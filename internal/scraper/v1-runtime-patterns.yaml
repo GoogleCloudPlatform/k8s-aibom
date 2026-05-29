@@ -1,0 +1,107 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# v1 default inference scraper configuration.
+#
+# This file is embedded into the controller binary at build time via go:embed
+# and provides the default extraction patterns when no override is present in
+# the AIBOMControllerConfig CR. Customers override these defaults by editing
+# spec.discovery.inferenceRuntimeImagePatterns / modelEnvVarNames /
+# modelArgFlags / modelVolumePaths in the AIBOMControllerConfig CR (Phase 13
+# wires the override path).
+#
+# The set is intentionally an audit-reviewable allowlist: anything not listed
+# here is invisible to the scraper. Adding to it is a deliberate, reviewable
+# action. The scraper does not infer or guess beyond what these patterns
+# describe.
+
+runtimeImagePatterns:
+  - runtime: vllm
+    pattern: '^vllm/.*'
+  - runtime: vllm
+    pattern: '.*ghcr\.io/.*/vllm.*'
+  - runtime: tgi
+    pattern: '^huggingface/text-generation-inference.*'
+  - runtime: triton
+    pattern: '^nvcr\.io/nvidia/tritonserver.*'
+  - runtime: ollama
+    pattern: '^ollama/ollama.*'
+  - runtime: ray-serve
+    pattern: '.*ray-project/ray.*'
+  - runtime: llm-d
+    pattern: '.*llm-d/.*'
+
+  # SGLang — LMSYS-published serving framework. Distinct namespace on
+  # Docker Hub (lmsysorg/sglang); upstream tags follow semver-ish.
+  - runtime: sglang
+    pattern: '^lmsysorg/sglang.*'
+
+  # LMDeploy — OpenMMLab-published serving / deployment framework for
+  # large language models. openmmlab/lmdeploy on Docker Hub.
+  - runtime: lmdeploy
+    pattern: '^openmmlab/lmdeploy.*'
+
+  # HuggingFace Text Embeddings Inference (TEI) — companion to TGI
+  # for embedding models. Distributed via ghcr.io/huggingface/.
+  # Distinct from TGI (which serves generative models); both ship
+  # under the same org but have separate image names so the pattern
+  # specifically targets text-embeddings-inference rather than
+  # matching all huggingface/* images.
+  - runtime: tei
+    pattern: '^ghcr\.io/huggingface/text-embeddings-inference.*'
+
+  # NOT added in Phase 11: TensorRT-LLM. NVIDIA's production-shipping
+  # form is `nvcr.io/nvidia/tritonserver:*-trtllm-*`, which is already
+  # covered by the existing triton pattern. Adding a separate
+  # tensorrt-llm pattern would risk double-counting the same workload.
+  # If a future customer ships a standalone TensorRT-LLM image with a
+  # distinct namespace, add a pattern then with the specific path.
+  #
+  # NOT added in Phase 11: registry-prefix matching for mirrored
+  # images (Artifact Registry, ECR, private mirrors). The asymmetry
+  # between false negatives (honest BOM with unresolved runtime) and
+  # false positives (BOM falsely claiming a runtime) makes
+  # speculative pattern broadening dangerous. Add when real customer
+  # reports identify specific mirroring patterns.
+
+# Environment variable names that, when found in a container spec, declare a
+# model identity claim. The variable VALUE is recorded as the model identity;
+# the variable NAME contributes to the Evidence locator.
+modelEnvVarNames:
+  - HF_MODEL_ID
+  - MODEL_PATH
+  - MODEL_NAME
+  - OLLAMA_MODELS
+  - TRANSFORMERS_CACHE
+
+# Argument flag names that, when found in a container's args, are immediately
+# followed by (positional) or =-joined to a model identity. v1 recognizes
+# only this small allowlist; customers extend it via the AIBOMControllerConfig
+# CR.
+modelArgFlags:
+  - --model
+  - --model-id
+  - --model-path
+  - --model-repository
+  - --model-name
+
+# Container mount path prefixes that suggest the mounted volume contains
+# model artifacts. Volumes mounted at one of these paths are emitted as
+# data-class Components with Evidence pointing to the mount.
+modelVolumePathPrefixes:
+  - /models
+  - /model
+  - /weights
+  - /checkpoints
+  - /hf_cache

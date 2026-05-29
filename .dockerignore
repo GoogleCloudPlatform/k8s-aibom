@@ -1,0 +1,41 @@
+# Don't ship build artifacts, test caches, or local tooling into the
+# Docker build context. Keeps the context small (faster builds) and
+# prevents accidental inclusion of secrets or local-only state.
+
+# Build output
+bin/
+dist/
+*.test
+*.out
+cover.out
+coverage.html
+
+# Generated CRDs / config (controller-gen output lives under config/;
+# not needed inside the runtime image — the Helm chart and install.yaml
+# package these separately)
+config/
+
+# Tests don't ship to runtime; .dockerignore can't exclude *_test.go
+# files specifically when COPY copies a directory, but Go's build
+# tooling excludes them automatically. Listed here for clarity.
+
+# Development tooling
+.git/
+.github/
+.idea/
+.vscode/
+
+# Docs and READMEs — not needed in the image
+docs/
+README.md
+
+# Local configs
+*.local.yaml
+*.local.yml
+kubeconfig
+*.kubeconfig
+.env
+.envrc
+
+# macOS
+.DS_Store

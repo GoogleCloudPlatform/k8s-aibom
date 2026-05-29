@@ -1,0 +1,92 @@
+{
+  "scraperName": "inference.spec",
+  "scrapeTimestamp": "2026-05-10T12:00:00Z",
+  "confidence": "inferred",
+  "components": [
+    {
+      "type": "application",
+      "name": "vllm",
+      "version": "v0.6.3",
+      "evidence": {
+        "source": "image_pattern",
+        "locator": "spec.template.spec.containers[0].image (pattern: ^vllm/.*)"
+      },
+      "confidence": "inferred",
+      "properties": {
+        "container.name": "vllm",
+        "image.tag": "v0.6.3",
+        "runtime.name": "vllm",
+        "runtime.pattern": "^vllm/.*"
+      }
+    },
+    {
+      "type": "container",
+      "name": "vllm/vllm-openai",
+      "version": "v0.6.3",
+      "hashes": {
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "evidence": {
+        "source": "pod_status",
+        "locator": "status.containerStatuses[name=vllm].imageID"
+      },
+      "confidence": "declared",
+      "properties": {
+        "container.init": "false",
+        "container.name": "vllm",
+        "image.reference": "vllm/vllm-openai:v0.6.3"
+      }
+    },
+    {
+      "type": "data",
+      "name": "llama-weights",
+      "evidence": {
+        "source": "volume_source",
+        "locator": "spec.template.spec.containers[0].volumeMounts[0](model-store -> /models)"
+      },
+      "confidence": "inferred",
+      "properties": {
+        "container.name": "vllm",
+        "volume.mountPath": "/models",
+        "volume.name": "model-store",
+        "volume.source": "persistentVolumeClaim"
+      }
+    },
+    {
+      "type": "machine-learning-model",
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "evidence": {
+        "source": "container_arg",
+        "locator": "spec.template.spec.containers[0].args[0 1](--model)"
+      },
+      "confidence": "declared",
+      "properties": {
+        "container.name": "vllm",
+        "identity.argFlag": "--model",
+        "identity.confidence": "claimed"
+      }
+    },
+    {
+      "type": "machine-learning-model",
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "evidence": {
+        "source": "env_var",
+        "locator": "spec.template.spec.containers[0].env[0](HF_MODEL_ID)"
+      },
+      "confidence": "inferred",
+      "properties": {
+        "container.name": "vllm",
+        "identity.confidence": "claimed",
+        "identity.envVarName": "HF_MODEL_ID"
+      }
+    }
+  ],
+  "provenance": [
+    {
+      "scraperName": "inference.spec",
+      "scraperVersion": "0.1.0",
+      "scrapeMethod": "spec",
+      "scrapeTimestamp": "2026-05-10T12:00:00Z"
+    }
+  ]
+}

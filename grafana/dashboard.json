@@ -1,0 +1,87 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Config Reloads",
+      "targets": [
+        { "expr": "sum(aibom_controller_config_reloads_total)" }
+      ],
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Sink Emit Failures",
+      "targets": [
+        { "expr": "sum(aibom_external_sink_emit_failures_total)" }
+      ],
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "GCS Write Failures",
+      "targets": [
+        { "expr": "sum(aibom_external_sink_emit_failures_total{sink=\"gcs\"})" }
+      ],
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook Write Failures",
+      "targets": [
+        { "expr": "sum(aibom_external_sink_emit_failures_total{sink=\"webhook\"})" }
+      ],
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sink Failures Over Time (by Sink)",
+      "targets": [
+        { "expr": "rate(aibom_external_sink_emit_failures_total[5m])", "legendFormat": "{{sink}}" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Scraper Extraction Errors (by Scraper)",
+      "targets": [
+        { "expr": "rate(aibom_scraper_extraction_errors_total[5m])", "legendFormat": "{{scraper}} - {{evidence_source}}" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "k8s-aibom / Controller Health",
+  "uid": "k8s-aibom",
+  "version": 1,
+  "weekStart": ""
+}

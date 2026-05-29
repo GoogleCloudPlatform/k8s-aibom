@@ -1,0 +1,34 @@
+# Build output
+/bin/
+/dist/
+*.test
+*.out
+cover.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Local env / secrets
+.env
+.envrc
+*.local.yaml
+*.local.yml
+kubeconfig
+*.kubeconfig
+
+# Tooling caches
+.cache/
+vendor/
+/manager

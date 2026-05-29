@@ -1,0 +1,252 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# --- VECTOR DATABASES ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: milvus-db
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: milvus } }
+  template:
+    metadata: { labels: { app: milvus } }
+    spec:
+      containers:
+      - name: db
+        image: milvusdb/milvus:v2.3.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant-db
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: qdrant } }
+  template:
+    metadata: { labels: { app: qdrant } }
+    spec:
+      containers:
+      - name: db
+        image: qdrant/qdrant:v1.7.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weaviate-db
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: weaviate } }
+  template:
+    metadata: { labels: { app: weaviate } }
+    spec:
+      containers:
+      - name: db
+        image: semitechnologies/weaviate:1.23.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chroma-db
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: chroma } }
+  template:
+    metadata: { labels: { app: chroma } }
+    spec:
+      containers:
+      - name: db
+        image: chromadb/chroma:0.4.22
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgvector-db
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: pgvector } }
+  template:
+    metadata: { labels: { app: pgvector } }
+    spec:
+      containers:
+      - name: db
+        image: pgvector/pgvector:pg16
+
+# --- AGENT FRAMEWORKS ---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langflow-agent
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: langflow } }
+  template:
+    metadata: { labels: { app: langflow } }
+    spec:
+      containers:
+      - name: agent
+        image: langflowai/langflow:latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowise-agent
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: flowise } }
+  template:
+    metadata: { labels: { app: flowise } }
+    spec:
+      containers:
+      - name: agent
+        image: flowiseai/flowise:latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chainlit-agent
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: chainlit } }
+  template:
+    metadata: { labels: { app: chainlit } }
+    spec:
+      containers:
+      - name: agent
+        image: chainlit/chainlit:latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autogen-agent
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: autogen } }
+  template:
+    metadata: { labels: { app: autogen } }
+    spec:
+      containers:
+      - name: agent
+        image: ragas/ragas-eval:latest
+        env:
+        - name: AUTOGEN_USE_DOCKER
+          value: "false"
+        - name: ANTHROPIC_API_KEY
+          value: "fake-key"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crewai-agent
+  namespace: inference-test
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: crewai } }
+  template:
+    metadata: { labels: { app: crewai } }
+    spec:
+      containers:
+      - name: agent
+        image: ragas/ragas-eval:latest
+        env:
+        - name: CREWAI_TELEMETRY_OPT_OUT
+          value: "true"
+        - name: GEMINI_API_KEY
+          value: "fake-key"
+
+# --- TRAINING AND FINE-TUNING ---
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kuberay-training
+  namespace: inference-test
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: training
+        image: rayproject/ray:latest
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jax-training
+  namespace: inference-test
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: training
+        image: ghcr.io/google/jax:latest
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: accelerate-training
+  namespace: inference-test
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: training
+        image: huggingface/accelerate:latest
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          value: "fake-hf-token"
+
+# --- EVALUATION FRAMEWORKS ---
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lmeval-job
+  namespace: inference-test
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: eval
+        image: eleutherai/lm-eval:latest
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ragas-eval
+  namespace: inference-test
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: eval
+        image: ragas/ragas-eval:latest
+        command: ["sleep", "infinity"]
+        env:
+        - name: RAGAS_DO_NOT_TRACK
+          value: "true"

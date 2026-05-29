@@ -1,0 +1,527 @@
+/*
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    api-approved.kubernetes.io: unapproved, experimental-only
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: aibomcontrollerconfigs.aibom.k8saibom.dev
+spec:
+  group: aibom.k8saibom.dev
+  names:
+    kind: AIBOMControllerConfig
+    listKind: AIBOMControllerConfigList
+    plural: aibomcontrollerconfigs
+    shortNames:
+    - aibomcfg
+    singular: aibomcontrollerconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastLoadedAt
+      name: Last-Loaded
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AIBOMControllerConfig is the cluster-scoped runtime configuration for the
+          k8s-aibom controller.
+
+          Singleton convention: the controller consults the AIBOMControllerConfig
+          whose metadata.name is exactly "default". Other AIBOMControllerConfig
+          resources are tolerated (cluster admins may create them as drafts) but
+          are not consulted by the running controller. Customers wishing to
+          update controller behavior MUST edit the "default" CR — creating a
+          differently-named CR has no effect on controller behavior.
+
+          Formal admission-webhook enforcement of the singleton (rejecting
+          creation of CRs with names other than "default") is post-v1.0. v1
+          relies on documentation and the controller's "only watch default"
+          behavior. This is acceptable for v1 because cluster admins authoring
+          AIBOMControllerConfig are trusted users; the singleton enforcement is
+          a usability guard against accidental misconfiguration, not a security
+          boundary.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              AIBOMControllerConfigSpec is the cluster-scoped runtime configuration
+              for the k8s-aibom controller. Phase 12 wires this CR as the canonical
+              configuration surface; the controller reads only the CR named
+              "default" (singleton convention; admission webhook enforcement is
+              post-v1.0).
+
+              Behavior on missing or semantically invalid CR is documented in the
+              project memory entry "AIBOMControllerConfig v1 behavior" and in
+              README's troubleshooting section: the controller falls back to
+              compiled-in safe defaults rather than failing to start, and surfaces
+              the failure via a Ready=False condition on this CR (when present)
+              plus a K8s Event on the controller's own Deployment.
+            properties:
+              bomGeneration:
+                description: BOMGeneration configures BOM-building behavior.
+                properties:
+                  inlineThresholdBytes:
+                    format: int64
+                    type: integer
+                  staleThresholdReconciles:
+                    default: 3
+                    description: |-
+                      InlineThresholdBytes is the size threshold below which generated
+                      BOMs are stored inline in AIBOM.status.bomDocument.inline.
+                      BOMs above this size are offloaded to an external sink (or
+                      truncated if no external sink is configured).
+
+                      Default: 262144 (256 KiB). Hard ceiling 1 MiB to stay safely
+                      under K8s' etcd object size limit.
+                      StaleThresholdReconciles is the number of consecutive reconciles with
+                      extraction errors before the AIBOM is marked Stale.
+                    format: int32
+                    maximum: 1048576
+                    minimum: 1
+                    type: integer
+                type: object
+              discovery:
+                description: Discovery configures workload selection.
+                properties:
+                  inferenceRuntimeImagePatterns:
+                    description: |-
+                      InferenceRuntimeImagePatterns configures the regex patterns
+                      the InferenceSpecScraper uses to detect runtime frameworks
+                      from container image references. If absent or empty, the
+                      compiled-in v1 defaults apply (see internal/scraper/v1-runtime-patterns.yaml).
+
+                      Conservative-detection rule: prefer anchored patterns. See
+                      docs/scraper-heuristics.md "Known false negatives" for context.
+                    items:
+                      description: RuntimeImagePattern is one runtime-detection rule.
+                      properties:
+                        pattern:
+                          description: |-
+                            Pattern is a Go regexp matched against the full image
+                            reference (registry/path:tag).
+                          maxLength: 256
+                          minLength: 1
+                          type: string
+                        runtime:
+                          description: |-
+                            Runtime is the identifier emitted as the detected runtime
+                            name (e.g., "vllm", "triton", "sglang").
+                          maxLength: 64
+                          minLength: 1
+                          type: string
+                      required:
+                      - pattern
+                      - runtime
+                      type: object
+                    type: array
+                  namespaceSelector:
+                    description: |-
+                      NamespaceSelector selects which namespaces the controller
+                      scrapes. The controller checks this selector on each reconcile
+                      against the workload's Namespace; non-matching namespaces are
+                      silently skipped. If absent or empty, defaults to matching the
+                      label `aibom.k8saibom.dev/enabled=true`.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+              logging:
+                description: Logging configures the controller's log level and format.
+                properties:
+                  format:
+                    default: json
+                    description: |-
+                      Format is the log output format. RESTART-REQUIRED — the logger
+                      is constructed at controller startup; format changes require a
+                      pod restart to take effect. Exposed in the spec for honest
+                      surface; the controller logs a notice when this changes
+                      post-startup.
+                    enum:
+                    - json
+                    - text
+                    type: string
+                  level:
+                    default: info
+                    description: Level is the controller log verbosity. Hot-reloadable.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                type: object
+              sinks:
+                description: |-
+                  Sinks is the ordered list of external sinks. Empty or absent
+                  means CRD-status-only (the CRD-status sink is always-on; it is
+                  NOT listed here). When multiple sinks are configured, the
+                  reconciler fans out in parallel; ExternalBOMRef.URL prefers
+                  non-WriteOnly sinks (GCS over webhook) when both succeed.
+                items:
+                  description: |-
+                    SinkConfig configures one external sink. Exactly one of GCS or
+                    Webhook MUST be populated based on Type.
+                  properties:
+                    gcs:
+                      description: GCS configures a GCS sink. Required when Type=GCS.
+                      properties:
+                        bucket:
+                          description: Bucket is the target GCS bucket name.
+                          maxLength: 222
+                          minLength: 3
+                          type: string
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef optionally references a Secret containing
+                            a service-account JSON key file. If unset, Application Default
+                            Credentials are used (recommended; works on GKE Workload Identity).
+                            The Secret MUST live in the controller's namespace.
+                          properties:
+                            key:
+                              description: |-
+                                Key is the data key within the Secret whose value holds the
+                                credential. Forcing the customer to be explicit about which
+                                key matches the cert-manager / external-secrets convention.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                            name:
+                              description: Name is the Secret's metadata.name.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                        pathTemplate:
+                          description: |-
+                            PathTemplate is the object path layout. Placeholders:
+                            {namespace}, {kind}, {name}, {timestamp}, {hash}, {category}.
+                            Default: mlbom/{namespace}/{kind}-{name}/{timestamp}.json.
+                          maxLength: 512
+                          type: string
+                      required:
+                      - bucket
+                      type: object
+                    name:
+                      description: |-
+                        Name is the customer-chosen identifier for this sink instance,
+                        distinct from the sink type. Appears in
+                        AIBOM.status.bomDocument.externalRef.sink and in failure
+                        conditions. Must be DNS-1123 label safe.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    type:
+                      description: |-
+                        Type selects the sink implementation. The corresponding
+                        type-specific field (GCS or Webhook) MUST be populated; the
+                        other MUST be absent.
+                      enum:
+                      - GCS
+                      - Webhook
+                      type: string
+                    webhook:
+                      description: Webhook configures a webhook sink. Required when
+                        Type=Webhook.
+                      properties:
+                        auth:
+                          description: |-
+                            Auth configures the webhook authentication. Exactly one of
+                            BearerToken / MTLS may be set. Absent Auth means no
+                            authentication is sent (development / private-network only).
+                          properties:
+                            bearerToken:
+                              description: |-
+                                BearerToken uses an "Authorization: Bearer <token>" header.
+                                The token is read from the referenced Secret.
+                              properties:
+                                secretRef:
+                                  description: SecretRef points at the K8s Secret
+                                    containing the token.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - secretRef
+                              type: object
+                            mtls:
+                              description: |-
+                                MTLS uses mutual TLS with a client certificate / key. The
+                                optional CASecretRef provides a custom CA bundle for verifying
+                                the server's certificate.
+                              properties:
+                                caSecretRef:
+                                  description: |-
+                                    CASecretRef optionally holds a custom CA bundle for verifying
+                                    the server's certificate. If unset, system roots are used.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                                clientCertSecretRef:
+                                  description: ClientCertSecretRef holds the PEM-encoded
+                                    client certificate.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                                clientKeySecretRef:
+                                  description: ClientKeySecretRef holds the PEM-encoded
+                                    client private key.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - clientCertSecretRef
+                              - clientKeySecretRef
+                              type: object
+                          type: object
+                        endpoint:
+                          description: Endpoint is the full HTTPS URL to POST BOMs
+                            to.
+                          maxLength: 2048
+                          pattern: ^https?://
+                          type: string
+                      required:
+                      - endpoint
+                      type: object
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+            type: object
+          status:
+            description: |-
+              AIBOMControllerConfigStatus reports the controller's view of this
+              configuration: whether it loaded successfully, when it was last
+              re-read, and any current failure modes.
+            properties:
+              conditions:
+                description: |-
+                  Conditions follow the K8s standard. The condition types
+                  emitted by the controller are documented in
+                  api/v1alpha1/aibomcontrollerconfig_conditions.go.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastLoadedAt:
+                description: |-
+                  LastLoadedAt is the time the controller last successfully
+                  parsed this configuration into a runtime snapshot. Distinct
+                  from LastTransitionTime on the Ready condition (which moves
+                  only when the condition's status value transitions).
+                format: date-time
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the spec.generation at the time the
+                  status was last set.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

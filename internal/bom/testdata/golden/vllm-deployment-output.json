@@ -1,0 +1,258 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-10T12:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "k8s-aibom",
+          "version": "0.1.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3",
+      "type": "application",
+      "group": "prod-inference",
+      "name": "vllm-llama3",
+      "properties": [
+        {
+          "name": "aibom.workload.kind",
+          "value": "Deployment"
+        },
+        {
+          "name": "aibom.workload.group",
+          "value": "apps"
+        },
+        {
+          "name": "aibom.workload.apiVersion",
+          "value": "v1"
+        },
+        {
+          "name": "aibom.workload.namespace",
+          "value": "prod-inference"
+        },
+        {
+          "name": "aibom.workload.name",
+          "value": "vllm-llama3"
+        },
+        {
+          "name": "aibom.workload.uid",
+          "value": "abc-123"
+        },
+        {
+          "name": "aibom.workload.category",
+          "value": "inference"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "aibom.confidence",
+        "value": "inferred"
+      },
+      {
+        "name": "aibom.controller.name",
+        "value": "k8s-aibom"
+      },
+      {
+        "name": "aibom.controller.version",
+        "value": "0.1.0"
+      },
+      {
+        "name": "aibom.scrape.0.scraperName",
+        "value": "inference.spec"
+      },
+      {
+        "name": "aibom.scrape.0.scraperVersion",
+        "value": "0.1.0"
+      },
+      {
+        "name": "aibom.scrape.0.method",
+        "value": "spec"
+      },
+      {
+        "name": "aibom.scrape.0.timestamp",
+        "value": "2026-05-10T12:00:00Z"
+      }
+    ]
+  },
+  "components": [
+    {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/0/application/vllm",
+      "type": "application",
+      "name": "vllm",
+      "version": "v0.6.3",
+      "properties": [
+        {
+          "name": "aibom.confidence",
+          "value": "inferred"
+        },
+        {
+          "name": "aibom.evidence.source",
+          "value": "image_pattern"
+        },
+        {
+          "name": "aibom.evidence.locator",
+          "value": "spec.template.spec.containers[0].image (pattern: ^vllm/.*)"
+        },
+        {
+          "name": "container.name",
+          "value": "vllm"
+        },
+        {
+          "name": "image.tag",
+          "value": "v0.6.3"
+        },
+        {
+          "name": "runtime.name",
+          "value": "vllm"
+        },
+        {
+          "name": "runtime.pattern",
+          "value": "^vllm/.*"
+        }
+      ]
+    },
+    {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/1/container/vllm/vllm-openai",
+      "type": "container",
+      "name": "vllm/vllm-openai",
+      "version": "v0.6.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aibom.confidence",
+          "value": "declared"
+        },
+        {
+          "name": "aibom.evidence.source",
+          "value": "pod_status"
+        },
+        {
+          "name": "aibom.evidence.locator",
+          "value": "status.containerStatuses[name=vllm].imageID"
+        },
+        {
+          "name": "container.init",
+          "value": "false"
+        },
+        {
+          "name": "container.name",
+          "value": "vllm"
+        },
+        {
+          "name": "image.reference",
+          "value": "vllm/vllm-openai:v0.6.3"
+        }
+      ]
+    },
+    {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/2/data/llama-weights",
+      "type": "data",
+      "name": "llama-weights",
+      "properties": [
+        {
+          "name": "aibom.confidence",
+          "value": "inferred"
+        },
+        {
+          "name": "aibom.evidence.source",
+          "value": "volume_source"
+        },
+        {
+          "name": "aibom.evidence.locator",
+          "value": "spec.template.spec.containers[0].volumeMounts[0](model-store -\u003e /models)"
+        },
+        {
+          "name": "container.name",
+          "value": "vllm"
+        },
+        {
+          "name": "volume.mountPath",
+          "value": "/models"
+        },
+        {
+          "name": "volume.name",
+          "value": "model-store"
+        },
+        {
+          "name": "volume.source",
+          "value": "persistentVolumeClaim"
+        }
+      ]
+    },
+    {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/3/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct",
+      "type": "machine-learning-model",
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "properties": [
+        {
+          "name": "aibom.confidence",
+          "value": "declared"
+        },
+        {
+          "name": "aibom.evidence.source",
+          "value": "container_arg"
+        },
+        {
+          "name": "aibom.evidence.locator",
+          "value": "spec.template.spec.containers[0].args[0 1](--model)"
+        },
+        {
+          "name": "container.name",
+          "value": "vllm"
+        },
+        {
+          "name": "identity.argFlag",
+          "value": "--model"
+        },
+        {
+          "name": "identity.confidence",
+          "value": "claimed"
+        }
+      ]
+    },
+    {
+      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/4/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct",
+      "type": "machine-learning-model",
+      "name": "meta-llama/Llama-3.1-8B-Instruct",
+      "properties": [
+        {
+          "name": "aibom.confidence",
+          "value": "inferred"
+        },
+        {
+          "name": "aibom.evidence.source",
+          "value": "env_var"
+        },
+        {
+          "name": "aibom.evidence.locator",
+          "value": "spec.template.spec.containers[0].env[0](HF_MODEL_ID)"
+        },
+        {
+          "name": "container.name",
+          "value": "vllm"
+        },
+        {
+          "name": "identity.confidence",
+          "value": "claimed"
+        },
+        {
+          "name": "identity.envVarName",
+          "value": "HF_MODEL_ID"
+        }
+      ]
+    }
+  ]
+}
+

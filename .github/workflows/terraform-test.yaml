@@ -1,0 +1,65 @@
+name: Terraform E2E Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - 'charts/**'
+      - 'Dockerfile'
+      - 'Makefile'
+
+jobs:
+  terratest:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write 
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Authenticate Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Fetch GKE Credentials
+        env:
+          CLUSTER_NAME: ${{ vars.GKE_CLUSTER_NAME }}
+          CLUSTER_LOCATION: ${{ vars.GKE_CLUSTER_LOCATION }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud container clusters get-credentials "$CLUSTER_NAME" \
+            --location "$CLUSTER_LOCATION" \
+            --project "$PROJECT_ID"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run Terratest
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER_NAME: ${{ vars.GKE_CLUSTER_NAME }}
+          GKE_CLUSTER_LOCATION: ${{ vars.GKE_CLUSTER_LOCATION }}
+        working-directory: terraform/test
+        run: |
+          go mod tidy
+          go test -v -timeout 45m ./...
