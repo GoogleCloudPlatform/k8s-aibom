@@ -5,7 +5,7 @@ A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] docu
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CycloneDX 1.6 ML-BOM](https://img.shields.io/badge/CycloneDX-1.6%20ML--BOM-success.svg)](https://cyclonedx.org/capabilities/mlbom/)
 [![Static Analysis](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml)
-[![CodeQL](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/codeql.yml/badge.svg)](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/codeql.yml)
+
 
 > **Status:** v1.0 — alpha. Production-suitable for non-critical observation use cases. Stable APIs through v1.x. Feedback welcome.
 
