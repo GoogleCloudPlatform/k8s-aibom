@@ -131,7 +131,7 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 		if afterCosmetic.Status.LastReconciled == nil {
 			return errors.New("LastReconciled nil after cosmetic change")
 		}
-		if !afterCosmetic.Status.LastReconciled.Time.After(initialLastReconciled) {
+		if !afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
 			return fmt.Errorf("LastReconciled (%v) not yet after initial (%v); waiting for dedup reconcile",
 				afterCosmetic.Status.LastReconciled.Time, initialLastReconciled)
 		}
@@ -149,7 +149,7 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 			tc.kind, initialBOMHash, afterCosmetic.Status.BOMHash)
 	}
 	if afterCosmetic.Status.LastReconciled == nil ||
-		!afterCosmetic.Status.LastReconciled.Time.After(initialLastReconciled) {
+		!afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
 		t.Errorf("Phase B (%s): LastReconciled did not advance: %v -> %v",
 			tc.kind, initialLastReconciled, afterCosmetic.Status.LastReconciled)
 	}

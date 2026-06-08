@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -30,7 +31,7 @@ func TestTerraformK8sAibom(t *testing.T) {
 	require.NotEmpty(t, clusterLocation, "GKE_CLUSTER_LOCATION environment variable is not set")
 
 	// 2. Generate unique identifiers to prevent collisions during concurrent CI runs
-	uniqueID := strings.ToLower(random.UniqueId())
+	uniqueID := strings.ToLower(random.UniqueID())
 	repositoryID := fmt.Sprintf("aibom-repo-%s", uniqueID)
 	namespace := fmt.Sprintf("aibom-ns-%s", uniqueID)
 	imageTag := fmt.Sprintf("v1.0.0-%s", uniqueID)
@@ -55,24 +56,24 @@ func TestTerraformK8sAibom(t *testing.T) {
 
 	// 4. Ensure we clean up resources automatically at the end of the test
 	defer func() {
-		terraform.Destroy(t, terraformOptions)
+		terraform.DestroyContext(context.Background(), t, terraformOptions)
 		// Terraform Helm provider with create_namespace=true does not delete the namespace on destroy.
 		// We use RunKubectlE because the namespace might not have been created if apply failed early.
-		_ = k8s.RunKubectlE(t, kubectlOptions, "delete", "namespace", namespace, "--ignore-not-found=true")
+		_ = k8s.RunKubectlContextE(context.Background(), t, kubectlOptions, "delete", "namespace", namespace, "--ignore-not-found=true")
 	}()
 
 	// 5. Run `terraform init` and `terraform apply`
-	terraform.InitAndApply(t, terraformOptions)
+	terraform.InitAndApplyContext(context.Background(), t, terraformOptions)
 
 	// 6. Validation: Verify Helm deployment succeeded by inspecting the Kubernetes cluster
 	// Wait for the Helm release to deploy the pods
-	k8s.WaitUntilNumPodsCreated(t, kubectlOptions, metav1.ListOptions{
+	k8s.WaitUntilNumPodsCreatedContext(context.Background(), t, kubectlOptions, metav1.ListOptions{
 		LabelSelector: "app.kubernetes.io/name=k8s-aibom",
 	}, 1, 30, 10*time.Second)
 
 	// Poll until the pod is actually in the Running state
-	retry.DoWithRetry(t, "Wait for pod to be running", 30, 10*time.Second, func() (string, error) {
-		pods := k8s.ListPods(t, kubectlOptions, metav1.ListOptions{
+	retry.DoWithRetryContext(context.Background(), t, "Wait for pod to be running", 30, 10*time.Second, func() (string, error) {
+		pods := k8s.ListPodsContext(context.Background(), t, kubectlOptions, metav1.ListOptions{
 			LabelSelector: "app.kubernetes.io/name=k8s-aibom",
 		})
 		if len(pods) == 0 {

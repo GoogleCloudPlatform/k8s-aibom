@@ -17,6 +17,7 @@ limitations under the License.
 package sink
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -142,7 +143,7 @@ func TestGCSSink_HealthCheck_AlwaysNil(t *testing.T) {
 	// permission beyond the sole-writer model's storage.objectCreator.
 	// Document the choice; lock it with a test.
 	s := &GCSSink{}
-	if err := s.HealthCheck(nil); err != nil {
+	if err := s.HealthCheck(context.Background()); err != nil {
 		t.Errorf("HealthCheck = %v, want nil (sole-writer model)", err)
 	}
 }

@@ -127,7 +127,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 		if afterCosmetic.Status.LastReconciled == nil {
 			return errors.New("LastReconciled nil after cosmetic change")
 		}
-		if !afterCosmetic.Status.LastReconciled.Time.After(initialLastReconciled) {
+		if !afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
 			return fmt.Errorf("LastReconciled (%v) not yet after initial (%v); waiting for dedup reconcile",
 				afterCosmetic.Status.LastReconciled.Time, initialLastReconciled)
 		}
@@ -147,7 +147,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 			initialBOMHash, afterCosmetic.Status.BOMHash)
 	}
 	if afterCosmetic.Status.LastReconciled == nil ||
-		!afterCosmetic.Status.LastReconciled.Time.After(initialLastReconciled) {
+		!afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
 		t.Errorf("Phase B: LastReconciled did not advance: %v -> %v",
 			initialLastReconciled, afterCosmetic.Status.LastReconciled)
 	}

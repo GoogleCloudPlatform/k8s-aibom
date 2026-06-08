@@ -31,7 +31,7 @@ import (
 var GroupVersion = schema.GroupVersion{Group: "aibom.k8saibom.dev", Version: "v1alpha1"}
 
 // SchemeBuilder collects functions that add Go types into a runtime.Scheme.
-var SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+var SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion} //nolint:staticcheck
 
 // AddToScheme adds every registered type in this package to the given Scheme.
 var AddToScheme = SchemeBuilder.AddToScheme

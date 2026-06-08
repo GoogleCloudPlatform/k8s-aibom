@@ -1,6 +1,6 @@
 module k8s-aibom/terraform/test
 
-go 1.26.2
+go 1.26.0
 
 require (
 	github.com/gruntwork-io/terratest v1.0.0

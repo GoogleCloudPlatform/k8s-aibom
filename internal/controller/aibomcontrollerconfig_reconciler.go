@@ -266,10 +266,7 @@ func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctr
 		toStore = result.Snapshot
 	}
 
-	retainSinks := false
-	if toStore != nil && toStore.Source == config.SourceLastKnownGood {
-		retainSinks = true
-	}
+	retainSinks := toStore != nil && toStore.Source == config.SourceLastKnownGood
 	
 	if prev != nil && prev != toStore && !retainSinks {
 		// Delay closing to ensure active WorkloadReconciler in-flight
@@ -414,7 +411,7 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 	stored *config.Snapshot,
 ) error {
 	var cr aibomv1alpha1.AIBOMControllerConfig
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: configName}, &cr); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: configName}, &cr); err != nil {
 		return err
 	}
 
@@ -525,7 +522,7 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 	}
 
 	startup := make(chan event.GenericEvent, 1)
-	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		startup <- event.GenericEvent{
 			Object: &aibomv1alpha1.AIBOMControllerConfig{
 				ObjectMeta: metav1.ObjectMeta{Name: configName},
@@ -533,7 +530,9 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		}
 		<-ctx.Done()
 		return nil
-	}))
+	})); err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("aibomcontrollerconfig").

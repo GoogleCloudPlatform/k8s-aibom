@@ -152,12 +152,6 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 			}
 
 			// Same for EnvFrom (ConfigMaps/Secrets)
-			for _, envFrom := range c.EnvFrom {
-				if envFrom.SecretRef != nil || envFrom.ConfigMapRef != nil {
-					// We don't resolve the actual secret/configmap contents yet (Phase 2),
-					// but we could at least flag that we skipped them.
-				}
-			}
 			_ = i
 		}
 	}

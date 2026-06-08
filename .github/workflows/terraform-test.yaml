@@ -1,5 +1,8 @@
 name: Terraform E2E Test
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 on:
   push:
     branches:
@@ -12,6 +15,7 @@ on:
 
 jobs:
   terratest:
+    if: vars.GCP_WIF_PROVIDER && vars.GCP_SERVICE_ACCOUNT
     runs-on: ubuntu-latest
     permissions:
       id-token: write 

@@ -291,7 +291,7 @@ func TestReconcile_ValidToInvalid_PreservesLastKnownGood(t *testing.T) {
 		{Name: "broken", Type: aibomv1alpha1.SinkTypeGCS}, // body nil
 	}
 	updated.Generation = 2
-	if err := r.Client.Update(context.Background(), updated); err != nil {
+	if err := r.Update(context.Background(), updated); err != nil {
 		t.Fatalf("update CR to invalid: %v", err)
 	}
 
@@ -331,7 +331,7 @@ func TestReconcile_InvalidToValid_ClearsDegraded(t *testing.T) {
 	got.Spec.Sinks = nil
 	got.Spec.BOMGeneration.InlineThresholdBytes = 32768
 	got.Generation = 3
-	if err := r.Client.Update(context.Background(), got); err != nil {
+	if err := r.Update(context.Background(), got); err != nil {
 		t.Fatalf("update to valid: %v", err)
 	}
 	reconcileOnce(t, r) // recovery
@@ -357,7 +357,7 @@ func TestReconcile_Deleted_RevertsToDefaults(t *testing.T) {
 
 	// Delete the CR.
 	got := getCR(t, r.Client, config.DefaultConfigName)
-	if err := r.Client.Delete(context.Background(), got); err != nil {
+	if err := r.Delete(context.Background(), got); err != nil {
 		t.Fatalf("delete CR: %v", err)
 	}
 

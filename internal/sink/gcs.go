@@ -135,10 +135,10 @@ func NewGCSSink(ctx context.Context, cfg GCSSinkConfig) (*GCSSink, error) {
 	switch {
 	case len(cfg.CredentialsJSON) > 0:
 		// CRD-driven path: bytes from a K8s Secret.
-		opts = append(opts, option.WithCredentialsJSON(cfg.CredentialsJSON))
+		opts = append(opts, option.WithCredentialsJSON(cfg.CredentialsJSON)) //nolint:staticcheck
 	case cfg.CredentialsFile != "":
 		// File-based path: env-var or volume-mounted Secret file.
-		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile))
+		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile)) //nolint:staticcheck
 	}
 	// When neither is set, no auth option is added; the storage
 	// client falls through to ADC discovery.

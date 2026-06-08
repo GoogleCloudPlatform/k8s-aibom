@@ -160,7 +160,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		Loader:        loader,
 		ConfigStore:   configStore,
-		Recorder:      mgr.GetEventRecorderFor("k8s-aibom-config"),
+		Recorder:      mgr.GetEventRecorderFor("k8s-aibom-config"), //nolint:staticcheck
 		ControllerPod: controllerPod,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up AIBOMControllerConfigReconciler")
@@ -229,7 +229,7 @@ func main() {
 	// the API client is wired. If the controller crashes before
 	// mgr.Start completes, the event is lost — that's correct (a Pod
 	// that never started doesn't deserve a "started" event).
-	emitStartupEvent(mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, log)
+	emitStartupEvent(mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, log) //nolint:staticcheck
 
 	log.Info("starting manager", "version", version())
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

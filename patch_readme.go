@@ -17,12 +17,16 @@ limitations under the License.
 package main
 
 import (
-	"io/ioutil"
+	"log"
+	"os"
 	"strings"
 )
 
 func main() {
-	b, _ := ioutil.ReadFile("README.md")
+	b, err := os.ReadFile("README.md")
+	if err != nil {
+		log.Fatalf("Error reading file: %v", err)
+	}
 	s := string(b)
 
 	// Fix introduction
@@ -31,5 +35,7 @@ func main() {
 	// Fix "What it does"
 	s = strings.Replace(s, "k8s-aibom observes inference workloads running in a Kubernetes cluster — Deployments, StatefulSets, DaemonSets, KServe `InferenceService` resources — and produces a CycloneDX 1.6 ML-BOM document for each one. The BOM captures:\n- The serving runtime in use (vLLM, TGI, Triton, Ollama, Ray Serve, llm-d, SGLang, LMDeploy, HuggingFace TEI) and its version", "k8s-aibom observes AI workloads running in a Kubernetes cluster — Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, and KServe `InferenceService` resources — and produces a CycloneDX 1.6 ML-BOM document for each one. The BOM captures:\n- The framework in use (vLLM, LangChain, PyTorch, Milvus, Ragas, etc.) and its version\n- External API dependencies (e.g., OpenAI, Gemini, Anthropic)\n- Mounted training datasets and volumes", 1)
 
-	ioutil.WriteFile("README.md", []byte(s), 0644)
+	if err := os.WriteFile("README.md", []byte(s), 0644); err != nil {
+		log.Fatalf("Error writing file: %v", err)
+	}
 }

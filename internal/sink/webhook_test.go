@@ -432,6 +432,6 @@ func bytesEqual(a, b []byte) bool {
 }
 
 func TestMain(m *testing.M) {
-	os.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "true")
+	_ = os.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "true")
 	os.Exit(m.Run())
 }
