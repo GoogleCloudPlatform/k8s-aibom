@@ -88,9 +88,9 @@ type WorkloadRef struct {
 }
 
 // AIBOMStatus is the auditor-facing summary of the generated BOM and the
-// controller's reconciliation state. Fields are designed for stability;
-// see docs/prd-deviations.md for guidance on treating this as a deliberate
-// external contract distinct from the internal scraper / builder types.
+// controller's reconciliation state. Fields are designed for stability,
+// providing an external contract distinct from the internal scraper and builder
+// structures to ensure long-term compatibility for consumer tools.
 type AIBOMStatus struct {
 	// Conditions follow the Kubernetes standard
 	// (k8s.io/apimachinery/pkg/apis/meta/v1.Condition). See
@@ -128,9 +128,8 @@ type AIBOMStatus struct {
 	// The reconciler compares this against a freshly-computed
 	// inputs hash on every reconcile pass; when they match, the
 	// reconciler skips BOM regeneration and external-sink emission
-	// (the fast path), updating only LastReconciled and
-	// ObservedGeneration. See docs/build-progress.md for the dedup
-	// design rationale.
+	// (the fast path) to reduce computational and storage overhead,
+	// updating only LastReconciled and ObservedGeneration.
 	InputHash string `json:"inputHash,omitempty"`
 
 	// ObservedGeneration is the .metadata.generation of the AIBOM at

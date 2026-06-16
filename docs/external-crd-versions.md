@@ -65,9 +65,9 @@ scraper work:
 (4 nested field paths + workload annotations); the module adds
 ~20MB of transitive go.sum entries; the unstructured access is
 contained in one file and easy to swap if the surface ever grows. See
-the godoc on `KServeInferenceServiceScraper` and the deferral entry
-in [`phase-deferrals.md`](phase-deferrals.md) for the v1→v2 migration
-trigger.
+the godoc on `KServeInferenceServiceScraper` for details on how
+the transition to v2 (to resolve container image digests by traversing
+down to managed Pods) is triggered.
 
 ## Process for adding a new external CRD
 

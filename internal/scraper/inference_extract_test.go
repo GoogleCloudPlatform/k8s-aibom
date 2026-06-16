@@ -260,10 +260,13 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		// matched. This is a deliberately preserved false negative:
 		// Phase 11 explicitly defers registry-prefix expansion until
 		// real customer signal identifies the deployed registries.
-		// If you arrived here because a customer reported missing
-		// TGI detection on GHCR, see docs/phase-deferrals.md for the
-		// expansion process — don't add a one-off GHCR pattern
-		// without that discipline.
+		// TGI's pattern is anchored to its Docker Hub repository form
+		// (`^huggingface/text-generation-inference.*`). The GHCR variant
+		// (`ghcr.io/huggingface/text-generation-inference`) is intentionally
+		// not matched. This is a preserved false negative: we defer registry-prefix
+		// expansion until real-world usage warrants it, avoiding adding one-off
+		// patterns that increase regex maintenance overhead. To support additional
+		// registries, update the runtime patterns configuration holistically.
 		{"ghcr.io/huggingface/text-generation-inference:2.0.0", ""},
 	}
 	for _, tc := range cases {

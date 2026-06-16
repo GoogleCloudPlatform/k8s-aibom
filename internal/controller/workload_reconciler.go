@@ -257,8 +257,10 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		// the upgrade case (LastReconciled populated, InputHash
 		// empty because the prior controller version didn't emit it):
 		// that case must proceed to the full build to populate
-		// InputHash. See docs/open-decisions.md OD-002 for the
-		// post-v1.0 customer-authored AIBOM constraint.
+		// InputHash. Note: If customer-authored AIBOM CRs are ever supported
+		// (e.g., via a future admission webhook), the webhook must initialize
+		// Status.LastReconciled to a non-nil sentinel value so they are not
+		// misidentified as a bootstrap race and deferred indefinitely.
 		if existing.Status.LastReconciled == nil {
 			logger.V(1).Info("AIBOM Status not yet populated by prior reconcile, deferring to subsequent reconcile",
 				"workload_namespace", req.Workload.Namespace,
@@ -447,12 +449,9 @@ func (r *WorkloadReconciler) emitToExternalSinks(ctx context.Context, doc *bom.D
 			defer cancel()
 			url, err := s.Emit(emitCtx, doc, meta)
 			if err != nil {
-				// Structured info-level log so Phase 14 can convert to
-				// a Prometheus counter without code changes. The
-				// curated label set is (sink, namespace, kind) —
-				// workload name is intentionally excluded to bound
-				// Prometheus cardinality (see docs/phase-deferrals.md
-				// Phase 14 entry).
+				// Increment the sink failure metric. The label set is limited to
+				// (sink, namespace, kind). The workload name is excluded to prevent
+				// high Prometheus metric cardinality if workloads are frequently recreated.
 				metrics.SinkEmitFailures.WithLabelValues(s.Name(), w.Namespace, w.Kind.Kind).Inc()
 				logger.Info("external sink failed",
 					"sink", s.Name(),

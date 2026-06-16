@@ -63,7 +63,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	t.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "true")
 
 	t.Cleanup(func() {
-		goleak.VerifyNone(t, 
+		goleak.VerifyNone(t,
 			goleak.IgnoreTopFunction("sigs.k8s.io/controller-runtime/pkg/internal/testing/process.(*State).Start.func1"),
 			goleak.IgnoreTopFunction("os/exec.(*Cmd).Wait"),
 			goleak.IgnoreTopFunction("syscall.Syscall6"),

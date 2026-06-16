@@ -442,7 +442,7 @@ func extractAnnotationModels(annotations map[string]string, source EvidenceSourc
 		if v == "" {
 			continue
 		}
-		
+
 		modelName := TruncateString(v, MaxComponentNameLength)
 
 		out = append(out, Component{

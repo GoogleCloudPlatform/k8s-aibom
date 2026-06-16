@@ -167,12 +167,12 @@ type AIBOMControllerConfigReconciler struct {
 	Recorder record.EventRecorder
 
 	// ControllerPod is an ObjectReference to the controller's own Pod,
-	// used as the involvedObject for the no-CR events. Constructed in
-	// cmd/manager from POD_NAME / POD_NAMESPACE downward-API env vars
-	// (Phase 14 Helm-chart dependency; documented in
-	// docs/phase-deferrals.md). May be nil in tests that exercise only
-	// the CR-targeted events; the reconciler tolerates nil by
-	// skipping no-CR event emission with a debug log line.
+	// used as the involvedObject for events emitted when the AIBOMControllerConfig
+	// CR does not exist. Constructed in cmd/manager from POD_NAME and
+	// POD_NAMESPACE environment variables, which must be populated via the
+	// Kubernetes downward API in the pod spec. May be nil in tests that
+	// exercise only the CR-targeted events; the reconciler tolerates nil by
+	// skipping event emission with a debug log.
 	ControllerPod *corev1.ObjectReference
 
 	// ConfigName is the singleton CR's metadata.name. Defaults to
@@ -267,7 +267,7 @@ func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	retainSinks := toStore != nil && toStore.Source == config.SourceLastKnownGood
-	
+
 	if prev != nil && prev != toStore && !retainSinks {
 		// Delay closing to ensure active WorkloadReconciler in-flight
 		// requests finish before the clients are torn down.

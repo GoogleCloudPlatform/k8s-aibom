@@ -108,9 +108,10 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 	initialLastReconciled := first.Status.LastReconciled.Time
 	initialReadyTransition := mustFindCondition(t, first.Status.Conditions, aibomv1alpha1.ConditionReady).LastTransitionTime
 
-	// metav1.Time has second precision on the wire; sleep past the
-	// second boundary so LastReconciled-advanced is observable. See
-	// docs/phase-deferrals.md (Phase 14, metav1.MicroTime note).
+	// metav1.Time has second precision when serialized to the Kubernetes API
+	// server. Sleep past the second boundary to ensure that the new
+	// LastReconciled timestamp is strictly greater than the initial one,
+	// allowing us to observe the reconcile run.
 	time.Sleep(1100 * time.Millisecond)
 
 	// ---------- Phase B: cosmetic change → dedup fast path ----------

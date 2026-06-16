@@ -1,20 +1,16 @@
-#
 # Copyright 2026 Google LLC
-
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-
-#    http://www.apache.org/licenses/LICENSE-2.0
-
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -155,9 +151,9 @@ spec:
           status:
             description: |-
               AIBOMStatus is the auditor-facing summary of the generated BOM and the
-              controller's reconciliation state. Fields are designed for stability;
-              see docs/prd-deviations.md for guidance on treating this as a deliberate
-              external contract distinct from the internal scraper / builder types.
+              controller's reconciliation state. Fields are designed for stability,
+              providing an external contract distinct from the internal scraper and builder
+              structures to ensure long-term compatibility for consumer tools.
             properties:
               bomDocument:
                 description: |-
@@ -342,9 +338,8 @@ spec:
                   The reconciler compares this against a freshly-computed
                   inputs hash on every reconcile pass; when they match, the
                   reconciler skips BOM regeneration and external-sink emission
-                  (the fast path), updating only LastReconciled and
-                  ObservedGeneration. See docs/build-progress.md for the dedup
-                  design rationale.
+                  (the fast path) to reduce computational and storage overhead,
+                  updating only LastReconciled and ObservedGeneration.
                 type: string
               lastReconciled:
                 description: |-

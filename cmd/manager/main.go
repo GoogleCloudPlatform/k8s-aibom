@@ -63,8 +63,7 @@ import (
 const controllerVersion = "0.1.0"
 
 // Downward-API env var names. The Helm chart and install.yaml MUST
-// populate these via `valueFrom.fieldRef` (Phase 15 chart dependency
-// documented in docs/phase-deferrals.md). If unset, the controller
+// populate these via `valueFrom.fieldRef`. If unset, the controller
 // degrades gracefully: it runs, but the startup K8s Event and the
 // AIBOMControllerConfigMissing/Deleted events lose their involvedObject
 // target and are not emitted.
