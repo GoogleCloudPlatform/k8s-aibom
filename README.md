@@ -106,6 +106,13 @@ The fastest way to evaluate `k8s-aibom` is to use our interactive Cloud Shell tu
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/GoogleCloudPlatform/k8s-aibom&cloudshell_tutorial=.cloudshell/tutorial.md)
 
+> [!NOTE]
+> If the interactive tutorial panel does not open automatically on the right side of your screen, you can manually launch it by running this command in the Cloud Shell terminal:
+> ```bash
+> teachme .cloudshell/tutorial.md
+> ```
+
+
 ### 2. Infrastructure-as-Code via Terraform
 
 For enterprise GitOps deployments, we provide a fully automated Terraform module that provisions an Artifact Registry repository, runs `gcloud builds submit` to compile the image, and deploys the Helm chart.
