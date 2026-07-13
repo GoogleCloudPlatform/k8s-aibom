@@ -107,14 +107,14 @@ type BOMGenerationConfig struct {
 	// +kubebuilder:default=262144
 	// +kubebuilder:validation:Minimum=1024
 	// +kubebuilder:validation:Maximum=1048576
+	InlineThresholdBytes int64 `json:"inlineThresholdBytes,omitempty"`
+
 	// StaleThresholdReconciles is the number of consecutive reconciles with
 	// extraction errors before the AIBOM is marked Stale.
 	// +optional
 	// +kubebuilder:default=3
 	// +kubebuilder:validation:Minimum=1
 	StaleThresholdReconciles int32 `json:"staleThresholdReconciles,omitempty"`
-
-	InlineThresholdBytes int64 `json:"inlineThresholdBytes,omitempty"`
 }
 
 // SinkType identifies the implementation of an external sink.

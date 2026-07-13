@@ -97,10 +97,7 @@ spec:
                 description: BOMGeneration configures BOM-building behavior.
                 properties:
                   inlineThresholdBytes:
-                    format: int64
-                    type: integer
-                  staleThresholdReconciles:
-                    default: 3
+                    default: 262144
                     description: |-
                       InlineThresholdBytes is the size threshold below which generated
                       BOMs are stored inline in AIBOM.status.bomDocument.inline.
@@ -109,10 +106,16 @@ spec:
 
                       Default: 262144 (256 KiB). Hard ceiling 1 MiB to stay safely
                       under K8s' etcd object size limit.
+                    format: int64
+                    maximum: 1048576
+                    minimum: 1024
+                    type: integer
+                  staleThresholdReconciles:
+                    default: 3
+                    description: |-
                       StaleThresholdReconciles is the number of consecutive reconciles with
                       extraction errors before the AIBOM is marked Stale.
                     format: int32
-                    maximum: 1048576
                     minimum: 1
                     type: integer
                 type: object

@@ -429,6 +429,59 @@ func TestLoad_NilDiscovery_DefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestLoad_BOMGeneration_InlineThresholdClamping(t *testing.T) {
+	cases := []struct {
+		name      string
+		inputValue int64
+		wantValue  int64
+	}{
+		{
+			name:       "Too small threshold - clamped to min 1024",
+			inputValue: 500,
+			wantValue:  1024,
+		},
+		{
+			name:       "Too large threshold - clamped to max 1 MiB",
+			inputValue: 5000000,
+			wantValue:  1048576,
+		},
+		{
+			name:       "Valid threshold - unchanged",
+			inputValue: 50000,
+			wantValue:  50000,
+		},
+		{
+			name:       "Negative threshold - falls back to default 256 KiB",
+			inputValue: -50,
+			wantValue:  262144,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cr := &aibomv1alpha1.AIBOMControllerConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
+				Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
+					BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+						InlineThresholdBytes: tc.inputValue,
+					},
+				},
+			}
+			l := newLoader(t, nil, cr)
+			result, err := l.Load(context.Background())
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+			if result.HasErrors() {
+				t.Fatalf("unexpected errors: %s", result.AggregateMessage())
+			}
+			if got := result.Snapshot.InlineThreshold; got != tc.wantValue {
+				t.Errorf("InlineThreshold = %d, want %d", got, tc.wantValue)
+			}
+		})
+	}
+}
+
 // ---------- Store + Snapshot atomic behavior ----------
 
 func TestStore_LoadStoreAtomic(t *testing.T) {
