@@ -75,8 +75,8 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 			},
 		},
 		{
-			name:         "Wandb Env Key - Match",
-			image:        "ubuntu:latest",
+			name:  "Wandb Env Key - Match",
+			image: "ubuntu:latest",
 			env: []corev1.EnvVar{
 				{
 					Name:  "WANDB_API_KEY",

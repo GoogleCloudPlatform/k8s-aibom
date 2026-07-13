@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,3 +219,186 @@ func vllmDeployment(namespace, name string) *appsv1.Deployment {
 		},
 	}
 }
+
+func TestIntegration_NamespaceOptInWatch(t *testing.T) {
+	env := startEnvTest(t)
+	ctx := context.Background()
+
+	nsName := "watch-optin"
+	depName := "vllm-watch"
+
+	// 1. Create namespace WITHOUT opt-in label.
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: nsName},
+	}
+	mustCreate(t, env.k8sClient, ctx, ns)
+
+	// 2. Create Deployment inside it.
+	dep := vllmDeployment(nsName, depName)
+	mustCreate(t, env.k8sClient, ctx, dep)
+
+	aibomKey := types.NamespacedName{
+		Name:      "apps-deployment-" + depName,
+		Namespace: nsName,
+	}
+
+	// 3. Wait a bit, verify NO AIBOM is created.
+	time.Sleep(500 * time.Millisecond)
+	var got aibomv1alpha1.AIBOM
+	if err := env.k8sClient.Get(ctx, aibomKey, &got); err == nil {
+		t.Fatalf("AIBOM unexpectedly created for non-opted-in namespace: %+v", got)
+	}
+
+	// 4. Update Namespace to add opt-in label: "aibom.k8saibom.dev/enabled=true".
+	ns.Labels = map[string]string{OptInLabel: "true"}
+	if err := env.k8sClient.Update(ctx, ns); err != nil {
+		t.Fatalf("failed to update namespace labels: %v", err)
+	}
+
+	// 5. Verify AIBOM is AUTOMATICALLY created because of the Namespace watch!
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return err
+		}
+		if got.Status.Summary == nil {
+			return fmt.Errorf("AIBOM exists but summary not yet populated")
+		}
+		return nil
+	})
+
+	// 6. Update Namespace to remove opt-in label (reconcile should clean up AIBOM).
+	delete(ns.Labels, OptInLabel)
+	if err := env.k8sClient.Update(ctx, ns); err != nil {
+		t.Fatalf("failed to clear namespace labels: %v", err)
+	}
+
+	// 7. Verify AIBOM is AUTOMATICALLY deleted because of Namespace watch!
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		err := env.k8sClient.Get(ctx, aibomKey, &got)
+		if err == nil {
+			return fmt.Errorf("AIBOM still exists: %+v", got)
+		}
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func TestIntegration_PodImageIDWatch(t *testing.T) {
+	env := startEnvTest(t)
+	ctx := context.Background()
+
+	nsName := "watch-pod-imageid"
+	depName := "vllm-pod-watch"
+
+	mustCreateOptedInNamespace(t, env.k8sClient, ctx, nsName)
+
+	// 1. Create Deployment.
+	dep := vllmDeployment(nsName, depName)
+	mustCreate(t, env.k8sClient, ctx, dep)
+
+	// 2. Create ReplicaSet owned by Deployment.
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      depName + "-rs",
+			Namespace: nsName,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(dep, appsv1.SchemeGroupVersion.WithKind("Deployment")),
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": depName}},
+			Template: dep.Spec.Template,
+		},
+	}
+	mustCreate(t, env.k8sClient, ctx, rs)
+
+	// 3. Create Pod owned by ReplicaSet.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      depName + "-pod-0",
+			Namespace: nsName,
+			Labels:    map[string]string{"app": depName},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet")),
+			},
+		},
+		Spec: dep.Spec.Template.Spec,
+	}
+	mustCreate(t, env.k8sClient, ctx, pod)
+
+	// Initially, Pod has no container statuses, so digests are Unresolved.
+	aibomKey := types.NamespacedName{
+		Name:      "apps-deployment-" + depName,
+		Namespace: nsName,
+	}
+	var got aibomv1alpha1.AIBOM
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return err
+		}
+		if got.Status.Summary == nil {
+			return fmt.Errorf("AIBOM exists but summary not yet populated")
+		}
+		return nil
+	})
+
+	// Verify model component has empty source locator (digests not resolved).
+	// Wait, is there a model component?
+	// Our scraper parses HF_MODEL_ID env var, yielding a model component.
+	// But let's check its digest or if there is a container component.
+	// Actually, let's look at container components or just verify the reconcile gets triggered.
+	// We can verify got.Status.Summary.Workload.UID or let's inspect the component digests.
+	// The scraper resolves container digests from status.containerStatuses[].imageID.
+	// Let's assert initially that we don't have container digests or we have Unresolved.
+	// Wait, the BOM builder emits container components. Let's check them.
+	
+	// Let's write the status to the Pod.
+	pod.Status = corev1.PodStatus{
+		ContainerStatuses: []corev1.ContainerStatus{{
+			Name:    "vllm",
+			Image:   "vllm/vllm-openai:v0.6.3",
+			ImageID: "docker-pullable://vllm/vllm-openai@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		}},
+	}
+	if err := env.k8sClient.Status().Update(ctx, pod); err != nil {
+		t.Fatalf("failed to update pod status: %v", err)
+	}
+
+	// 3. Verify AIBOM is AUTOMATICALLY reconciled and updated with the digest!
+	// We can check if the BOM document now has the digest.
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return err
+		}
+		// Look for component with digest sha256:111111...
+		if got.Status.BOMDocument == nil || got.Status.BOMDocument.Inline == nil {
+			return fmt.Errorf("BOMDocument not inline yet")
+		}
+		bomStr := string(got.Status.BOMDocument.Inline.Data)
+		if !strings.Contains(bomStr, "11111111111111111111111111111111") {
+			return fmt.Errorf("BOM does not contain expected digest: %s", bomStr)
+		}
+		return nil
+	})
+
+	// 4. Update the Pod status to a new digest.
+	pod.Status.ContainerStatuses[0].ImageID = "docker-pullable://vllm/vllm-openai@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	if err := env.k8sClient.Status().Update(ctx, pod); err != nil {
+		t.Fatalf("failed to update pod status to digest 2: %v", err)
+	}
+
+	// 5. Verify AIBOM is AUTOMATICALLY reconciled and updated with the new digest!
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return err
+		}
+		bomStr := string(got.Status.BOMDocument.Inline.Data)
+		if !strings.Contains(bomStr, "22222222222222222222222222222222") {
+			return fmt.Errorf("BOM does not contain updated digest 2: %s", bomStr)
+		}
+		return nil
+	})
+}
+

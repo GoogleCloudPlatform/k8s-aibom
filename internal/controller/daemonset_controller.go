@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -119,8 +120,28 @@ func (r *DaemonSetReconciler) listOwnedPods(ctx context.Context, ds *appsv1.Daem
 // SetupWithManager registers this reconciler with the controller-runtime
 // manager.
 func (r *DaemonSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	listFactory := func() client.ObjectList { return &appsv1.DaemonSetList{} }
+	extractItems := func(l client.ObjectList) []client.Object {
+		sl := l.(*appsv1.DaemonSetList)
+		var res []client.Object
+		for i := range sl.Items {
+			res = append(res, &sl.Items[i])
+		}
+		return res
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.DaemonSet{}).
 		Owns(&aibomv1alpha1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),
+			builder.WithPredicates(NamespaceOptInChangedPredicate()),
+		).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("DaemonSet")),
+			builder.WithPredicates(PodImageIDChangedPredicate()),
+		).
 		Complete(r)
 }

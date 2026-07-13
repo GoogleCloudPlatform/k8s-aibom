@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -125,5 +126,31 @@ func (r *KServeInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) er
 	return ctrl.NewControllerManagedBy(mgr).
 		For(u).
 		Owns(&aibomv1alpha1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(
+				func() client.ObjectList {
+					list := &unstructured.UnstructuredList{}
+					list.SetGroupVersionKind(schema.GroupVersionKind{
+						Group:   "serving.kserve.io",
+						Version: "v1beta1",
+						Kind:    "InferenceServiceList",
+					})
+					return list
+				},
+				func(objList client.ObjectList) []client.Object {
+					uList, ok := objList.(*unstructured.UnstructuredList)
+					if !ok {
+						return nil
+					}
+					var objs []client.Object
+					for i := range uList.Items {
+						objs = append(objs, &uList.Items[i])
+					}
+					return objs
+				},
+			)),
+			builder.WithPredicates(NamespaceOptInChangedPredicate()),
+		).
 		Complete(r)
 }

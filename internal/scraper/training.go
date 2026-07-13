@@ -42,7 +42,7 @@ var DefaultTrainingImagePatterns = []TrainingImagePattern{
 
 // TrainingEnvSignatures matches environment variables that indicate training frameworks.
 var TrainingEnvSignatures = map[string]string{
-	"WANDB_API_KEY":          "wandb",
+	"WANDB_API_KEY": "wandb",
 }
 
 type TrainingSpecScraper struct{}

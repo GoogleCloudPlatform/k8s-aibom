@@ -431,7 +431,7 @@ func TestLoad_NilDiscovery_DefaultsApplied(t *testing.T) {
 
 func TestLoad_BOMGeneration_InlineThresholdClamping(t *testing.T) {
 	cases := []struct {
-		name      string
+		name       string
 		inputValue int64
 		wantValue  int64
 	}{

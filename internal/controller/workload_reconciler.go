@@ -43,6 +43,12 @@ import (
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/metrics"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
+
+	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // WorkloadReconciler holds the kind-neutral dependencies and methods
@@ -498,4 +504,143 @@ func formatAPIVersion(k scraper.WorkloadKind) string {
 		return k.Version
 	}
 	return k.Group + "/" + k.Version
+}
+
+// NamespaceOptInChangedPredicate returns a predicate that triggers only when
+// the "aibom.k8saibom.dev/enabled" label is added, removed, or changed.
+func NamespaceOptInChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNs, okOld := e.ObjectOld.(*corev1.Namespace)
+			newNs, okNew := e.ObjectNew.(*corev1.Namespace)
+			if !okOld || !okNew {
+				return false
+			}
+			oldVal := oldNs.Labels[OptInLabel]
+			newVal := newNs.Labels[OptInLabel]
+			return oldVal != newVal
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			ns, ok := e.Object.(*corev1.Namespace)
+			if !ok {
+				return false
+			}
+			return ns.Labels[OptInLabel] == "true"
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			ns, ok := e.Object.(*corev1.Namespace)
+			if !ok {
+				return false
+			}
+			return ns.Labels[OptInLabel] == "true"
+		},
+	}
+}
+
+// EnqueueWorkloadsForNamespace returns a MapFunc that lists all workloads of the kind
+// constructed by listFactory, and enqueues them for reconciliation when their namespace
+// matches the MapFunc input.
+func (r *WorkloadReconciler) EnqueueWorkloadsForNamespace(listFactory func() client.ObjectList, extractItems func(client.ObjectList) []client.Object) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		ns, ok := obj.(*corev1.Namespace)
+		if !ok {
+			return nil
+		}
+		list := listFactory()
+		if err := r.List(ctx, list, client.InNamespace(ns.Name)); err != nil {
+			return nil
+		}
+		items := extractItems(list)
+		var requests []reconcile.Request
+		for _, item := range items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      item.GetName(),
+					Namespace: item.GetNamespace(),
+				},
+			})
+		}
+		return requests
+	}
+}
+
+// PodImageIDChangedPredicate returns a predicate that triggers only when
+// a Pod container's status ImageID (digest) changes, or on pod creation/deletion.
+func PodImageIDChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldPod, okOld := e.ObjectOld.(*corev1.Pod)
+			newPod, okNew := e.ObjectNew.(*corev1.Pod)
+			if !okOld || !okNew {
+				return false
+			}
+			return podStatusesChanged(oldPod.Status.ContainerStatuses, newPod.Status.ContainerStatuses)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+	}
+}
+
+func podStatusesChanged(oldStatuses, newStatuses []corev1.ContainerStatus) bool {
+	if len(oldStatuses) != len(newStatuses) {
+		return true
+	}
+	oldMap := make(map[string]corev1.ContainerStatus)
+	for _, status := range oldStatuses {
+		oldMap[status.Name] = status
+	}
+	for _, newStatus := range newStatuses {
+		oldStatus, ok := oldMap[newStatus.Name]
+		if !ok {
+			return true
+		}
+		if oldStatus.ImageID != newStatus.ImageID {
+			return true
+		}
+	}
+	return false
+}
+
+// EnqueueWorkloadForPod returns a MapFunc that maps a Pod event to a reconcile request
+// for its owner workload (e.g. Deployment, StatefulSet, DaemonSet, Job) matching targetKind.
+// Direct owners are enqueued; for Deployments, the owner chain traverses transitively through ReplicaSet.
+func (r *WorkloadReconciler) EnqueueWorkloadForPod(targetKind string) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		pod, ok := obj.(*corev1.Pod)
+		if !ok {
+			return nil
+		}
+		ownerRef := metav1.GetControllerOf(pod)
+		if ownerRef == nil {
+			return nil
+		}
+		ownerKey := types.NamespacedName{
+			Namespace: pod.Namespace,
+		}
+
+		if ownerRef.Kind == "ReplicaSet" && ownerRef.APIVersion == "apps/v1" && targetKind == "Deployment" {
+			var rs appsv1.ReplicaSet
+			if err := r.Get(ctx, types.NamespacedName{Name: ownerRef.Name, Namespace: pod.Namespace}, &rs); err != nil {
+				return nil
+			}
+			parentRef := metav1.GetControllerOf(&rs)
+			if parentRef == nil {
+				return nil
+			}
+			if parentRef.Kind == "Deployment" {
+				ownerKey.Name = parentRef.Name
+			} else {
+				return nil
+			}
+		} else if ownerRef.Kind == targetKind {
+			ownerKey.Name = ownerRef.Name
+		} else {
+			return nil
+		}
+		return []reconcile.Request{{NamespacedName: ownerKey}}
+	}
 }

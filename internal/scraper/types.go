@@ -111,14 +111,14 @@ const (
 	// reserved for v2 use.
 	SourceInitContainerArg EvidenceSource = "init_container_arg"
 
-	SourceEnvVar          EvidenceSource = "env_var"
+	SourceEnvVar            EvidenceSource = "env_var"
 	SourceEnvVarNamePresent EvidenceSource = "env_var_name_present"
-	SourceImagePattern    EvidenceSource = "image_pattern"
-	SourceImageLabel      EvidenceSource = "image_label"
-	SourceCRDField        EvidenceSource = "crd_field"
-	SourceVolumeSource    EvidenceSource = "volume_source"
-	SourceResourceRequest EvidenceSource = "resource_request"
-	SourceNodeSelector    EvidenceSource = "node_selector"
+	SourceImagePattern      EvidenceSource = "image_pattern"
+	SourceImageLabel        EvidenceSource = "image_label"
+	SourceCRDField          EvidenceSource = "crd_field"
+	SourceVolumeSource      EvidenceSource = "volume_source"
+	SourceResourceRequest   EvidenceSource = "resource_request"
+	SourceNodeSelector      EvidenceSource = "node_selector"
 
 	// SourcePodStatus identifies values extracted from pod.status (notably
 	// imageID, which is how v1 resolves image digests per the digest-
