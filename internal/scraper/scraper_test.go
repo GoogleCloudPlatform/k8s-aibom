@@ -116,3 +116,115 @@ func TestScraperInterfaceShape_ZeroHandlesKind(t *testing.T) {
 		t.Error("empty fakeScraper unexpectedly handles zero kind")
 	}
 }
+
+func TestMultiScraper_Scrape_CategoryPrecedence(t *testing.T) {
+	kind := WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+
+	cases := []struct {
+		name         string
+		scrapers     []Scraper
+		wantCategory WorkloadCategory
+	}{
+		{
+			name: "Inference vs Agent (Agent first) - Agent wins",
+			scrapers: []Scraper{
+				&fakeScraper{
+					name:  "agent",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryAgent,
+					},
+				},
+				&fakeScraper{
+					name:  "inference",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryInference,
+					},
+				},
+			},
+			wantCategory: CategoryAgent,
+		},
+		{
+			name: "Inference vs Agent (Inference first) - Agent wins",
+			scrapers: []Scraper{
+				&fakeScraper{
+					name:  "inference",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryInference,
+					},
+				},
+				&fakeScraper{
+					name:  "agent",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryAgent,
+					},
+				},
+			},
+			wantCategory: CategoryAgent,
+		},
+		{
+			name: "VectorDB vs Agent - Agent wins",
+			scrapers: []Scraper{
+				&fakeScraper{
+					name:  "vectordb",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryVectorDB,
+					},
+				},
+				&fakeScraper{
+					name:  "agent",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryAgent,
+					},
+				},
+			},
+			wantCategory: CategoryAgent,
+		},
+		{
+			name: "VectorDB vs Inference - VectorDB wins",
+			scrapers: []Scraper{
+				&fakeScraper{
+					name:  "inference",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryInference,
+					},
+				},
+				&fakeScraper{
+					name:  "vectordb",
+					kinds: []WorkloadKind{kind},
+					inputs: &BOMInputs{
+						Confidence: ConfidenceInferred,
+						Category:   CategoryVectorDB,
+					},
+				},
+			},
+			wantCategory: CategoryVectorDB,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewMultiScraper(tc.scrapers...)
+			got, err := m.Scrape(context.Background(), Workload{Kind: kind}, nil)
+			if err != nil {
+				t.Fatalf("Scrape failed: %v", err)
+			}
+			if got.Category != tc.wantCategory {
+				t.Errorf("Category = %q, want %q", got.Category, tc.wantCategory)
+			}
+		})
+	}
+}

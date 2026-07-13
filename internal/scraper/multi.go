@@ -51,8 +51,10 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 				if inputs.Confidence == ConfidenceInferred {
 					finalInputs.Confidence = ConfidenceInferred
 				}
-				if string(inputs.Category) != "" {
-					finalInputs.Category = inputs.Category
+				if inputs.Category != "" {
+					if finalInputs.Category == "" || categoryPriority[inputs.Category] > categoryPriority[finalInputs.Category] {
+						finalInputs.Category = inputs.Category
+					}
 				}
 			}
 		}
@@ -75,4 +77,14 @@ func (m *MultiScraper) HandlesKind(k WorkloadKind) bool {
 		}
 	}
 	return false
+}
+
+var categoryPriority = map[WorkloadCategory]int{
+	CategoryAgent:      7,
+	CategoryTraining:   6,
+	CategoryEvaluation: 5,
+	CategoryVectorDB:   4,
+	CategoryPipeline:   3,
+	CategoryNotebook:   2,
+	CategoryInference:  1,
 }

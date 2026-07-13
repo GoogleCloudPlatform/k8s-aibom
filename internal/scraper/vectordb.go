@@ -16,8 +16,12 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // CategoryVectorDB identifies workloads serving vector databases or RAG pipelines.
@@ -33,9 +37,9 @@ type VectorDBPattern struct {
 var DefaultVectorDBPatterns = []VectorDBPattern{
 	{Name: "milvus", Pattern: regexp.MustCompile(`^milvusdb/milvus.*`)},
 	{Name: "qdrant", Pattern: regexp.MustCompile(`^qdrant/qdrant.*`)},
-	{Name: "weaviate", Pattern: regexp.MustCompile(`.*weaviate.*`)},
+	{Name: "weaviate", Pattern: regexp.MustCompile(`^(?:.*/)?weaviate(?:[:@]|$)`)},
 	{Name: "chroma", Pattern: regexp.MustCompile(`^chromadb/chroma.*`)},
-	{Name: "pgvector", Pattern: regexp.MustCompile(`.*pgvector.*`)},
+	{Name: "pgvector", Pattern: regexp.MustCompile(`^(?:.*/)?pgvector(?:[:@]|$)`)},
 }
 
 type VectorDBSpecScraper struct{}
@@ -56,26 +60,44 @@ func (s *VectorDBSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 		Confidence:      ConfidenceUnresolved,
 	}
 
-	for _, pod := range w.Pods {
-		for _, c := range pod.Spec.Containers {
-			for _, p := range DefaultVectorDBPatterns {
-				if p.Pattern.MatchString(c.Image) {
-					comp := Component{
-						Type:       ComponentApplication,
-						Name:       p.Name,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceImagePattern,
-							Locator: "spec.containers.image",
-						},
-						Properties: map[string]string{
-							"runtime.name":    p.Name,
-							"runtime.pattern": p.Pattern.String(),
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-					inputs.Confidence = ConfidenceInferred
+	var template *corev1.PodTemplateSpec
+
+	switch obj := w.Object.(type) {
+	case *appsv1.Deployment:
+		template = &obj.Spec.Template
+	case *appsv1.StatefulSet:
+		template = &obj.Spec.Template
+	case *appsv1.DaemonSet:
+		template = &obj.Spec.Template
+	default:
+		return nil, fmt.Errorf("vectordb.spec: unsupported object type %T for kind %s/%s/%s",
+			w.Object, w.Kind.Group, w.Kind.Version, w.Kind.Kind)
+	}
+
+	s.scrapePodTemplate(inputs, template, t)
+
+	return inputs, nil
+}
+
+func (s *VectorDBSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, t time.Time) {
+	for i, c := range template.Spec.Containers {
+		for _, p := range DefaultVectorDBPatterns {
+			if p.Pattern.MatchString(c.Image) {
+				comp := Component{
+					Type:       ComponentApplication,
+					Name:       p.Name,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceImagePattern,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].image", i),
+					},
+					Properties: map[string]string{
+						"runtime.name":    p.Name,
+						"runtime.pattern": p.Pattern.String(),
+					},
 				}
+				inputs.Components = append(inputs.Components, comp)
+				inputs.Confidence = ConfidenceInferred
 			}
 		}
 	}
@@ -89,8 +111,6 @@ func (s *VectorDBSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 			ScrapeTimestamp: t,
 		}}
 	}
-
-	return inputs, nil
 }
 
 func (s *VectorDBSpecScraper) HandlesKind(k WorkloadKind) bool {

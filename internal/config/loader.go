@@ -160,6 +160,12 @@ func resolveInlineThreshold(crValue int64) int64 {
 	if crValue <= 0 {
 		return DefaultInlineThresholdBytes
 	}
+	if crValue < MinInlineThresholdBytes {
+		return MinInlineThresholdBytes
+	}
+	if crValue > MaxInlineThresholdBytes {
+		return MaxInlineThresholdBytes
+	}
 	return crValue
 }
 

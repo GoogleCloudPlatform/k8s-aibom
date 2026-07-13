@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
@@ -60,6 +63,7 @@ type envTestEnv struct {
 // makes the lighter-weight unit tests pay the envtest startup cost).
 func startEnvTest(t *testing.T) *envTestEnv {
 	t.Helper()
+	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	t.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "true")
 
 	t.Cleanup(func() {
@@ -140,6 +144,9 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	if err := (&DaemonSetReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager DaemonSetReconciler: %v", err)
 	}
+	if err := (&JobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
+		t.Fatalf("SetupWithManager JobReconciler: %v", err)
+	}
 	if err := (&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager KServeInferenceServiceReconciler: %v", err)
 	}
@@ -151,7 +158,9 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	}()
 	t.Cleanup(func() {
 		mgrCancel()
-		<-mgrErrCh
+		if err := <-mgrErrCh; err != nil && !errors.Is(err, context.Canceled) {
+			t.Logf("manager stopped with error: %v", err)
+		}
 	})
 
 	// Wait for the manager's cache to sync before returning.

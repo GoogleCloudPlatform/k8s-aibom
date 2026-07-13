@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -73,6 +74,7 @@ type DeploymentReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aibom.k8saibom.dev,resources=aiboms,verbs=get;list;watch;create;update;patch;delete
@@ -171,8 +173,28 @@ func AIBOMNameForDeployment(dep *appsv1.Deployment) string {
 // label changes on namespaces are picked up by re-reconciling already-
 // known Deployments on the next event.
 func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	listFactory := func() client.ObjectList { return &appsv1.DeploymentList{} }
+	extractItems := func(l client.ObjectList) []client.Object {
+		dl := l.(*appsv1.DeploymentList)
+		var res []client.Object
+		for i := range dl.Items {
+			res = append(res, &dl.Items[i])
+		}
+		return res
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.Deployment{}).
 		Owns(&aibomv1alpha1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),
+			builder.WithPredicates(r.NamespaceWatchPredicate()),
+		).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("Deployment")),
+			builder.WithPredicates(PodImageIDChangedPredicate()),
+		).
 		Complete(r)
 }

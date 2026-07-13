@@ -16,8 +16,12 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // CategoryTraining identifies model training and fine-tuning workloads.
@@ -38,8 +42,7 @@ var DefaultTrainingImagePatterns = []TrainingImagePattern{
 
 // TrainingEnvSignatures matches environment variables that indicate training frameworks.
 var TrainingEnvSignatures = map[string]string{
-	"HUGGING_FACE_HUB_TOKEN": "huggingface",
-	"WANDB_API_KEY":          "wandb",
+	"WANDB_API_KEY": "wandb",
 }
 
 type TrainingSpecScraper struct{}
@@ -60,8 +63,97 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 		ScrapeTimestamp: t,
 		Confidence:      ConfidenceUnresolved,
 	}
+
+	var template *corev1.PodTemplateSpec
+
+	switch obj := w.Object.(type) {
+	case *batchv1.Job:
+		template = &obj.Spec.Template
+	default:
+		// For unstructured CRDs, fallback to scraping running Pods and de-duplicating
+		s.scrapePods(inputs, w.Pods)
+		inputs.Deduplicate()
+		return inputs, nil
+	}
+
+	s.scrapePodTemplate(inputs, template)
+	return inputs, nil
+}
+
+func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) {
 	isTraining := false
-	for _, pod := range w.Pods {
+	for i, c := range template.Spec.Containers {
+		// Check for training images
+		for _, p := range DefaultTrainingImagePatterns {
+			if p.Pattern.MatchString(c.Image) {
+				isTraining = true
+				comp := Component{
+					Type:       ComponentApplication,
+					Name:       p.Name,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceImagePattern,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].image", i),
+					},
+					Properties: map[string]string{
+						"runtime.name":    p.Name,
+						"runtime.pattern": p.Pattern.String(),
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+			}
+		}
+		// Check Env Vars
+		for _, env := range c.Env {
+			if fwName, ok := TrainingEnvSignatures[env.Name]; ok {
+				isTraining = true
+				comp := Component{
+					Type:       ComponentApplication,
+					Name:       fwName,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceEnvVarNamePresent,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s]", i, env.Name),
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+			}
+		}
+		// Map Volume Mounts as training datasets (simplified logic)
+		for _, vm := range c.VolumeMounts {
+			if vm.Name == "dataset" || vm.Name == "training-data" || vm.MountPath == "/data" {
+				comp := Component{
+					Type:       ComponentData,
+					Name:       vm.Name,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceVolumeSource,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].volumeMounts[%s]", i, vm.Name),
+					},
+					Properties: map[string]string{
+						"dataset.path": vm.MountPath,
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+			}
+		}
+	}
+
+	if isTraining {
+		inputs.Confidence = ConfidenceInferred
+		inputs.Category = CategoryTraining
+		inputs.Provenance = []Provenance{{
+			ScraperName:     s.Name(),
+			ScraperVersion:  ScraperVersion,
+			ScrapeMethod:    "spec",
+			ScrapeTimestamp: inputs.ScrapeTimestamp,
+		}}
+	}
+}
+
+func (s *TrainingSpecScraper) scrapePods(inputs *BOMInputs, pods []corev1.Pod) {
+	isTraining := false
+	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			// Check for training images
 			for _, p := range DefaultTrainingImagePatterns {
@@ -92,7 +184,7 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 						Name:       fwName,
 						Confidence: ConfidenceInferred,
 						Evidence: Evidence{
-							Source:  SourceEnvVar,
+							Source:  SourceEnvVarNamePresent,
 							Locator: "spec.containers.env[" + env.Name + "]",
 						},
 					}
@@ -119,6 +211,7 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 			}
 		}
 	}
+
 	if isTraining {
 		inputs.Confidence = ConfidenceInferred
 		inputs.Category = CategoryTraining
@@ -126,8 +219,7 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 			ScraperName:     s.Name(),
 			ScraperVersion:  ScraperVersion,
 			ScrapeMethod:    "spec",
-			ScrapeTimestamp: t,
+			ScrapeTimestamp: inputs.ScrapeTimestamp,
 		}}
 	}
-	return inputs, nil
 }

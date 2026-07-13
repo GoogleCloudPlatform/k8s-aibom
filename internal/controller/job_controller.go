@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -106,8 +107,28 @@ func (r *JobReconciler) listOwnedPods(ctx context.Context, job *batchv1.Job) ([]
 }
 
 func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	listFactory := func() client.ObjectList { return &batchv1.JobList{} }
+	extractItems := func(l client.ObjectList) []client.Object {
+		jl := l.(*batchv1.JobList)
+		var res []client.Object
+		for i := range jl.Items {
+			res = append(res, &jl.Items[i])
+		}
+		return res
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.Job{}).
 		Owns(&aibomv1alpha1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),
+			builder.WithPredicates(r.NamespaceWatchPredicate()),
+		).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("Job")),
+			builder.WithPredicates(PodImageIDChangedPredicate()),
+		).
 		Complete(r)
 }

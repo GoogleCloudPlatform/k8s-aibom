@@ -23,8 +23,11 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
 )
@@ -157,4 +160,69 @@ func minimalUnstructuredISVC(namespace, name string) *unstructured.Unstructured 
 	u.SetName(name)
 	u.SetNamespace(namespace)
 	return u
+}
+
+func TestIntegration_KServeNamespaceOptInWatch(t *testing.T) {
+	env := startEnvTest(t)
+	ctx := context.Background()
+
+	nsName := "watch-kserve-optin"
+	isvcName := "llama-watch"
+
+	// 1. Create namespace WITHOUT opt-in label.
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: nsName},
+	}
+	mustCreate(t, env.k8sClient, ctx, ns)
+
+	// 2. Create InferenceService inside it.
+	isvc := kserveInferenceService(nsName, isvcName, "pytorch", "gs://my-models/llama-3.1-8b/")
+	mustCreate(t, env.k8sClient, ctx, isvc)
+
+	aibomKey := types.NamespacedName{
+		Name:      AIBOMNameForWorkload("serving.kserve.io", "InferenceService", isvcName),
+		Namespace: nsName,
+	}
+
+	// 3. Wait a bit, verify NO AIBOM is created.
+	time.Sleep(500 * time.Millisecond)
+	var got aibomv1alpha1.AIBOM
+	if err := env.k8sClient.Get(ctx, aibomKey, &got); err == nil {
+		t.Fatalf("AIBOM unexpectedly created for non-opted-in namespace: %+v", got)
+	}
+
+	// 4. Update Namespace to add opt-in label: "aibom.k8saibom.dev/enabled=true".
+	ns.Labels = map[string]string{OptInLabel: "true"}
+	if err := env.k8sClient.Update(ctx, ns); err != nil {
+		t.Fatalf("failed to update namespace labels: %v", err)
+	}
+
+	// 5. Verify AIBOM is AUTOMATICALLY created because of the Namespace watch!
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return err
+		}
+		if got.Status.Summary == nil {
+			return fmt.Errorf("AIBOM exists but summary not yet populated")
+		}
+		return nil
+	})
+
+	// 6. Update Namespace to remove opt-in label (reconcile should clean up AIBOM).
+	delete(ns.Labels, OptInLabel)
+	if err := env.k8sClient.Update(ctx, ns); err != nil {
+		t.Fatalf("failed to clear namespace labels: %v", err)
+	}
+
+	// 7. Verify AIBOM is AUTOMATICALLY deleted because of Namespace watch!
+	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
+		err := env.k8sClient.Get(ctx, aibomKey, &got)
+		if err == nil {
+			return fmt.Errorf("AIBOM still exists: %+v", got)
+		}
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		return nil
+	})
 }

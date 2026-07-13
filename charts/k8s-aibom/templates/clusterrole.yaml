@@ -72,7 +72,7 @@ rules:
   - list
   - watch
 - apiGroups: ["apps"]
-  resources: ["daemonsets", "deployments", "statefulsets"]
+  resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch"]
 - apiGroups:
   - batch
