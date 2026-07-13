@@ -112,6 +112,7 @@ const (
 	SourceInitContainerArg EvidenceSource = "init_container_arg"
 
 	SourceEnvVar          EvidenceSource = "env_var"
+	SourceEnvVarNamePresent EvidenceSource = "env_var_name_present"
 	SourceImagePattern    EvidenceSource = "image_pattern"
 	SourceImageLabel      EvidenceSource = "image_label"
 	SourceCRDField        EvidenceSource = "crd_field"

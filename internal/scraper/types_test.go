@@ -47,6 +47,7 @@ func TestEvidenceSourceStringValues(t *testing.T) {
 		SourceContainerArg:       "container_arg",
 		SourceInitContainerArg:   "init_container_arg",
 		SourceEnvVar:             "env_var",
+		SourceEnvVarNamePresent:  "env_var_name_present",
 		SourceImagePattern:       "image_pattern",
 		SourceImageLabel:         "image_label",
 		SourceCRDField:           "crd_field",

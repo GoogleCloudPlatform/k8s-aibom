@@ -38,7 +38,6 @@ var DefaultTrainingImagePatterns = []TrainingImagePattern{
 
 // TrainingEnvSignatures matches environment variables that indicate training frameworks.
 var TrainingEnvSignatures = map[string]string{
-	"HUGGING_FACE_HUB_TOKEN": "huggingface",
 	"WANDB_API_KEY":          "wandb",
 }
 
@@ -92,7 +91,7 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 						Name:       fwName,
 						Confidence: ConfidenceInferred,
 						Evidence: Evidence{
-							Source:  SourceEnvVar,
+							Source:  SourceEnvVarNamePresent,
 							Locator: "spec.containers.env[" + env.Name + "]",
 						},
 					}

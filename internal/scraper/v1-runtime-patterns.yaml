@@ -30,7 +30,7 @@ runtimeImagePatterns:
   - runtime: vllm
     pattern: '^vllm/.*'
   - runtime: vllm
-    pattern: '.*ghcr\.io/.*/vllm.*'
+    pattern: '^ghcr\.io/[a-zA-Z0-9.\-_]+/vllm(?:[:@]|$)'
   - runtime: tgi
     pattern: '^huggingface/text-generation-inference.*'
   - runtime: triton
@@ -38,9 +38,9 @@ runtimeImagePatterns:
   - runtime: ollama
     pattern: '^ollama/ollama.*'
   - runtime: ray-serve
-    pattern: '.*ray-project/ray.*'
+    pattern: '^(?:.*/)?rayproject/ray(?:[:@]|$)'
   - runtime: llm-d
-    pattern: '.*llm-d/.*'
+    pattern: '^(?:.*/)?llm-d/[a-zA-Z0-9.\-_]+(?:[:@]|$)'
 
   # SGLang — LMSYS-published serving framework. Distinct namespace on
   # Docker Hub (lmsysorg/sglang); upstream tags follow semver-ish.
@@ -80,10 +80,7 @@ runtimeImagePatterns:
 # the variable NAME contributes to the Evidence locator.
 modelEnvVarNames:
   - HF_MODEL_ID
-  - MODEL_PATH
   - MODEL_NAME
-  - OLLAMA_MODELS
-  - TRANSFORMERS_CACHE
 
 # Argument flag names that, when found in a container's args, are immediately
 # followed by (positional) or =-joined to a model identity. v1 recognizes

@@ -238,7 +238,8 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"huggingface/text-generation-inference:2.0.0", "tgi"},
 		{"nvcr.io/nvidia/tritonserver:24.01-py3", "triton"},
 		{"ollama/ollama:0.1.0", "ollama"},
-		{"rayproject/ray:latest", ""}, // configured 'ray-project/ray' specifically — narrow pattern
+		{"rayproject/ray:latest", "ray-serve"},
+		{"ray-project/ray:latest", ""},
 		{"foo/bar:tag", ""},
 
 		// Phase 11 additions
@@ -305,10 +306,16 @@ func TestInferenceConfig_IsModelVolumePath(t *testing.T) {
 
 func TestInferenceConfig_IsModelEnvVarName(t *testing.T) {
 	cfg := DefaultV1Config()
-	want := []string{"HF_MODEL_ID", "MODEL_PATH", "MODEL_NAME", "OLLAMA_MODELS", "TRANSFORMERS_CACHE"}
+	want := []string{"HF_MODEL_ID", "MODEL_NAME"}
 	for _, n := range want {
 		if !cfg.IsModelEnvVarName(n) {
 			t.Errorf("expected %q in allowlist", n)
+		}
+	}
+	// Verify directory-path env vars are excluded
+	for _, n := range []string{"MODEL_PATH", "OLLAMA_MODELS", "TRANSFORMERS_CACHE"} {
+		if cfg.IsModelEnvVarName(n) {
+			t.Errorf("expected %q to be excluded from allowlist", n)
 		}
 	}
 	// Case sensitivity

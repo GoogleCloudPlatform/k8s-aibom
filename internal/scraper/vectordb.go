@@ -33,9 +33,9 @@ type VectorDBPattern struct {
 var DefaultVectorDBPatterns = []VectorDBPattern{
 	{Name: "milvus", Pattern: regexp.MustCompile(`^milvusdb/milvus.*`)},
 	{Name: "qdrant", Pattern: regexp.MustCompile(`^qdrant/qdrant.*`)},
-	{Name: "weaviate", Pattern: regexp.MustCompile(`.*weaviate.*`)},
+	{Name: "weaviate", Pattern: regexp.MustCompile(`^(?:.*/)?weaviate(?:[:@]|$)`)},
 	{Name: "chroma", Pattern: regexp.MustCompile(`^chromadb/chroma.*`)},
-	{Name: "pgvector", Pattern: regexp.MustCompile(`.*pgvector.*`)},
+	{Name: "pgvector", Pattern: regexp.MustCompile(`^(?:.*/)?pgvector(?:[:@]|$)`)},
 }
 
 type VectorDBSpecScraper struct{}

@@ -32,6 +32,8 @@ var DefaultAgentImagePatterns = []AgentImagePattern{
 	{Name: "langflow", Pattern: regexp.MustCompile(`^langflowai/langflow.*`)},
 	{Name: "flowise", Pattern: regexp.MustCompile(`^flowiseai/flowise.*`)},
 	{Name: "chainlit", Pattern: regexp.MustCompile(`^chainlit/chainlit.*`)},
+	{Name: "haystack", Pattern: regexp.MustCompile(`^deepset/haystack.*`)},
+	{Name: "llamaindex", Pattern: regexp.MustCompile(`.*llama-index.*`)},
 }
 
 // AgentEnvSignature represents environment variables that indicate agent framework usage.
@@ -40,15 +42,19 @@ var AgentEnvSignatures = map[string]string{
 	"LANGCHAIN_API_KEY":        "langchain",
 	"AUTOGEN_USE_DOCKER":       "autogen",
 	"CREWAI_TELEMETRY_OPT_OUT": "crewai",
+	"PIPELINE_YAML_PATH":       "haystack",
+	"DSPY_PROFILES_PATH":       "dspy",
+	"LLAMA_CLOUD_API_KEY":      "llamaindex",
 }
 
 // ExternalAPISignatures maps API key environment variables to the remote model/service.
 var ExternalAPISignatures = map[string]string{
-	"OPENAI_API_KEY":    "openai-api",
-	"ANTHROPIC_API_KEY": "anthropic-api",
-	"GEMINI_API_KEY":    "gemini-api",
-	"GOOGLE_API_KEY":    "gemini-api",
-	"COHERE_API_KEY":    "cohere-api",
+	"OPENAI_API_KEY":        "openai-api",
+	"ANTHROPIC_API_KEY":     "anthropic-api",
+	"GEMINI_API_KEY":        "gemini-api",
+	"COHERE_API_KEY":        "cohere-api",
+	"AZURE_OPENAI_API_KEY":  "azure-openai-api",
+	"AZURE_OPENAI_ENDPOINT": "azure-openai-api",
 }
 
 type AgentSpecScraper struct{}
@@ -112,7 +118,7 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 						Name:       fwName,
 						Confidence: ConfidenceInferred,
 						Evidence: Evidence{
-							Source:  SourceEnvVar,
+							Source:  SourceEnvVarNamePresent,
 							Locator: "spec.containers.env[" + env.Name + "]",
 						},
 						Properties: map[string]string{
@@ -127,7 +133,15 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 			for _, env := range c.Env {
 				if apiName, ok := ExternalAPISignatures[env.Name]; ok {
 					if env.ValueFrom != nil {
-						comp := Component{Type: ComponentMLModel, Name: apiName, Confidence: ConfidenceUnresolved, Evidence: Evidence{Source: SourceEnvVar, Locator: "spec.containers.env[" + env.Name + "].valueFrom"}}
+						comp := Component{
+							Type:       ComponentMLModel,
+							Name:       apiName,
+							Confidence: ConfidenceUnresolved,
+							Evidence: Evidence{
+								Source:  SourceEnvVarNamePresent,
+								Locator: "spec.containers.env[" + env.Name + "].valueFrom",
+							},
+						}
 						inputs.Components = append(inputs.Components, comp)
 						isAgent = true
 						continue
@@ -136,9 +150,9 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 					comp := Component{
 						Type:       ComponentMLModel,
 						Name:       apiName,
-						Confidence: ConfidenceDeclared,
+						Confidence: ConfidenceInferred,
 						Evidence: Evidence{
-							Source:  SourceEnvVar,
+							Source:  SourceEnvVarNamePresent,
 							Locator: "spec.containers.env[" + env.Name + "]",
 						},
 						Properties: map[string]string{

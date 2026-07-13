@@ -31,8 +31,8 @@ type EvalImagePattern struct {
 
 var DefaultEvalImagePatterns = []EvalImagePattern{
 	{Name: "lm-eval", Pattern: regexp.MustCompile(`^eleutherai/lm-eval.*`)},
-	{Name: "ragas", Pattern: regexp.MustCompile(`.*ragas.*`)},
-	{Name: "trulens", Pattern: regexp.MustCompile(`.*trulens.*`)},
+	{Name: "ragas", Pattern: regexp.MustCompile(`^(?:.*/)?ragas(?:[:@]|$)`)},
+	{Name: "trulens", Pattern: regexp.MustCompile(`^(?:.*/)?trulens(?:[:@]|$)`)},
 }
 
 type EvalSpecScraper struct{}
