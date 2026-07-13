@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,7 +158,9 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	}()
 	t.Cleanup(func() {
 		mgrCancel()
-		<-mgrErrCh
+		if err := <-mgrErrCh; err != nil && !errors.Is(err, context.Canceled) {
+			t.Logf("manager stopped with error: %v", err)
+		}
 	})
 
 	// Wait for the manager's cache to sync before returning.
