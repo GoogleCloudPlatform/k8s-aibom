@@ -353,7 +353,7 @@ func TestIntegration_PodImageIDWatch(t *testing.T) {
 	// The scraper resolves container digests from status.containerStatuses[].imageID.
 	// Let's assert initially that we don't have container digests or we have Unresolved.
 	// Wait, the BOM builder emits container components. Let's check them.
-	
+
 	// Let's write the status to the Pod.
 	pod.Status = corev1.PodStatus{
 		ContainerStatuses: []corev1.ContainerStatus{{
@@ -401,4 +401,3 @@ func TestIntegration_PodImageIDWatch(t *testing.T) {
 		return nil
 	})
 }
-

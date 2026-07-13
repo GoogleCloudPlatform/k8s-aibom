@@ -136,7 +136,7 @@ func (r *DaemonSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.Namespace{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),
-			builder.WithPredicates(NamespaceOptInChangedPredicate()),
+			builder.WithPredicates(r.NamespaceWatchPredicate()),
 		).
 		Watches(
 			&corev1.Pod{},

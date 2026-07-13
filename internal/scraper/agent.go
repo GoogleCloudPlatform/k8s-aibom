@@ -37,7 +37,7 @@ var DefaultAgentImagePatterns = []AgentImagePattern{
 	{Name: "flowise", Pattern: regexp.MustCompile(`^flowiseai/flowise.*`)},
 	{Name: "chainlit", Pattern: regexp.MustCompile(`^chainlit/chainlit.*`)},
 	{Name: "haystack", Pattern: regexp.MustCompile(`^deepset/haystack.*`)},
-	{Name: "llamaindex", Pattern: regexp.MustCompile(`.*llama-index.*`)},
+	{Name: "llamaindex", Pattern: regexp.MustCompile(`^(?:.*/)?llama-index(?:[:@]|$)`)},
 }
 
 // AgentEnvSignature represents environment variables that indicate agent framework usage.
@@ -97,32 +97,34 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 			w.Object, w.Kind.Group, w.Kind.Version, w.Kind.Kind)
 	}
 
-	isAgent := s.scrapePodTemplate(inputs, template)
+	hasFramework, hasComponents := s.scrapePodTemplate(inputs, template)
 
-	if isAgent {
+	if hasComponents {
 		inputs.Confidence = ConfidenceInferred
-		inputs.Category = CategoryAgent
 		inputs.Provenance = []Provenance{{
 			ScraperName:     s.Name(),
 			ScraperVersion:  ScraperVersion,
 			ScrapeMethod:    "spec",
 			ScrapeTimestamp: t,
 		}}
+		if hasFramework {
+			inputs.Category = CategoryAgent
+		}
 	}
 
 	return inputs, nil
 }
 
-func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) bool {
-	isAgent := false
-	var agentName string
+func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) (bool, bool) {
+	hasFramework := false
+	hasComponents := false
 
 	for i, c := range template.Spec.Containers {
 		// 1. Check for Agent UI/framework images
 		for _, p := range DefaultAgentImagePatterns {
 			if p.Pattern.MatchString(c.Image) {
-				isAgent = true
-				agentName = p.Name
+				hasFramework = true
+				hasComponents = true
 				comp := Component{
 					Type:       ComponentApplication,
 					Name:       p.Name,
@@ -143,10 +145,8 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 		// 2. Check for Framework Env Vars
 		for _, env := range c.Env {
 			if fwName, ok := AgentEnvSignatures[env.Name]; ok {
-				isAgent = true
-				if agentName == "" {
-					agentName = fwName
-				}
+				hasFramework = true
+				hasComponents = true
 				comp := Component{
 					Type:       ComponentApplication,
 					Name:       fwName,
@@ -166,6 +166,7 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 		// 3. Extract Remote LLM API Dependencies
 		for _, env := range c.Env {
 			if apiName, ok := ExternalAPISignatures[env.Name]; ok {
+				hasComponents = true
 				if env.ValueFrom != nil {
 					comp := Component{
 						Type:       ComponentMLModel,
@@ -177,7 +178,6 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 						},
 					}
 					inputs.Components = append(inputs.Components, comp)
-					isAgent = true
 					continue
 				}
 				// We just record that the dependency exists, never the key value
@@ -194,9 +194,8 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 					},
 				}
 				inputs.Components = append(inputs.Components, comp)
-				isAgent = true
 			}
 		}
 	}
-	return isAgent
+	return hasFramework, hasComponents
 }

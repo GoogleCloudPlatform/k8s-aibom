@@ -57,6 +57,12 @@ const (
 	// controller consults (singleton convention; see godoc on the
 	// AIBOMControllerConfig type).
 	DefaultConfigName = "default"
+
+	// MinInlineThresholdBytes is the minimum allowed inline threshold (1 KiB).
+	MinInlineThresholdBytes int64 = 1024
+
+	// MaxInlineThresholdBytes is the maximum allowed inline threshold (1 MiB).
+	MaxInlineThresholdBytes int64 = 1048576
 )
 
 // DefaultSnapshot returns a fresh Snapshot wrapping the compiled-in

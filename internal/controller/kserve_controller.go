@@ -150,7 +150,7 @@ func (r *KServeInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) er
 					return objs
 				},
 			)),
-			builder.WithPredicates(NamespaceOptInChangedPredicate()),
+			builder.WithPredicates(r.NamespaceWatchPredicate()),
 		).
 		Complete(r)
 }

@@ -206,7 +206,7 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					},
 				},
 			},
-			wantCategory:   CategoryAgent,
+			wantCategory:   "",
 			wantConfidence: ConfidenceInferred,
 			wantComponents: []Component{
 				{

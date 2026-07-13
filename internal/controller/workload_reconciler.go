@@ -506,9 +506,9 @@ func formatAPIVersion(k scraper.WorkloadKind) string {
 	return k.Group + "/" + k.Version
 }
 
-// NamespaceOptInChangedPredicate returns a predicate that triggers only when
-// the "aibom.k8saibom.dev/enabled" label is added, removed, or changed.
-func NamespaceOptInChangedPredicate() predicate.Predicate {
+// NamespaceWatchPredicate returns a predicate that triggers when a Namespace's
+// opt-in status changes, based on the live NamespaceSelector in the ConfigStore.
+func (r *WorkloadReconciler) NamespaceWatchPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldNs, okOld := e.ObjectOld.(*corev1.Namespace)
@@ -516,23 +516,26 @@ func NamespaceOptInChangedPredicate() predicate.Predicate {
 			if !okOld || !okNew {
 				return false
 			}
-			oldVal := oldNs.Labels[OptInLabel]
-			newVal := newNs.Labels[OptInLabel]
-			return oldVal != newVal
+			snap := r.ConfigStore.Load()
+			oldMatch := snap.NamespaceSelector.Matches(labels.Set(oldNs.Labels))
+			newMatch := snap.NamespaceSelector.Matches(labels.Set(newNs.Labels))
+			return oldMatch != newMatch
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			ns, ok := e.Object.(*corev1.Namespace)
 			if !ok {
 				return false
 			}
-			return ns.Labels[OptInLabel] == "true"
+			snap := r.ConfigStore.Load()
+			return snap.NamespaceSelector.Matches(labels.Set(ns.Labels))
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			ns, ok := e.Object.(*corev1.Namespace)
 			if !ok {
 				return false
 			}
-			return ns.Labels[OptInLabel] == "true"
+			snap := r.ConfigStore.Load()
+			return snap.NamespaceSelector.Matches(labels.Set(ns.Labels))
 		},
 	}
 }
@@ -565,7 +568,7 @@ func (r *WorkloadReconciler) EnqueueWorkloadsForNamespace(listFactory func() cli
 }
 
 // PodImageIDChangedPredicate returns a predicate that triggers only when
-// a Pod container's status ImageID (digest) changes, or on pod creation/deletion.
+// a Pod container's or init container's status ImageID (digest) changes, or on pod creation/deletion.
 func PodImageIDChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -574,7 +577,8 @@ func PodImageIDChangedPredicate() predicate.Predicate {
 			if !okOld || !okNew {
 				return false
 			}
-			return podStatusesChanged(oldPod.Status.ContainerStatuses, newPod.Status.ContainerStatuses)
+			return podStatusesChanged(oldPod.Status.ContainerStatuses, newPod.Status.ContainerStatuses) ||
+				podStatusesChanged(oldPod.Status.InitContainerStatuses, newPod.Status.InitContainerStatuses)
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			return true

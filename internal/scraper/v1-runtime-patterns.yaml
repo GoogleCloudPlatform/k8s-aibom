@@ -30,7 +30,7 @@ runtimeImagePatterns:
   - runtime: vllm
     pattern: '^vllm/.*'
   - runtime: vllm
-    pattern: '^ghcr\.io/[a-zA-Z0-9.\-_]+/vllm(?:[:@]|$)'
+    pattern: '^ghcr\.io/[a-zA-Z0-9.\-_]+/vllm[a-zA-Z0-9.\-_]*(?:[:@]|$)'
   - runtime: tgi
     pattern: '^huggingface/text-generation-inference.*'
   - runtime: triton
