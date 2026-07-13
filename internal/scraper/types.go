@@ -242,3 +242,48 @@ type BOMInputs struct {
 	Errors     []error          `json:"-"`
 	Category   WorkloadCategory `json:"category,omitempty"`
 }
+
+// Deduplicate removes duplicate components and services from the inputs,
+// preserving order.
+func (b *BOMInputs) Deduplicate() {
+	if b == nil {
+		return
+	}
+	b.Components = deduplicateComponents(b.Components)
+	b.Services = deduplicateServices(b.Services)
+}
+
+func deduplicateComponents(in []Component) []Component {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []Component
+	for _, c := range in {
+		if len(c.Children) > 0 {
+			c.Children = deduplicateComponents(c.Children)
+		}
+		// Key on coordinates that identify a component and its extraction source.
+		key := string(c.Type) + "|" + c.Name + "|" + c.Version + "|" + string(c.Evidence.Source) + "|" + c.Evidence.Locator
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func deduplicateServices(in []Service) []Service {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []Service
+	for _, s := range in {
+		if !seen[s.Name] {
+			seen[s.Name] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}

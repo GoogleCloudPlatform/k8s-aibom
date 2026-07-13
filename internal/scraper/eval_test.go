@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -63,7 +64,7 @@ func TestEvalSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -79,7 +80,7 @@ func TestEvalSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -101,7 +102,7 @@ func TestEvalSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -118,19 +119,19 @@ func TestEvalSpecScraper_Scrape(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := Workload{
 				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
-				Object: &corev1.Pod{
+				Object: &batchv1.Job{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod",
+						Name:      "test-job",
 						Namespace: "test-ns",
 					},
-				},
-				Pods: []corev1.Pod{
-					{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								{
-									Name:  "evaluator",
-									Image: tc.image,
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "evaluator",
+										Image: tc.image,
+									},
 								},
 							},
 						},

@@ -16,8 +16,12 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // CategoryAgent identifies agentic AI workloads.
@@ -79,96 +83,21 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 		Confidence:      ConfidenceUnresolved,
 	}
 
-	isAgent := false
-	var agentName string
+	var template *corev1.PodTemplateSpec
 
-	for _, pod := range w.Pods {
-		for i, c := range pod.Spec.Containers {
-			// 1. Check for Agent UI/framework images
-			for _, p := range DefaultAgentImagePatterns {
-				if p.Pattern.MatchString(c.Image) {
-					isAgent = true
-					agentName = p.Name
-					comp := Component{
-						Type:       ComponentApplication,
-						Name:       p.Name,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceImagePattern,
-							Locator: "spec.containers.image",
-						},
-						Properties: map[string]string{
-							"runtime.name":    p.Name,
-							"runtime.pattern": p.Pattern.String(),
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-				}
-			}
-
-			// 2. Check for Framework Env Vars
-			for _, env := range c.Env {
-				if fwName, ok := AgentEnvSignatures[env.Name]; ok {
-					isAgent = true
-					if agentName == "" {
-						agentName = fwName
-					}
-					comp := Component{
-						Type:       ComponentApplication,
-						Name:       fwName,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceEnvVarNamePresent,
-							Locator: "spec.containers.env[" + env.Name + "]",
-						},
-						Properties: map[string]string{
-							"runtime.name": fwName,
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-				}
-			}
-
-			// 3. Extract Remote LLM API Dependencies
-			for _, env := range c.Env {
-				if apiName, ok := ExternalAPISignatures[env.Name]; ok {
-					if env.ValueFrom != nil {
-						comp := Component{
-							Type:       ComponentMLModel,
-							Name:       apiName,
-							Confidence: ConfidenceUnresolved,
-							Evidence: Evidence{
-								Source:  SourceEnvVarNamePresent,
-								Locator: "spec.containers.env[" + env.Name + "].valueFrom",
-							},
-						}
-						inputs.Components = append(inputs.Components, comp)
-						isAgent = true
-						continue
-					}
-					// We just record that the dependency exists, never the key value
-					comp := Component{
-						Type:       ComponentMLModel,
-						Name:       apiName,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceEnvVarNamePresent,
-							Locator: "spec.containers.env[" + env.Name + "]",
-						},
-						Properties: map[string]string{
-							"dependency.type": "remote-api",
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-					// If they use an LLM API, it heavily implies an AI workload
-					isAgent = true
-				}
-			}
-
-			// Same for EnvFrom (ConfigMaps/Secrets)
-			_ = i
-		}
+	switch obj := w.Object.(type) {
+	case *appsv1.Deployment:
+		template = &obj.Spec.Template
+	case *appsv1.StatefulSet:
+		template = &obj.Spec.Template
+	case *appsv1.DaemonSet:
+		template = &obj.Spec.Template
+	default:
+		return nil, fmt.Errorf("agent.spec: unsupported object type %T for kind %s/%s/%s",
+			w.Object, w.Kind.Group, w.Kind.Version, w.Kind.Kind)
 	}
+
+	isAgent := s.scrapePodTemplate(inputs, template)
 
 	if isAgent {
 		inputs.Confidence = ConfidenceInferred
@@ -182,4 +111,92 @@ func (s *AgentSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inferenc
 	}
 
 	return inputs, nil
+}
+
+func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) bool {
+	isAgent := false
+	var agentName string
+
+	for i, c := range template.Spec.Containers {
+		// 1. Check for Agent UI/framework images
+		for _, p := range DefaultAgentImagePatterns {
+			if p.Pattern.MatchString(c.Image) {
+				isAgent = true
+				agentName = p.Name
+				comp := Component{
+					Type:       ComponentApplication,
+					Name:       p.Name,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceImagePattern,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].image", i),
+					},
+					Properties: map[string]string{
+						"runtime.name":    p.Name,
+						"runtime.pattern": p.Pattern.String(),
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+			}
+		}
+
+		// 2. Check for Framework Env Vars
+		for _, env := range c.Env {
+			if fwName, ok := AgentEnvSignatures[env.Name]; ok {
+				isAgent = true
+				if agentName == "" {
+					agentName = fwName
+				}
+				comp := Component{
+					Type:       ComponentApplication,
+					Name:       fwName,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceEnvVarNamePresent,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s]", i, env.Name),
+					},
+					Properties: map[string]string{
+						"runtime.name": fwName,
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+			}
+		}
+
+		// 3. Extract Remote LLM API Dependencies
+		for _, env := range c.Env {
+			if apiName, ok := ExternalAPISignatures[env.Name]; ok {
+				if env.ValueFrom != nil {
+					comp := Component{
+						Type:       ComponentMLModel,
+						Name:       apiName,
+						Confidence: ConfidenceUnresolved,
+						Evidence: Evidence{
+							Source:  SourceEnvVarNamePresent,
+							Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s].valueFrom", i, env.Name),
+						},
+					}
+					inputs.Components = append(inputs.Components, comp)
+					isAgent = true
+					continue
+				}
+				// We just record that the dependency exists, never the key value
+				comp := Component{
+					Type:       ComponentMLModel,
+					Name:       apiName,
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceEnvVarNamePresent,
+						Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s]", i, env.Name),
+					},
+					Properties: map[string]string{
+						"dependency.type": "remote-api",
+					},
+				}
+				inputs.Components = append(inputs.Components, comp)
+				isAgent = true
+			}
+		}
+	}
+	return isAgent
 }

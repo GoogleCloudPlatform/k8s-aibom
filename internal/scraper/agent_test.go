@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -57,23 +58,17 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 
 	cases := []struct {
 		name           string
-		pods           []corev1.Pod
+		containers     []corev1.Container
 		wantCategory   WorkloadCategory
 		wantConfidence Confidence
 		wantComponents []Component
 	}{
 		{
 			name: "No Agent Signal",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "web",
-								Image: "nginx:latest",
-							},
-						},
-					},
+					Name:  "web",
+					Image: "nginx:latest",
 				},
 			},
 			wantCategory:   "",
@@ -82,16 +77,10 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 		},
 		{
 			name: "Langflow Image",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "agent-ui",
-								Image: "langflowai/langflow:v1.0.0",
-							},
-						},
-					},
+					Name:  "agent-ui",
+					Image: "langflowai/langflow:v1.0.0",
 				},
 			},
 			wantCategory:   CategoryAgent,
@@ -103,27 +92,21 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
 		},
 		{
 			name: "Haystack Image and Env",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "agent-runner",
-								Image: "deepset/haystack:base-v2.0.0",
-								Env: []corev1.EnvVar{
-									{
-										Name:  "PIPELINE_YAML_PATH",
-										Value: "/app/pipeline.yaml",
-									},
-								},
-							},
+					Name:  "agent-runner",
+					Image: "deepset/haystack:base-v2.0.0",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "PIPELINE_YAML_PATH",
+							Value: "/app/pipeline.yaml",
 						},
 					},
 				},
@@ -137,7 +120,7 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 				{
@@ -146,35 +129,29 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[PIPELINE_YAML_PATH]",
+						Locator: "spec.template.spec.containers[0].env[PIPELINE_YAML_PATH]",
 					},
 				},
 			},
 		},
 		{
 			name: "LlamaIndex and DSPy Env Vars and OpenAI API",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "agent",
-								Image: "my-custom-agent:latest",
-								Env: []corev1.EnvVar{
-									{
-										Name:  "LLAMA_CLOUD_API_KEY",
-										Value: "secret-key",
-									},
-									{
-										Name:  "DSPY_PROFILES_PATH",
-										Value: "/app/profiles.toml",
-									},
-									{
-										Name:  "OPENAI_API_KEY",
-										Value: "sk-proj-12345",
-									},
-								},
-							},
+					Name:  "agent",
+					Image: "my-custom-agent:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "LLAMA_CLOUD_API_KEY",
+							Value: "secret-key",
+						},
+						{
+							Name:  "DSPY_PROFILES_PATH",
+							Value: "/app/profiles.toml",
+						},
+						{
+							Name:  "OPENAI_API_KEY",
+							Value: "sk-proj-12345",
 						},
 					},
 				},
@@ -188,7 +165,7 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[LLAMA_CLOUD_API_KEY]",
+						Locator: "spec.template.spec.containers[0].env[LLAMA_CLOUD_API_KEY]",
 					},
 				},
 				{
@@ -197,7 +174,7 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[DSPY_PROFILES_PATH]",
+						Locator: "spec.template.spec.containers[0].env[DSPY_PROFILES_PATH]",
 					},
 				},
 				{
@@ -206,31 +183,25 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[OPENAI_API_KEY]",
+						Locator: "spec.template.spec.containers[0].env[OPENAI_API_KEY]",
 					},
 				},
 			},
 		},
 		{
 			name: "Azure OpenAI API Key and Endpoint",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "agent-azure",
-								Image: "my-azure-agent:latest",
-								Env: []corev1.EnvVar{
-									{
-										Name:  "AZURE_OPENAI_API_KEY",
-										Value: "secret-key",
-									},
-									{
-										Name:  "AZURE_OPENAI_ENDPOINT",
-										Value: "https://my-resource.openai.azure.com/",
-									},
-								},
-							},
+					Name:  "agent-azure",
+					Image: "my-azure-agent:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "AZURE_OPENAI_API_KEY",
+							Value: "secret-key",
+						},
+						{
+							Name:  "AZURE_OPENAI_ENDPOINT",
+							Value: "https://my-resource.openai.azure.com/",
 						},
 					},
 				},
@@ -244,7 +215,7 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[AZURE_OPENAI_API_KEY]",
+						Locator: "spec.template.spec.containers[0].env[AZURE_OPENAI_API_KEY]",
 					},
 				},
 				{
@@ -253,27 +224,21 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[AZURE_OPENAI_ENDPOINT]",
+						Locator: "spec.template.spec.containers[0].env[AZURE_OPENAI_ENDPOINT]",
 					},
 				},
 			},
 		},
 		{
 			name: "GOOGLE_API_KEY False Positive Check",
-			pods: []corev1.Pod{
+			containers: []corev1.Container{
 				{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "app",
-								Image: "my-generic-app:latest",
-								Env: []corev1.EnvVar{
-									{
-										Name:  "GOOGLE_API_KEY",
-										Value: "ai_somekey123",
-									},
-								},
-							},
+					Name:  "app",
+					Image: "my-generic-app:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "GOOGLE_API_KEY",
+							Value: "ai_somekey123",
 						},
 					},
 				},
@@ -288,13 +253,19 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := Workload{
 				Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-				Object: &corev1.Pod{
+				Object: &appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod",
+						Name:      "test-deployment",
 						Namespace: "test-ns",
 					},
+					Spec: appsv1.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: tc.containers,
+							},
+						},
+					},
 				},
-				Pods: tc.pods,
 			}
 			got, err := s.Scrape(context.Background(), w, nil)
 			if err != nil {

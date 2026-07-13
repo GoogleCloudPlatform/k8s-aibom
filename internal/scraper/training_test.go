@@ -18,8 +18,10 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,6 +55,8 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 		env            []corev1.EnvVar
 		wantCategory   WorkloadCategory
 		wantComponents []Component
+		isFallback     bool
+		numReplicas    int
 	}{
 		{
 			name:         "PyTorch Image - Match",
@@ -65,7 +69,7 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -87,7 +91,7 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: "spec.containers.env[WANDB_API_KEY]",
+						Locator: "spec.template.spec.containers[0].env[WANDB_API_KEY]",
 					},
 				},
 			},
@@ -104,20 +108,56 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 			wantCategory:   "",
 			wantComponents: nil,
 		},
+		{
+			name:        "Fallback Multi-Replica Deduplication - Match Once",
+			image:       "pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime",
+			isFallback:  true,
+			numReplicas: 3,
+			env: []corev1.EnvVar{
+				{
+					Name:  "WANDB_API_KEY",
+					Value: "secret-wandb-key",
+				},
+			},
+			wantCategory: CategoryTraining,
+			wantComponents: []Component{
+				{
+					Type:       ComponentApplication,
+					Name:       "pytorch",
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceImagePattern,
+						Locator: "spec.containers.image",
+					},
+				},
+				{
+					Type:       ComponentApplication,
+					Name:       "wandb",
+					Confidence: ConfidenceInferred,
+					Evidence: Evidence{
+						Source:  SourceEnvVarNamePresent,
+						Locator: "spec.containers.env[WANDB_API_KEY]",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := Workload{
-				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
-				Object: &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod",
-						Namespace: "test-ns",
-					},
-				},
-				Pods: []corev1.Pod{
-					{
+			var w Workload
+			if tc.isFallback {
+				var pods []corev1.Pod
+				n := tc.numReplicas
+				if n == 0 {
+					n = 1
+				}
+				for i := 0; i < n; i++ {
+					pods = append(pods, corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      fmt.Sprintf("test-pod-%d", i),
+							Namespace: "test-ns",
+						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
@@ -127,9 +167,38 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 								},
 							},
 						},
+					})
+				}
+				w = Workload{
+					Kind:   WorkloadKind{Group: "ray.io", Version: "v1", Kind: "RayJob"},
+					Object: &corev1.Pod{}, // triggers default case
+					Pods:   pods,
+				}
+			} else {
+				w = Workload{
+					Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+					Object: &batchv1.Job{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-job",
+							Namespace: "test-ns",
+						},
+						Spec: batchv1.JobSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:  "trainer",
+											Image: tc.image,
+											Env:   tc.env,
+										},
+									},
+								},
+							},
+						},
 					},
-				},
+				}
 			}
+
 			got, err := s.Scrape(context.Background(), w, nil)
 			if err != nil {
 				t.Fatalf("Scrape failed: %v", err)

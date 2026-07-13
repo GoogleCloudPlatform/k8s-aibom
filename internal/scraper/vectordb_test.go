@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -88,7 +89,7 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -104,7 +105,7 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -120,7 +121,7 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: "spec.containers.image",
+						Locator: "spec.template.spec.containers[0].image",
 					},
 				},
 			},
@@ -137,19 +138,19 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := Workload{
 				Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-				Object: &corev1.Pod{
+				Object: &appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod",
+						Name:      "test-deployment",
 						Namespace: "test-ns",
 					},
-				},
-				Pods: []corev1.Pod{
-					{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								{
-									Name:  "db",
-									Image: tc.image,
+					Spec: appsv1.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "db",
+										Image: tc.image,
+									},
 								},
 							},
 						},
