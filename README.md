@@ -93,7 +93,7 @@ k8s-aibom does not certify compliance with any framework; it produces evidence t
 
 ## Quickstart (Bring Your Own Image)
 
-> **Prerequisites:** A Kubernetes cluster (1.27+), `kubectl` configured to talk to it, Docker, and Helm 3.
+> **Prerequisites:** A Kubernetes cluster (1.27+), `kubectl` configured to talk to it, Docker, and Helm 3 (or use the local bootstrap helper below).
 
 Google does **not** host a pre-built container image or Helm repository for `k8s-aibom`. You must build the image and push it to your own container registry before deploying.
 
@@ -119,7 +119,7 @@ For enterprise GitOps deployments, we provide a fully automated Terraform module
 
 See the [Terraform Automation Guide](terraform/README.md) to get started.
 
-### 3. Manual Deployment (Docker + Helm)
+### 3. Manual Deployment (Docker/Cloud Build + Helm)
 
 If you are not using GCP or prefer to build locally:
 
@@ -130,15 +130,25 @@ cd k8s-aibom
 # Set your target registry
 export IMG=my-registry.example.com/k8s-aibom:v1.0.0
 
-# Build and push the image
+# Option A: Build and push the image locally using Docker
 make image
 make docker-push
+
+# Option B: Build and push the image using GCP Cloud Build (if on GCP)
+gcloud builds submit . --project=YOUR_PROJECT_ID --tag=$IMG
 ```
+
+#### Local Helm Bootstrap (Optional)
+If you do not have `helm` installed globally, you can download and configure a local version of Helm inside the `bin/` directory by running:
+```bash
+make helm
+```
+This will download Helm to `./bin/helm`, which you can use for the deployment step below.
 
 > [!WARNING]
 > **Platform Architecture Mismatch:** `make image` builds the container for your host's native architecture. If you build on an Apple Silicon (M1/M2) Mac, you will produce a `linux/arm64` image. If you deploy this to a standard AMD64 Kubernetes cluster, the pod will CrashLoop with an `exec format error`. Use `make image-multiarch` to safely cross-compile. (Note: The Cloud Shell and Terraform paths bypass this issue by natively building on AMD64 Cloud Build runners).
 
-Deploy the local chart to your cluster, injecting your registry path:
+Deploy the local chart to your cluster, injecting your registry path (use `./bin/helm` instead of `helm` if you used the local bootstrap helper):
 
 ```bash
 helm install k8s-aibom ./charts/k8s-aibom \
@@ -172,6 +182,12 @@ kubectl describe aibom -n my-ai-namespace deployment-my-workload
 ```
 
 The full CycloneDX BOM is inline in `status.bomDocument` for BOMs under 256 KB, or referenced via URL for larger BOMs.
+
+If the BOM is inline, it is stored as base64-encoded data. You can decode and view the raw JSON by running:
+
+```bash
+kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
+```
 
 ## Configuring external sinks
 
