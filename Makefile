@@ -24,6 +24,10 @@ ENVTEST_VERSION         ?= release-0.24
 ENVTEST_K8S_VERSION     ?= 1.34.0
 IMG                     ?= k8s-aibom:latest
 
+# VERSION is stamped into the binary (main.controllerVersion) and image OCI
+# labels. Release builds pass the git tag; local builds report "dev".
+VERSION ?= dev
+
 LOCALBIN := $(CURDIR)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
@@ -79,7 +83,7 @@ vet:
 
 .PHONY: build
 build: fmt vet
-	go build -o $(LOCALBIN)/manager ./cmd/manager
+	go build -ldflags "-X main.controllerVersion=$(VERSION)" -o $(LOCALBIN)/manager ./cmd/manager
 
 .PHONY: run
 run: fmt vet
@@ -165,11 +169,11 @@ install.yaml: helm
 	$(HELM) template k8s-aibom charts/k8s-aibom -n k8s-aibom-system | sed -e '/helm.sh\/hook/d' >> install.yaml
 .PHONY: image
 image:
-	docker build -t $(IMG) .
+	docker build --build-arg VERSION=$(VERSION) -t $(IMG) .
 
 .PHONY: image-multiarch
 image-multiarch:
-	docker buildx build --platform linux/amd64,linux/arm64 -t $(IMG) .
+	docker buildx build --build-arg VERSION=$(VERSION) --platform linux/amd64,linux/arm64 -t $(IMG) .
 
 .PHONY: docker-push
 docker-push:

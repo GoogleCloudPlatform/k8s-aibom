@@ -57,10 +57,11 @@ import (
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
 
-// controllerVersion is the version label stamped into emitted BOMs.
-// Pre-release while the project is in early development; will be
-// ldflags-stamped at build time when releases start.
-const controllerVersion = "0.1.0"
+// controllerVersion is the version label stamped into emitted BOMs and
+// startup logs. Set at build time via
+// `-ldflags "-X main.controllerVersion=<version>"`; "dev" identifies
+// non-release builds.
+var controllerVersion = "dev"
 
 // Downward-API env var names. The Helm chart and install.yaml MUST
 // populate these via `valueFrom.fieldRef`. If unset, the controller
@@ -237,7 +238,8 @@ func main() {
 	}
 }
 
-// version is a placeholder until ldflags-stamped build metadata lands.
+// version renders the build version stamped via ldflags (see
+// controllerVersion).
 func version() string {
 	return fmt.Sprintf("k8s-aibom %s", controllerVersion)
 }

@@ -48,12 +48,15 @@ COPY internal/ internal/
 #     shrink the binary (~30% smaller).
 ARG TARGETOS
 ARG TARGETARCH
+# VERSION is stamped into the binary (main.controllerVersion) and surfaces
+# in emitted BOMs and startup logs. "dev" identifies non-release builds.
+ARG VERSION=dev
 ENV CGO_ENABLED=0 \
     GOOS=${TARGETOS} \
     GOARCH=${TARGETARCH}
 RUN go build \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.controllerVersion=${VERSION}" \
     -o /workspace/manager \
     ./cmd/manager
 
@@ -69,6 +72,13 @@ RUN go build \
 #     the controller (TLS to GCS / webhook endpoints; UTC timestamps).
 #   - Pinned to debian12 to match a specific OS image lineage.
 FROM gcr.io/distroless/static-debian12:nonroot
+
+# OCI identity labels. VERSION must be re-declared after FROM to be in scope.
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/GoogleCloudPlatform/k8s-aibom" \
+      org.opencontainers.image.title="k8s-aibom" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
 WORKDIR /
 COPY --from=builder /workspace/manager /manager
