@@ -1052,73 +1052,43 @@ metadata:
     app.kubernetes.io/instance: k8s-aibom
     app.kubernetes.io/version: "1.0.0"
     app.kubernetes.io/managed-by: Helm
+# Rules mirror the +kubebuilder:rbac markers in internal/controller (the
+# source of truth for what the controller uses). Workload reads are
+# read-only; writes are limited to controller-owned AIBOMs, status
+# subresources, and Events.
 rules:
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
+# Watched workload kinds (read-only).
 - apiGroups: [""]
   resources: ["namespaces", "pods"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["aibom.k8saibom.dev"]
-  resources: ["aiboms", "aibomcontrollerconfigs"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["aibom.k8saibom.dev"]
-  resources: ["aiboms/status", "aibomcontrollerconfigs/status"]
-  verbs: ["get", "patch", "update"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups: ["apps"]
   resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["serving.kserve.io"]
   resources: ["inferenceservices"]
   verbs: ["get", "list", "watch"]
+# AIBOMs are controller-owned: full lifecycle including stale-report cleanup.
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aiboms"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aiboms/status"]
+  verbs: ["get", "patch", "update"]
+# The controller config is admin-owned: the controller reads it and writes
+# only its status.
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aibomcontrollerconfigs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aibomcontrollerconfigs/status"]
+  verbs: ["get", "patch", "update"]
+# Operational events (bounded: create/patch only).
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
 ---
 # Source: k8s-aibom/templates/clusterrolebinding.yaml
 # Copyright 2026 Google LLC
@@ -1149,72 +1119,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: k8s-aibom
-subjects:
-- kind: ServiceAccount
-  name: k8s-aibom
-  namespace: k8s-aibom-system
----
-# Source: k8s-aibom/templates/role.yaml
-# Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: k8s-aibom-namespace-role
-  namespace: k8s-aibom-system
-  labels:
-    helm.sh/chart: k8s-aibom-1.0.0
-    app.kubernetes.io/name: k8s-aibom
-    app.kubernetes.io/instance: k8s-aibom
-    app.kubernetes.io/version: "1.0.0"
-    app.kubernetes.io/managed-by: Helm
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get", "list", "watch"]
----
-# Source: k8s-aibom/templates/rolebinding.yaml
-# Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: k8s-aibom-namespace-rolebinding
-  namespace: k8s-aibom-system
-  labels:
-    helm.sh/chart: k8s-aibom-1.0.0
-    app.kubernetes.io/name: k8s-aibom
-    app.kubernetes.io/instance: k8s-aibom
-    app.kubernetes.io/version: "1.0.0"
-    app.kubernetes.io/managed-by: Helm
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: k8s-aibom-namespace-role
 subjects:
 - kind: ServiceAccount
   name: k8s-aibom
@@ -1294,7 +1198,7 @@ spec:
         - name: tmp-dir
           emptyDir: {}
 ---
-# Source: k8s-aibom/templates/default-cr-hook.yaml
+# Source: k8s-aibom/templates/role.yaml
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1309,12 +1213,55 @@ spec:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Secret access exists solely so sinks (GCS, webhook) can read their
+# credential Secrets in the release namespace. It is granted only when
+# rbac.sinkSecretAccess is enabled — with no sinks configured (the default),
+# the controller holds no Secret permissions at all.
+---
+# Source: k8s-aibom/templates/rolebinding.yaml
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+# Source: k8s-aibom/templates/controllerconfig.yaml
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# AIBOMControllerConfig is cluster-scoped and managed as a regular release
+# resource so install/upgrade/rollback/uninstall ownership is deterministic.
+# (Previously created via a pre-install hook, which Helm never upgrades or
+# removes, and carried an invalid namespace on a cluster-scoped object.)
 apiVersion: aibom.k8saibom.dev/v1alpha1
 kind: AIBOMControllerConfig
 metadata:
   name: default
-  namespace: k8s-aibom-system
-  annotations:
+  labels:
+    helm.sh/chart: k8s-aibom-1.0.0
+    app.kubernetes.io/name: k8s-aibom
+    app.kubernetes.io/instance: k8s-aibom
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
 spec:
   bomGeneration:
     inlineThresholdBytes: 262144
