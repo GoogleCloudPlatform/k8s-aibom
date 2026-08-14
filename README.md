@@ -91,75 +91,71 @@ k8s-aibom outputs are designed to serve as evidence for the following framework 
 
 k8s-aibom does not certify compliance with any framework; it produces evidence that organizations can use as inputs to their compliance processes.
 
-## Quickstart (Bring Your Own Image)
+## Quickstart
 
-> **Prerequisites:** A Kubernetes cluster (1.27+), `kubectl` configured to talk to it, Docker, and Helm 3 (or use the local bootstrap helper below).
+> **Prerequisites:** A Kubernetes cluster (1.27+) and `kubectl` configured to talk to it. Helm 3 for the chart path.
 
-Google does **not** host a pre-built container image or Helm repository for `k8s-aibom`. You must build the image and push it to your own container registry before deploying.
+Releases publish a signed multi-arch image (linux/amd64, linux/arm64) with build provenance and a CycloneDX SBOM — see [Releases](https://github.com/GoogleCloudPlatform/k8s-aibom/releases) for the latest version.
 
-> [!WARNING]
-> **API and Billing Requirements:** The Zero-Install paths below (Cloud Shell and Terraform) utilize Google Cloud Build and Artifact Registry to automatically build and host your image. This requires the `cloudbuild.googleapis.com` and `artifactregistry.googleapis.com` APIs to be enabled on your GCP project and will incur standard billing costs.
+### Install with Helm (recommended)
 
-### 1. Zero-Install via Google Cloud Shell (Recommended for GCP)
+```bash
+helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
+  --version 1.0.0 \
+  --namespace k8s-aibom-system \
+  --create-namespace
+```
 
-The fastest way to evaluate `k8s-aibom` is to use our interactive Cloud Shell tutorial. This automatically provisions a workspace in your browser, builds the image using Cloud Build, and deploys the controller to your cluster.
+The published chart pins the controller image **by digest** — you install exactly the attested artifact.
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/GoogleCloudPlatform/k8s-aibom&cloudshell_tutorial=.cloudshell/tutorial.md)
+### Install with kubectl
 
-> [!NOTE]
-> If the interactive tutorial panel does not open automatically on the right side of your screen, you can manually launch it by running this command in the Cloud Shell terminal:
-> ```bash
-> teachme .cloudshell/tutorial.md
-> ```
+```bash
+kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.0.0/install.yaml
+```
 
+Always install from a release asset; the `install.yaml` at the repo root is a development artifact.
 
-### 2. Infrastructure-as-Code via Terraform
+### Verify the supply chain (optional)
 
-For enterprise GitOps deployments, we provide a fully automated Terraform module that provisions an Artifact Registry repository, runs `gcloud builds submit` to compile the image, and deploys the Helm chart.
+Every release image carries Sigstore build-provenance and SBOM attestations:
 
-See the [Terraform Automation Guide](terraform/README.md) to get started.
+```bash
+gh attestation verify oci://ghcr.io/googlecloudplatform/k8s-aibom@<digest> \
+  --owner GoogleCloudPlatform
+```
 
-### 3. Manual Deployment (Docker/Cloud Build + Helm)
+The image digest is printed in the release notes. Admission policies can verify the Sigstore bundle format (e.g. Kyverno `type: SigstoreBundle`, or Sigstore Policy Controller with `signatureFormat: bundle`).
 
-If you are not using GCP or prefer to build locally:
+### Alternative install paths
+
+- **Google Cloud Shell tutorial** — interactive evaluation walkthrough: [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/GoogleCloudPlatform/k8s-aibom&cloudshell_tutorial=.cloudshell/tutorial.md)
+- **Terraform** — GitOps-style deployment: see the [Terraform Automation Guide](terraform/README.md).
+
+### Building from source
+
+For air-gapped environments, forks, or development — build and host your own image:
 
 ```bash
 git clone https://github.com/GoogleCloudPlatform/k8s-aibom.git
 cd k8s-aibom
 
-# Set your target registry
-export IMG=my-registry.example.com/k8s-aibom:v1.0.0
-
-# Option A: Build and push the image locally using Docker
-make image
+export IMG=my-registry.example.com/k8s-aibom:dev
+make image-multiarch   # cross-compiles linux/amd64 + linux/arm64
 make docker-push
 
-# Option B: Build and push the image using GCP Cloud Build (if on GCP)
-gcloud builds submit . --project=YOUR_PROJECT_ID --tag=$IMG
-```
-
-#### Local Helm Bootstrap (Optional)
-If you do not have `helm` installed globally, you can download and configure a local version of Helm inside the `bin/` directory by running:
-```bash
-make helm
-```
-This will download Helm to `./bin/helm`, which you can use for the deployment step below.
-
-> [!WARNING]
-> **Platform Architecture Mismatch:** `make image` builds the container for your host's native architecture. If you build on an Apple Silicon (M1/M2) Mac, you will produce a `linux/arm64` image. If you deploy this to a standard AMD64 Kubernetes cluster, the pod will CrashLoop with an `exec format error`. Use `make image-multiarch` to safely cross-compile. (Note: The Cloud Shell and Terraform paths bypass this issue by natively building on AMD64 Cloud Build runners).
-
-Deploy the local chart to your cluster, injecting your registry path (use `./bin/helm` instead of `helm` if you used the local bootstrap helper):
-
-```bash
 helm install k8s-aibom ./charts/k8s-aibom \
   --namespace k8s-aibom-system \
   --create-namespace \
   --set image.repository=my-registry.example.com/k8s-aibom \
-  --set image.tag=v1.0.0
+  --set image.tag=dev
 ```
 
+> [!WARNING]
+> **Platform architecture:** plain `make image` builds only your host's native architecture — an Apple Silicon build will CrashLoop on an AMD64 cluster with `exec format error`. Prefer `make image-multiarch`. No `helm` installed? `make helm` bootstraps one at `./bin/helm`.
+
 > [!NOTE]
-> **Private Registries:** If your registry requires authentication, add `--set imagePullSecrets[0].name=my-secret` to the Helm command.
+> **Private registries:** if your registry requires authentication, add `--set imagePullSecrets[0].name=my-secret` to the Helm command.
 
 ### Opt in a namespace
 
