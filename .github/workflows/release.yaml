@@ -134,7 +134,9 @@ jobs:
         helm push "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}"
 
     - name: Generate digest-pinned install.yaml
-      run: make install.yaml
+      # HELM override: the Makefile defaults to ./bin/helm and its
+      # self-bootstrap cannot write to the runner; use setup-helm's binary.
+      run: make install.yaml HELM="$(command -v helm)"
 
     - name: Build binary
       run: make build VERSION="${TAG}"

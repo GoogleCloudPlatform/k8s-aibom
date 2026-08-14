@@ -62,4 +62,6 @@ jobs:
         test -f dist/k8s-aibom-0.0.0-dryrun.tgz
 
     - name: Generate install.yaml
-      run: make install.yaml
+      # HELM override: the Makefile defaults to ./bin/helm and its
+      # self-bootstrap cannot write to the runner; use setup-helm's binary.
+      run: make install.yaml HELM="$(command -v helm)"
