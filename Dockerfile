@@ -25,7 +25,12 @@
 # and breaks the build. Pinning to 1.26 directly here avoids the
 # toolchain-resolution surprise. Bump in lockstep with the go.mod `go`
 # directive when upgrading.
-FROM golang:1.26-bookworm AS builder
+#
+# --platform=$BUILDPLATFORM keeps this stage on the build host's native
+# architecture in multi-arch builds; the binary is cross-compiled via
+# GOOS/GOARCH below. Without it, buildx runs the whole Go compile under
+# QEMU emulation for non-native targets (~20x slower).
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
 
 WORKDIR /workspace
 
