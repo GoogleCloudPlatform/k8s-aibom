@@ -18,70 +18,40 @@ metadata:
   name: {{ include "k8s-aibom.fullname" . }}
   labels:
     {{- include "k8s-aibom.labels" . | nindent 4 }}
+# Rules mirror the +kubebuilder:rbac markers in internal/controller (the
+# source of truth for what the controller uses). Workload reads are
+# read-only; writes are limited to controller-owned AIBOMs, status
+# subresources, and Events.
 rules:
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
+# Watched workload kinds (read-only).
 - apiGroups: [""]
   resources: ["namespaces", "pods"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["aibom.k8saibom.dev"]
-  resources: ["aiboms", "aibomcontrollerconfigs"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["aibom.k8saibom.dev"]
-  resources: ["aiboms/status", "aibomcontrollerconfigs/status"]
-  verbs: ["get", "patch", "update"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups: ["apps"]
   resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["serving.kserve.io"]
   resources: ["inferenceservices"]
   verbs: ["get", "list", "watch"]
+# AIBOMs are controller-owned: full lifecycle including stale-report cleanup.
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aiboms"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aiboms/status"]
+  verbs: ["get", "patch", "update"]
+# The controller config is admin-owned: the controller reads it and writes
+# only its status.
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aibomcontrollerconfigs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["aibom.k8saibom.dev"]
+  resources: ["aibomcontrollerconfigs/status"]
+  verbs: ["get", "patch", "update"]
+# Operational events (bounded: create/patch only).
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]

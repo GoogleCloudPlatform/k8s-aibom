@@ -34,6 +34,13 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+rbac:
+  # Grant the controller read access to Secrets in the release namespace.
+  # Required ONLY when a sink (GCS, webhook) reads credentials from a
+  # Secret. Off by default: with no sinks configured, the controller holds
+  # no Secret permissions.
+  sinkSecretAccess: false
+
 podAnnotations: {}
 
 podSecurityContext:
