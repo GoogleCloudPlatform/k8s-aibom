@@ -1,0 +1,63 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Exercises the release pipeline's build and packaging steps on every PR —
+# multi-arch image build (no push), chart packaging with release-style
+# version overrides, and install.yaml generation — so a broken release
+# path is caught at review time, not at tag time. Publishes nothing.
+
+name: Release Dry Run
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  release-dry-run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build multi-arch image (no push)
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: false
+        tags: k8s-aibom:dry-run
+        build-args: |
+          VERSION=v0.0.0-dryrun
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+
+    - name: Package chart with release-style versions
+      run: |
+        helm package charts/k8s-aibom --version "0.0.0-dryrun" --app-version "v0.0.0-dryrun" --destination dist/
+        test -f dist/k8s-aibom-0.0.0-dryrun.tgz
+
+    - name: Generate install.yaml
+      run: make install.yaml

@@ -12,10 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Release pipeline. Fires on v* tags and publishes one coherent artifact
+# set: multi-arch image (ghcr, digest-pinned), Helm chart (OCI), digest-
+# pinned install.yaml, CycloneDX SBOM, build-provenance attestations, and
+# a GitHub release. Everything published under ghcr.io/googlecloudplatform
+# is tagged, attested, and changelogged — no snapshot/edge publishing.
+
 name: Release
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  IMAGE: ghcr.io/googlecloudplatform/k8s-aibom
+  CHART_REPO: oci://ghcr.io/googlecloudplatform/charts
 
 on:
   push:
@@ -26,31 +34,115 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      
+      contents: write      # create the GitHub release
+      packages: write      # push image + chart to ghcr
+      id-token: write      # keyless signing (Sigstore via GitHub attestations)
+      attestations: write  # store attestations
+
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Helm
-      uses: azure/setup-helm@v4
-      
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
 
-    - name: Build binaries
+    # TAG keeps the leading v (image tag, binary version, appVersion);
+    # VERSION strips it (Helm chart semver).
+    - name: Derive versions from tag
       run: |
-        make build
-        # Optionally build for multiple architectures if providing raw binaries
+        echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+        echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-    - name: Generate install.yaml
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to ghcr.io
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Build and push multi-arch image
+      id: build
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ env.IMAGE }}:${{ env.TAG }}
+        build-args: |
+          VERSION=${{ env.TAG }}
+        # GitHub attestations below are the provenance story; disable
+        # buildx's own so the pushed artifact is a plain image index.
+        provenance: false
+
+    - name: Attest image build provenance
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-name: ${{ env.IMAGE }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        push-to-registry: true
+
+    # CycloneDX for the self-SBOM: the BOM tool ships its own BOM in the
+    # format it emits.
+    - name: Generate image SBOM (CycloneDX)
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+        format: cyclonedx-json
+        output-file: k8s-aibom-${{ env.TAG }}.sbom.cdx.json
+        registry-username: ${{ github.actor }}
+        registry-password: ${{ github.token }}
+        upload-artifact: false
+        upload-release-assets: false
+
+    - name: Attest SBOM
+      uses: actions/attest-sbom@v2
+      with:
+        subject-name: ${{ env.IMAGE }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        sbom-path: k8s-aibom-${{ env.TAG }}.sbom.cdx.json
+        push-to-registry: true
+
+    # Pin the chart defaults to the published image by digest before
+    # packaging, so the published chart and install.yaml install exactly
+    # the attested artifact with no overrides needed.
+    - name: Pin chart values to published image digest
+      run: |
+        yq -i '.image.repository = strenv(IMAGE) | .image.digest = "${{ steps.build.outputs.digest }}"' \
+          charts/k8s-aibom/values.yaml
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+
+    - name: Package and push chart
+      run: |
+        helm package charts/k8s-aibom --version "${VERSION}" --app-version "${TAG}" --destination dist/
+        helm push "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}"
+
+    - name: Generate digest-pinned install.yaml
       run: make install.yaml
-      
-    - name: Create GitHub Release
+
+    - name: Build binary
+      run: make build VERSION="${TAG}"
+
+    - name: Create GitHub release
       uses: softprops/action-gh-release@v2
       with:
         files: |
           install.yaml
+          k8s-aibom-${{ env.TAG }}.sbom.cdx.json
+          dist/k8s-aibom-${{ env.VERSION }}.tgz
           bin/manager
         generate_release_notes: true
+        body: |
+          Image: `${{ env.IMAGE }}:${{ env.TAG }}`
+          Digest: `${{ steps.build.outputs.digest }}`
+          Chart: `${{ env.CHART_REPO }}/k8s-aibom:${{ env.VERSION }}`
+
+          Verify: `gh attestation verify oci://${{ env.IMAGE }}@${{ steps.build.outputs.digest }} --owner GoogleCloudPlatform`

@@ -166,7 +166,7 @@ install.yaml: helm
 		echo "---" >> install.yaml; \
 		grep -v "^---$$" $$file >> install.yaml; \
 	done
-	$(HELM) template k8s-aibom charts/k8s-aibom -n k8s-aibom-system | sed -e '/helm.sh\/hook/d' >> install.yaml
+	$(HELM) template k8s-aibom charts/k8s-aibom -n k8s-aibom-system >> install.yaml
 .PHONY: image
 image:
 	docker build --build-arg VERSION=$(VERSION) -t $(IMG) .
