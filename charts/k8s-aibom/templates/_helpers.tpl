@@ -75,3 +75,15 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Controller image reference. A digest takes precedence over the tag so
+releases can pin the image immutably without patching the chart.
+*/}}
+{{- define "k8s-aibom.image" -}}
+{{- if .Values.image.digest }}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest }}
+{{- else }}
+{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- end }}
+{{- end }}

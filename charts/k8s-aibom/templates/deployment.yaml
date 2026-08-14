@@ -44,7 +44,7 @@ spec:
         - name: manager
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ include "k8s-aibom.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: POD_NAME
