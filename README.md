@@ -127,35 +127,10 @@ gh attestation verify oci://ghcr.io/googlecloudplatform/k8s-aibom@<digest> \
 
 The image digest is printed in the release notes. Admission policies can verify the Sigstore bundle format (e.g. Kyverno `type: SigstoreBundle`, or Sigstore Policy Controller with `signatureFormat: bundle`).
 
-### Alternative install paths
+### Other install paths
 
-- **Google Cloud Shell tutorial** — interactive evaluation walkthrough: [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/GoogleCloudPlatform/k8s-aibom&cloudshell_tutorial=.cloudshell/tutorial.md)
 - **Terraform** — GitOps-style deployment: see the [Terraform Automation Guide](terraform/README.md).
-
-### Building from source
-
-For air-gapped environments, forks, or development — build and host your own image:
-
-```bash
-git clone https://github.com/GoogleCloudPlatform/k8s-aibom.git
-cd k8s-aibom
-
-export IMG=my-registry.example.com/k8s-aibom:dev
-make image-multiarch   # cross-compiles linux/amd64 + linux/arm64
-make docker-push
-
-helm install k8s-aibom ./charts/k8s-aibom \
-  --namespace k8s-aibom-system \
-  --create-namespace \
-  --set image.repository=my-registry.example.com/k8s-aibom \
-  --set image.tag=dev
-```
-
-> [!WARNING]
-> **Platform architecture:** plain `make image` builds only your host's native architecture — an Apple Silicon build will CrashLoop on an AMD64 cluster with `exec format error`. Prefer `make image-multiarch`. No `helm` installed? `make helm` bootstraps one at `./bin/helm`.
-
-> [!NOTE]
-> **Private registries:** if your registry requires authentication, add `--set imagePullSecrets[0].name=my-secret` to the Helm command.
+- **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
 
 ### Opt in a namespace
 
