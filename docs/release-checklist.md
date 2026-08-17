@@ -18,6 +18,11 @@ the tag step with a new version.
 5. README version strings: the Quickstart's chart `--version` and
    install.yaml release URL updated to the new version (they are
    hardcoded by design so installs are reproducible).
+6. Downstream consumers: distributions that qualify k8s-aibom (e.g.
+   NVIDIA AICR, per their ADR-019) pin the chart, image, CRDs, and status
+   contract as one versioned set — any release changes their
+   qualification target. Give downstream maintainers a heads-up,
+   especially for unscheduled security patches landing mid-qualification.
 
 ## Real-cluster verification (GKE)
 
