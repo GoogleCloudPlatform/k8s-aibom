@@ -6,6 +6,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-17
+
+First tagged release. Every release publishes a coherent, verifiable
+artifact set: multi-arch image (linux/amd64, linux/arm64) on
+ghcr.io/googlecloudplatform/k8s-aibom with Sigstore build-provenance and
+CycloneDX SBOM attestations, a digest-pinned Helm chart on
+oci://ghcr.io/googlecloudplatform/charts, and a digest-pinned install.yaml
+release asset.
+
 ### Changed
 
 - **AIBOMControllerConfig is now a regular Helm release resource** instead
@@ -33,6 +42,10 @@ All notable changes to k8s-aibom are documented here. The format follows
 - Community health files: CODEOWNERS, issue forms, PR template.
 - `VERSIONING.md`, this changelog, `docs/compatibility.md`,
   `docs/release-checklist.md`.
+- Release pipeline: tag-triggered publishing of the signed multi-arch
+  image, provenance and SBOM attestations (image and chart), OCI chart,
+  and digest-pinned install.yaml; a dry-run job exercises the release
+  path on every PR.
 
 ### Security
 
