@@ -15,6 +15,9 @@ the tag step with a new version.
    package time and the binary version at build time from the tag — no
    hand-edited version strings anywhere in the diff.
 4. Dependabot alerts: zero open critical/high.
+5. README version strings: the Quickstart's chart `--version` and
+   install.yaml release URL updated to the new version (they are
+   hardcoded by design so installs are reproducible).
 
 ## Real-cluster verification (GKE)
 

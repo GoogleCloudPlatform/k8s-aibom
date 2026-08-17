@@ -7,7 +7,7 @@ A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] docu
 [![Static Analysis](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml)
 
 
-> **Status:** v1.0 — alpha. Production-suitable for non-critical observation use cases. Stable APIs through v1.x. Feedback welcome.
+> **Status:** v1.0.0 [released](https://github.com/GoogleCloudPlatform/k8s-aibom/releases) — production-suitable for non-critical observation use cases. APIs stable through v1.x (see [VERSIONING.md](VERSIONING.md)); changes tracked in the [CHANGELOG](CHANGELOG.md). Feedback welcome.
 
 ---
 
@@ -78,7 +78,7 @@ Every attribute in a k8s-aibom BOM carries a confidence flag and an evidence loc
 
 For compliance reviewers, this distinction is the entire point: a BOM that says "this workload runs vLLM and serves Phi-3-mini" is dramatically more useful when the reviewer can tell at a glance which parts of that claim are the customer's own declaration versus the controller's pattern-matching inference.
 
-The v1.1 roadmap extends the confidence model with cryptographic verification — `verified` for model identities backed by a [Sigstore][sigstore] / OMS signature with a valid Rekor entry. The v1.0 codebase ships with the verification interface in place but uses a `NoopVerifier` that never marks anything verified, leaving signing for v1.1.
+The v1.1 roadmap extends the confidence model with cryptographic verification — `verified` for model identities backed by a [Sigstore][sigstore] / OMS signature with a valid Rekor entry. v1.0.x releases ship with the verification interface in place but use a `NoopVerifier` that never marks anything verified, leaving signing for v1.1.
 
 ## Compliance framework mapping
 
@@ -189,6 +189,9 @@ kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.statu
 
 By default, BOMs are stored only in the AIBOM CR's status — no data leaves the cluster. To configure external sinks, edit the `AIBOMControllerConfig` named `default`:
 
+> [!IMPORTANT]
+> Sinks that read credential Secrets (webhook auth, GCS service-account keys) require installing the chart with `--set rbac.sinkSecretAccess=true`. It is **off by default**: with no sinks configured, the controller holds no Secret permissions at all.
+
 ```yaml
 apiVersion: aibom.k8saibom.dev/v1alpha1
 kind: AIBOMControllerConfig
@@ -220,7 +223,7 @@ Configuration changes take effect on the next reconcile, without restarting the 
 The controller is the *only* identity in the system that writes BOMs to external sinks. This is enforced structurally:
 
 - The controller runs as a single ServiceAccount with minimum permissions: `roles/storage.objectCreator` on the target GCS bucket (no `objectViewer`, no `objectAdmin`, no bucket-level admin). On non-GCP environments, equivalent minimum permissions via Workload Identity Federation.
-- Webhook sink credentials are loaded from Kubernetes Secrets in the controller's namespace. The controller does not read Secrets from other namespaces. Customer workload pods cannot read these Secrets.
+- Webhook sink credentials are loaded from Kubernetes Secrets in the controller's namespace. The controller does not read Secrets from other namespaces, and holds Secret read permission only when `rbac.sinkSecretAccess` is enabled at install time (off by default). Customer workload pods cannot read these Secrets.
 - The GCS sink uses `DoesNotExist` preconditions on every write, making BOM objects immutable once written. A second write to the same path fails by design — the audit trail cannot be silently overwritten.
 
 This bounds the blast radius of a compromised AI workload: it cannot tamper with audit BOMs. The single-principal write pattern also produces a clean signature in cloud audit logs.
@@ -231,7 +234,7 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model a
 
 The project is built around a few load-bearing conventions documented in [CONTRIBUTING.md](CONTRIBUTING.md):
 
-- **316 tests** across unit, envtest, and real-cluster smoke layers, with substring-asserted error messages, fallback-path-first ordering, and the customer-protection properties (last-known-good config retention) tested at all three layers.
+- **300+ tests** across unit, envtest, and real-cluster smoke layers, with substring-asserted error messages, fallback-path-first ordering, and the customer-protection properties (last-known-good config retention) tested at all three layers.
 - **Conservative-detection principle** — the controller prefers false negatives (an honest "unresolved") to false positives (a fabricated "declared"). Detection patterns are added only when there is clear signal, not speculatively.
 - **Cloud-neutrality constraint** — the project runs on any conformant Kubernetes cluster. Google-specific dependencies are limited to the optional GCS sink; all other code paths work identically on EKS, AKS, on-prem, or local clusters.
 - **Real-cluster smoke verification** — every release is verified end-to-end on a real GKE cluster against the documented properties before tagging, not solely via envtest.
@@ -249,6 +252,8 @@ The controller is comfortable on a cluster with a few hundred AI workloads. For 
 
 ## Compatibility
 
+See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and support policy. Summary:
+
 **Kubernetes versions.** Tested against Kubernetes 1.27 through 1.35. The controller uses only stable APIs; older versions back to 1.23 should work but are not actively tested.
 
 **Cloud platforms.** Runs on Google Kubernetes Engine (Standard and Autopilot), Amazon Elastic Kubernetes Service, Azure Kubernetes Service, on-premises clusters (kubeadm, kops, Rancher, OpenShift), and local development clusters (kind, minikube, k3s). The GCS sink requires Google Cloud authentication; the webhook sink works against any HTTPS endpoint; the CRD status sink works on any conformant cluster.
@@ -257,18 +262,9 @@ The controller is comfortable on a cluster with a few hundred AI workloads. For 
 
 ## Roadmap
 
-### v1.x — stable API series
+v1.0.0 is released — see the [CHANGELOG](CHANGELOG.md) for what shipped. Headline directions: **v1.1** brings Sigstore/OMS model-signature verification (the `verified` confidence tier) and a native GUAC sink; **v1.2–v1.3** expand scraper and registry coverage; **v2** explores eBPF-based extraction and SPDX 3.0 emission.
 
-- **v1.1** — Native GUAC sink for OpenSSF GUAC ingestion; Sigstore / OMS signature verification for model identities (`verified` confidence); admission webhook for `AIBOMControllerConfig` singleton enforcement; configurable workload-kind allowlist via the CR.
-- **v1.2** — Additional CRD scrapers (llm-d native CRDs, KAITO, Seldon Core); deep KServe extraction following `ServingRuntime` references; expanded agent framework coverage (Semantic Kernel, Haystack, DSPy).
-- **v1.3** — Active registry digest resolution for mutable image tags; image SBOM extraction from Artifact Registry; hardware (GPU/TPU) extraction from resource requests and node selectors.
-
-### v2 — Phase 2 capability tier
-
-- eBPF-based scraper for higher-fidelity attribute extraction: in-container model load events, egress destination capture, runtime version verification against running processes.
-- Native SPDX 3.0 AI profile emission alongside CycloneDX.
-- Service mesh telemetry integration (Istio / Linkerd / Cilium) for network posture in the BOM.
-- Upstream CycloneDX profile contribution — a "Kubernetes runtime ML-BOM profile" codifying the conventions developed in v1.x as a CycloneDX upstream specification.
+Full detail in [docs/roadmap.md](docs/roadmap.md).
 
 ## Relationship to other projects
 
@@ -296,6 +292,10 @@ k8s-aibom is published by Google under the Apache 2.0 license. The project welco
 
 Kubernetes and K8s are registered trademarks of The Linux Foundation in the United States and other countries.
 
+## Disclaimer
+
+This is not an officially supported Google product. This project is not eligible for the [Google Open Source Software Vulnerability Rewards Program](https://bughunters.google.com/open-source-security).
+
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
@@ -310,6 +310,3 @@ Apache 2.0. See [LICENSE](LICENSE).
 [eu-ai-act]: https://artificialintelligenceact.eu/
 [nist-ai-rmf]: https://www.nist.gov/itl/ai-risk-management-framework
 [iso-42001]: https://www.iso.org/standard/81230.html
-
-## Disclaimer
-This is not an officially supported Google product. This project is not eligible for the [Google Open Source Software Vulnerability Rewards Program](https://bughunters.google.com/open-source-security).
