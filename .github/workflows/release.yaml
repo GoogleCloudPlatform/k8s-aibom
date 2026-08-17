@@ -129,9 +129,20 @@ jobs:
       uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
     - name: Package and push chart
+      id: chart
       run: |
         helm package charts/k8s-aibom --version "${VERSION}" --app-version "${TAG}" --destination dist/
-        helm push "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}"
+        helm push "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}" 2>&1 | tee push.log
+        echo "digest=$(awk '/Digest:/ {print $2}' push.log)" >> "$GITHUB_OUTPUT"
+
+    # The chart is attested like the image, so both artifacts AICR pins
+    # (image digest + chart) are cryptographically verifiable.
+    - name: Attest chart build provenance
+      uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+      with:
+        subject-name: ghcr.io/googlecloudplatform/charts/k8s-aibom
+        subject-digest: ${{ steps.chart.outputs.digest }}
+        push-to-registry: true
 
     - name: Generate digest-pinned install.yaml
       # HELM override: the Makefile defaults to ./bin/helm and its
@@ -154,7 +165,11 @@ jobs:
 
         Verify: \`gh attestation verify oci://${IMAGE}@${DIGEST} --owner GoogleCloudPlatform\`
         EOF
-        gh release create "${TAG}" \
+        # Tags with a pre-release identifier (v1.0.0-rc.1) publish as
+        # GitHub prereleases so they never show as "latest".
+        PRERELEASE=""
+        case "${TAG}" in *-*) PRERELEASE="--prerelease" ;; esac
+        gh release create "${TAG}" ${PRERELEASE} \
           --title "${TAG}" \
           --notes "$(cat release-notes.md)" \
           --generate-notes \
