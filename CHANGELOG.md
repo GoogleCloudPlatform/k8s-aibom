@@ -6,7 +6,7 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-08-19
+## [1.2.0] - 2026-08-18
 
 ### Added
 
