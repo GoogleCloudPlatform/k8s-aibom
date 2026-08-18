@@ -163,3 +163,54 @@ For completeness, the threats outside scope:
 - The runtime-model-fetch bypass. A workload that downloads a model
   from an arbitrary URL at runtime is invisible to v1 spec-driven
   scraping. See [`threat-model.md`](threat-model.md) §5.
+
+## 7. Data visibility, sensitivity, and retention
+
+Adopter-facing disclosure of what the controller sees, what it emits, who
+should be able to read the output, and how long data lives.
+
+### What the controller sees (in memory)
+
+The controller's informers watch workloads and pods **cluster-wide**. This
+means the full spec of every workload and pod in the cluster — including
+container args and inline environment variable *values* — passes through
+the controller's informer cache in memory, **before** the namespace
+opt-in check is applied. The `aibom.k8saibom.dev/enabled=true` label
+governs what is *reported*, not what is *cached*: specs from non-opted-in
+namespaces are held in the standard controller-runtime cache and are
+never scraped, persisted, emitted to any sink, or included in any BOM.
+Restricting the informers themselves to labeled namespaces would miss
+newly labeled namespaces and is not currently implemented; the in-memory
+scope is a deliberate, disclosed trade-off.
+
+### What the controller emits
+
+BOMs contain metadata **derived from workload specs**: image references
+and digests, detected runtimes/frameworks, model identities from args,
+annotations, and environment variable *names* and identity-bearing values
+(e.g. `HF_MODEL_ID`). Secret *values* are never emitted: `secretKeyRef`
+values do not appear in BOMs or controller logs (verified independently
+during downstream qualification). Sink credential Secrets are read
+on-demand, used to construct sink clients, and never logged or embedded
+in output.
+
+### Intended readers
+
+Treat `AIBOM` resources as **sensitive operational metadata** — they
+reveal which AI models, frameworks, and external AI dependencies run
+where. Intended readers are platform, security, and compliance teams.
+Recommended posture: do not grant `get`/`list` on `aiboms` in ClusterRole
+grants for general developer roles; scope read access to the teams that
+consume inventory. The same applies to any external sink destination
+(bucket ACLs, webhook receivers).
+
+### Retention
+
+- **In-cluster:** each AIBOM lives exactly as long as its owning
+  workload (owner-reference garbage collection). Uninstalling the
+  controller does not delete AIBOMs (see README: Uninstall); deleting
+  the CRDs purges all inventory data.
+- **External sinks:** retention is governed by the destination. The GCS
+  sink writes immutable objects (`DoesNotExist` preconditions) — the
+  audit trail cannot be silently overwritten, and lifecycle/retention
+  policy is the bucket owner's responsibility.
