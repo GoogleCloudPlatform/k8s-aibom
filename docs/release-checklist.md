@@ -17,7 +17,11 @@ the tag step with a new version.
 4. Dependabot alerts: zero open critical/high.
 5. README version strings: the Quickstart's chart `--version` and
    install.yaml release URL updated to the new version (they are
-   hardcoded by design so installs are reproducible).
+   hardcoded by design so installs are reproducible). Merge all
+   README/docs updates BEFORE tagging so the tagged tree is
+   self-consistent — release URLs briefly pointing at a not-yet-published
+   release is acceptable; a tag whose README contradicts the release is
+   not (v1.0.0 lesson: its tagged README predated the install rewrite).
 6. Downstream consumers: distributions that qualify k8s-aibom (e.g.
    NVIDIA AICR, per their ADR-019) pin the chart, image, CRDs, and status
    contract as one versioned set — any release changes their
