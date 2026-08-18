@@ -6,6 +6,23 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Chart `config.*` values render verbatim into the default
+  `AIBOMControllerConfig`: `discovery` (incl. namespace selector),
+  `bomGeneration`, `sinks`, and `logging` are now normal public values —
+  no template patching or post-install CR mutation needed.
+- Chart default resources are set from measured footprint (requests
+  50m/128Mi, memory limit 256Mi; no CPU limit by design — see
+  docs/quality-baseline.md).
+
+### Changed
+
+- Readiness now gates on informer cache sync: `/readyz` fails until the
+  controller can observe the cluster, and the chart wires liveness and
+  readiness probes against the health endpoints (previously no probe
+  consulted them).
+
 ### Fixed
 
 - Sink credential Secrets are now read via a direct (uncached) API
@@ -15,13 +32,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   (`Ready=True` stale at the prior observedGeneration) with repeated
   `secrets is forbidden` list errors. Found by AICR gate-3 qualification.
   The Role also narrows to `get` only.
-
-### Changed
-
-- Readiness now gates on informer cache sync: `/readyz` fails until the
-  controller can observe the cluster, and the chart wires liveness and
-  readiness probes against the health endpoints (previously no probe
-  consulted them).
 
 ## [1.0.0] - 2026-08-17
 

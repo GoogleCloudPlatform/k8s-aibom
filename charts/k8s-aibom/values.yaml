@@ -41,6 +41,33 @@ rbac:
   # no Secret permissions.
   sinkSecretAccess: false
 
+# Rendered verbatim into the default AIBOMControllerConfig CR spec, so
+# every config surface is a normal public value — no template patching or
+# post-install CR mutation needed. Field shapes mirror the CR spec
+# (aibom.k8saibom.dev/v1alpha1 AIBOMControllerConfig).
+config:
+  # Discovery scoping, e.g. a namespace selector applied IN ADDITION to
+  # the aibom.k8saibom.dev/enabled=true namespace label opt-in:
+  #   discovery:
+  #     namespaceSelector:
+  #       matchLabels:
+  #         environment: production
+  discovery: {}
+  bomGeneration:
+    inlineThresholdBytes: 262144
+    staleThresholdReconciles: 3
+  # External sinks (GCS, Webhook). Sinks referencing credential Secrets
+  # also need rbac.sinkSecretAccess=true. Example:
+  #   sinks:
+  #     - name: audit-archive
+  #       type: GCS
+  #       gcs:
+  #         bucket: my-aibom-archive
+  sinks: []
+  logging:
+    level: info
+    format: json
+
 podAnnotations: {}
 
 podSecurityContext:
@@ -58,7 +85,16 @@ securityContext:
   runAsUser: 65532
   allowPrivilegeEscalation: false
 
-resources: {}
+# Measured defaults: ~15m CPU / ~85Mi at rest on GKE (see
+# docs/quality-baseline.md); requests sized with headroom for reconcile
+# bursts. No CPU limit by design — hard CPU limits throttle BOM
+# generation bursts on large clusters (rationale in quality-baseline.md).
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
 
 nodeSelector: {}
 tolerations: []

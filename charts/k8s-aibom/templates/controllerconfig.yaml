@@ -23,9 +23,15 @@ metadata:
   labels:
     {{- include "k8s-aibom.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.config.discovery }}
+  discovery:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   bomGeneration:
-    inlineThresholdBytes: 262144
-    staleThresholdReconciles: 3
+    {{- toYaml .Values.config.bomGeneration | nindent 4 }}
+  {{- with .Values.config.sinks }}
+  sinks:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   logging:
-    level: info
-    format: json
+    {{- toYaml .Values.config.logging | nindent 4 }}
