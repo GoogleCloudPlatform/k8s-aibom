@@ -105,6 +105,13 @@ type Snapshot struct {
 // hot-reload contract documented in the Phase 12 proposal.
 type Store struct {
 	current atomic.Pointer[Snapshot]
+
+	// configInvalid records whether the most recent load attempt found
+	// an INVALID AIBOMControllerConfig (running on last-known-good or
+	// defaults as a result). An absent CR is not invalid — running on
+	// compiled defaults by choice is a legitimate state. Consumed by
+	// the opt-in strict readiness check (--strict-config-readiness).
+	configInvalid atomic.Bool
 }
 
 // NewStore constructs a Store with the given initial Snapshot. The
@@ -127,6 +134,19 @@ func NewStore(initial *Snapshot) *Store {
 // be mutated by the caller.
 func (s *Store) Load() *Snapshot {
 	return s.current.Load()
+}
+
+// SetConfigInvalid records whether the active configuration derives
+// from an invalid CR. Set by the AIBOMControllerConfigReconciler on
+// every state transition; read by the strict readiness check.
+func (s *Store) SetConfigInvalid(invalid bool) {
+	s.configInvalid.Store(invalid)
+}
+
+// ConfigInvalid reports whether the most recent config load found an
+// invalid CR. Lock-free; safe for concurrent use.
+func (s *Store) ConfigInvalid() bool {
+	return s.configInvalid.Load()
 }
 
 // Store atomically replaces the current snapshot. Callers MUST pass

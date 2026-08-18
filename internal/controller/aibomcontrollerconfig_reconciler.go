@@ -367,6 +367,11 @@ func (r *AIBOMControllerConfigReconciler) emitTransitionEvent(
 		r.Recorder.Event(r.ControllerPod, corev1.EventTypeWarning, reason, msg)
 	}
 
+	// Config-health bit for the opt-in strict readiness check: invalid
+	// means "the CR exists and failed validation" — an absent CR is a
+	// legitimate defaults-by-choice state, not a failure.
+	r.ConfigStore.SetConfigInvalid(to == stateInvalid)
+
 	switch {
 	case to == stateMissing && from == stateUnknown:
 		emitOnPod(EventReasonConfigMissing,

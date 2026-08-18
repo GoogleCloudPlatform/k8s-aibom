@@ -253,6 +253,11 @@ func TestReconcile_FreshStart_InvalidCR(t *testing.T) {
 		t.Errorf("ConfigInvalid events = %d, want 1", len(invalid))
 	}
 
+	// Strict-readiness health bit: an invalid CR marks the store invalid.
+	if !r.ConfigStore.ConfigInvalid() {
+		t.Error("ConfigInvalid() = false after invalid CR, want true")
+	}
+
 	got := getCR(t, r.Client, config.DefaultConfigName)
 	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionReady, metav1.ConditionFalse, aibomv1alpha1.ReasonConfigInvalid)
 	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionDegraded, metav1.ConditionTrue, aibomv1alpha1.ReasonRunningOnDefaults)
@@ -335,6 +340,11 @@ func TestReconcile_InvalidToValid_ClearsDegraded(t *testing.T) {
 		t.Fatalf("update to valid: %v", err)
 	}
 	reconcileOnce(t, r) // recovery
+
+	// Strict-readiness health bit clears on recovery.
+	if r.ConfigStore.ConfigInvalid() {
+		t.Error("ConfigInvalid() = true after recovery, want false")
+	}
 
 	snap := r.ConfigStore.Load()
 	if snap.Source != config.SourceConfigCR {

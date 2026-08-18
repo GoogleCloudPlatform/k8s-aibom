@@ -46,6 +46,10 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ include "k8s-aibom.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.readiness.strictConfig }}
+          args:
+            - --strict-config-readiness
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz

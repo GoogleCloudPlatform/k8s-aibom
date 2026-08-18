@@ -13,7 +13,11 @@ contributions dictate. Delivered work is recorded in the
   values (discovery/namespace selector, sinks, thresholds, logging),
   measured resource defaults, readiness gated on cache sync with chart
   probes, and the data-visibility/privacy disclosure.
-- **v1.2 — the verification release.**
+- **v1.2 — strict readiness + the verification release.**
+  - **Opt-in configuration-aware readiness** (`readiness.strictConfig`):
+    the pod-level signal AICR's qualification requires, while the
+    default preserves last-known-good semantics (shipped first as the
+    remaining ADR-019 gate-4 criterion).
   - **Sigstore / OMS signature verification** for model identities (the
     `verified` confidence tier): a nested Go module on upstream Sigstore
     libraries. Scope constraints: model artifacts only (container-image

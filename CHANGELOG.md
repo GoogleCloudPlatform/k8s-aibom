@@ -6,6 +6,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in strict configuration readiness: `--strict-config-readiness`
+  (chart value `readiness.strictConfig`) fails the readiness probe while
+  the active `AIBOMControllerConfig` is invalid. Off by default — the
+  controller deliberately stays Ready on last-known-good config so an
+  operator typo cannot take down inventory; distributions requiring
+  configuration-aware readiness (e.g. AICR) enable it via values. An
+  absent CR (defaults-by-choice) is not treated as invalid.
+
 ## [1.1.0] - 2026-08-18
 
 The qualification release: every blocking finding from NVIDIA/AICR's
