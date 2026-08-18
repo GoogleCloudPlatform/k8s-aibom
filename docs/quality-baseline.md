@@ -12,7 +12,7 @@ All tools are configured to run automatically in CI on every Pull Request to pre
 **Status:** PASS (with documented suppressions)
 
 **Findings Triage:**
-- `unset-cpu-requirements`: **Suppressed.** The `k8s-aibom` controller is lightweight, but we do not enforce a hard CPU limit by default to prevent CPU throttling during rapid `AIBOM` generation on large clusters. CPU requests are set.
+- `unset-cpu-requirements`: **Resolved.** Requests and limits default to the measured envelope from the 0/250/1,000-workload downstream qualification (steady 16m CPU / 57Mi at 1,000 workloads; ~370m CPU burst). The 1-CPU limit is ~3x the observed burst maximum, bounding runaway consumption without throttling BOM-generation bursts.
 - `run-as-non-root`: **Suppressed.** The container currently runs as non-root (uid 65532), but the explicit `runAsNonRoot: true` securityContext flag is missing from the default kubebuilder scaffolding. Will be fixed in v1.1.
 - `read-only-root-fs`: **Suppressed.** Requires mounting an emptyDir for `/tmp`. Will be fixed in v1.1.
 
