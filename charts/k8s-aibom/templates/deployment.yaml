@@ -46,6 +46,20 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ include "k8s-aibom.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          # /readyz fails until informer caches sync, so the pod only
+          # reports Ready once the controller can observe the cluster.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
           env:
             - name: POD_NAME
               valueFrom:
