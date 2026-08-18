@@ -85,15 +85,16 @@ securityContext:
   runAsUser: 65532
   allowPrivilegeEscalation: false
 
-# Measured defaults: ~15m CPU / ~85Mi at rest on GKE (see
-# docs/quality-baseline.md); requests sized with headroom for reconcile
-# bursts. No CPU limit by design — hard CPU limits throttle BOM
-# generation bursts on large clusters (rationale in quality-baseline.md).
+# Measured envelope from the 0/250/1,000-workload qualification (AICR
+# gate 4) combined with GKE idle observations: 16m CPU / 57Mi steady and
+# ~370m CPU burst at 1,000 workloads. The 1-CPU limit is ~3x the observed
+# burst maximum — generous enough not to throttle BOM-generation bursts.
 resources:
   requests:
     cpu: 50m
     memory: 128Mi
   limits:
+    cpu: "1"
     memory: 256Mi
 
 nodeSelector: {}
