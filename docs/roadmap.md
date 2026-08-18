@@ -7,7 +7,13 @@ contributions dictate. Delivered work is recorded in the
 
 ## v1.x — stable API series
 
-- **v1.1 — the verification release.**
+- **v1.1 — the qualification release** (in progress). Fixes and public
+  config surface from NVIDIA/AICR's ADR-019 qualification: sink Secret
+  reads via direct API reader (Role narrowed to `get`), chart `config.*`
+  values (discovery/namespace selector, sinks, thresholds, logging),
+  measured resource defaults, readiness gated on cache sync with chart
+  probes, and the data-visibility/privacy disclosure.
+- **v1.2 — the verification release.**
   - **Sigstore / OMS signature verification** for model identities (the
     `verified` confidence tier): a nested Go module on upstream Sigstore
     libraries. Scope constraints: model artifacts only (container-image
@@ -28,12 +34,12 @@ contributions dictate. Delivered work is recorded in the
     jobs; grouped Dependabot updates.
   - **SKILL.md** — an agent-operable runbook for installing, inspecting,
     and troubleshooting the controller.
-- **v1.2** — Native GUAC sink for OpenSSF GUAC ingestion; admission
+- **v1.3** — Native GUAC sink for OpenSSF GUAC ingestion; admission
   webhook for `AIBOMControllerConfig` singleton enforcement; additional
   CRD scrapers (llm-d native CRDs, KAITO, Seldon Core); deep KServe
   extraction following `ServingRuntime` references; expanded agent
   framework coverage (Semantic Kernel, Haystack, DSPy).
-- **v1.3** — Active registry digest resolution for mutable image tags;
+- **v1.4** — Active registry digest resolution for mutable image tags;
   image SBOM extraction from registries; hardware (GPU/TPU) extraction
   from resource requests and node selectors.
 - **API graduation** — `v1beta1` for the AIBOM APIs with a documented

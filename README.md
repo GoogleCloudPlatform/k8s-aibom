@@ -226,6 +226,8 @@ The controller is the *only* identity in the system that writes BOMs to external
 
 This bounds the blast radius of a compromised AI workload: it cannot tamper with audit BOMs. The single-principal write pattern also produces a clean signature in cloud audit logs.
 
+**Data visibility:** the controller's informers watch workloads cluster-wide, so workload/pod specs (including args and inline env values) pass through its in-memory cache before the namespace opt-in check — the opt-in label governs what is *reported*, never what is *cached*. Secret values are never emitted in BOMs or logs. Treat `AIBOM` resources as sensitive operational metadata: intended readers are platform/security/compliance teams. Full disclosure and retention details: [docs/security-model.md §7](docs/security-model.md).
+
 See [docs/security-model.md](docs/security-model.md) for the full threat model and design justification.
 
 ## Engineering discipline
