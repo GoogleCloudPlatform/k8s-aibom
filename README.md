@@ -160,6 +160,19 @@ If the BOM is inline, it is stored as base64-encoded data. You can decode and vi
 kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
 ```
 
+### Uninstall
+
+```bash
+helm uninstall k8s-aibom -n k8s-aibom-system
+```
+
+This removes the controller, its RBAC, and the `AIBOMControllerConfig`. Two things persist **by design**:
+
+- **The CRDs** — Helm never removes `crds/`-directory CRDs on uninstall; deleting them would destroy data.
+- **AIBOM resources** — they are owner-referenced to their *workloads*, not the controller, so inventory records outlive the collector. Each AIBOM is garbage-collected when its workload is deleted, and a reinstalled controller re-adopts existing AIBOMs and resumes reconciling them.
+
+To purge everything including inventory data: `kubectl delete crd aiboms.aibom.k8saibom.dev aibomcontrollerconfigs.aibom.k8saibom.dev`.
+
 ## Configuring external sinks
 
 By default, BOMs are stored only in the AIBOM CR's status — no data leaves the cluster. To configure external sinks, edit the `AIBOMControllerConfig` named `default`:
