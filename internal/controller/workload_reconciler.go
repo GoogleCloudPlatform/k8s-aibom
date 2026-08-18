@@ -28,10 +28,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -80,6 +82,12 @@ type WorkloadReconciler struct {
 	Scraper       scraper.Scraper
 	BOMBuilder    *bom.Builder
 	StatusBuilder *StatusBuilder
+
+	// Recorder emits Events for status-persistence failures (the
+	// observable signal when the terminal status write itself fails).
+	// Nil-tolerant: tests that construct the reconciler without a
+	// recorder simply skip Event emission.
+	Recorder record.EventRecorder
 
 	// ConfigStore holds the live AIBOMControllerConfig-derived Snapshot.
 	// Read once at the top of reconcileWorkload; the loaded *Snapshot is
@@ -199,6 +207,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	// into every extraction helper as a parameter.
 	inputs, err := r.Scraper.Scrape(ctx, req.Workload, snap.Patterns)
 	if err != nil {
+		r.persistFailureStatus(ctx, req, "ScrapeFailed", fmt.Sprintf("scrape failed: %v", err))
 		return ctrl.Result{}, fmt.Errorf("scrape: %w", err)
 	}
 	if inputs.Confidence == scraper.ConfidenceUnresolved {
@@ -249,6 +258,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				if apierrors.IsConflict(err) {
 					return ctrl.Result{Requeue: true}, nil
 				}
+				r.recordStatusPersistFailure(&existing, req, err)
 				return ctrl.Result{}, fmt.Errorf("update AIBOM status (fast path): %w", err)
 			}
 			return ctrl.Result{}, nil
@@ -289,6 +299,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	// Build the BOM.
 	doc, err := r.BOMBuilder.Build(inputs, req.BOMBuildOptions)
 	if err != nil {
+		r.persistFailureStatus(ctx, req, "BuildFailed", fmt.Sprintf("BOM build failed: %v", err))
 		return ctrl.Result{}, fmt.Errorf("build: %w", err)
 	}
 
@@ -383,9 +394,53 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			// requeue and the next pass picks up the latest state.
 			return ctrl.Result{Requeue: true}, nil
 		}
+		r.recordStatusPersistFailure(aibom, req, err)
 		return ctrl.Result{}, fmt.Errorf("update AIBOM status: %w", err)
 	}
 	return ctrl.Result{}, nil
+}
+
+// persistFailureStatus best-effort flips Ready=False (with reason and
+// message) on an EXISTING AIBOM when scrape or build fails, so failures
+// are observable in status rather than only in logs and requeue backoff.
+// It deliberately never creates an AIBOM: a workload with no published
+// inventory gets one only via the success path (detection may not even
+// apply to it). Previously published document/summary fields are
+// preserved — a failed cycle makes inventory stale, not wrong.
+// Persistence problems here are logged and counted, never returned: the
+// caller's original error drives the requeue either way.
+func (r *WorkloadReconciler) persistFailureStatus(ctx context.Context, req WorkloadReconcileRequest, reason, message string) {
+	logger := log.FromContext(ctx)
+	var existing aibomv1alpha1.AIBOM
+	if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, &existing); err != nil {
+		if !apierrors.IsNotFound(err) {
+			logger.V(1).Info("failure-status write skipped: fetch failed", "error", err.Error())
+		}
+		return
+	}
+	existing.Status.ConsecutiveErrors++
+	apimeta.SetStatusCondition(&existing.Status.Conditions, metav1.Condition{
+		Type:               aibomv1alpha1.ConditionReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: req.Generation,
+	})
+	if err := r.Status().Update(ctx, &existing); err != nil && !apierrors.IsConflict(err) {
+		r.recordStatusPersistFailure(&existing, req, err)
+		logger.V(1).Info("failure-status write failed", "error", err.Error())
+	}
+}
+
+// recordStatusPersistFailure emits the observable signals for a
+// non-conflict status-persistence failure: a metric always, an Event
+// when a Recorder is wired.
+func (r *WorkloadReconciler) recordStatusPersistFailure(obj *aibomv1alpha1.AIBOM, req WorkloadReconcileRequest, err error) {
+	metrics.StatusPersistFailures.WithLabelValues(req.Workload.Namespace, req.Workload.Kind.Kind).Inc()
+	if r.Recorder != nil {
+		r.Recorder.Event(obj, corev1.EventTypeWarning, "AIBOMStatusPersistFailed",
+			fmt.Sprintf("failed to persist AIBOM status: %v", err))
+	}
 }
 
 // emitToExternalSinks calls each configured external sink in parallel

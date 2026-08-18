@@ -207,12 +207,21 @@ func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []Sin
 		}
 		return ref
 	}
-	// No external sink delivered it: honest degradation.
+	// No external sink delivered it: honest degradation. The reason
+	// distinguishes "nothing configured" from "everything configured
+	// failed" — previously both produced the not-configured message.
 	ref.Truncated = true
-	ref.TruncationReason = fmt.Sprintf(
-		"BOM size %d bytes exceeds inline threshold %d bytes and no external sink is configured. Configure a GCS or webhook sink in AIBOMControllerConfig to retrieve the full BOM.",
-		size, inlineThresholdBytes,
-	)
+	if len(sinkResults) == 0 {
+		ref.TruncationReason = fmt.Sprintf(
+			"BOM size %d bytes exceeds inline threshold %d bytes and no external sink is configured. Configure a GCS or webhook sink in AIBOMControllerConfig to retrieve the full BOM.",
+			size, inlineThresholdBytes,
+		)
+	} else {
+		ref.TruncationReason = fmt.Sprintf(
+			"BOM size %d bytes exceeds inline threshold %d bytes and no configured external sink succeeded this cycle (see the SinkFailed condition). The full BOM was not delivered and will be retried on the next reconcile.",
+			size, inlineThresholdBytes,
+		)
+	}
 	return ref
 }
 

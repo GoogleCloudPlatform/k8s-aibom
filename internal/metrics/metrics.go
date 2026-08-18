@@ -44,6 +44,13 @@ var (
 		[]string{"category", "runtime"},
 	)
 
+	StatusPersistFailures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aibom_status_persist_failures_total",
+			Help: "Number of non-conflict failures persisting AIBOM status",
+		},
+		[]string{"namespace", "kind"},
+	)
 	ConfigReloads = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aibom_controller_config_reloads_total",
@@ -54,5 +61,5 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, ConfigReloads, WorkloadsTotal)
+	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal)
 }
