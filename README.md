@@ -101,7 +101,7 @@ Releases publish a signed multi-arch image (linux/amd64, linux/arm64) with build
 
 ```bash
 helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace k8s-aibom-system \
   --create-namespace
 ```
@@ -111,7 +111,7 @@ The published chart pins the controller image **by digest** — you install exac
 ### Install with kubectl
 
 ```bash
-kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.1.0/install.yaml
+kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.2.0/install.yaml
 ```
 
 Always install from a release asset; the `install.yaml` at the repo root is a development artifact.
