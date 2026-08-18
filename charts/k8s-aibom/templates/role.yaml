@@ -25,7 +25,9 @@ metadata:
   labels:
     {{- include "k8s-aibom.labels" . | nindent 4 }}
 rules:
+# get only: the controller reads referenced sink Secrets on demand via a
+# direct API reader — it never lists or watches Secrets.
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get"]
 {{- end }}

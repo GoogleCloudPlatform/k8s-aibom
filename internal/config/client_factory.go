@@ -49,8 +49,13 @@ import (
 // (NOT exact-match) so future contributors can refine wording without
 // breaking tests, but cannot accidentally regress to "secret not found."
 type ClientSinkFactory struct {
-	// Client reads referenced Secrets. Required.
-	Client client.Client
+	// Client reads referenced Secrets. Required. MUST be a direct
+	// (uncached) reader — e.g. manager.GetAPIReader(). A cached client's
+	// first Secret Get would start a cluster-wide Secret informer, which
+	// the chart's namespace-scoped, get-only Role correctly forbids;
+	// Secret reads here are rare (config load only), so on-demand direct
+	// reads are both sufficient and the security contract.
+	Client client.Reader
 
 	// Namespace is the controller's own namespace. All referenced
 	// Secrets are looked up here. Cross-namespace Secret references
