@@ -16,11 +16,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 ## [1.0.0] - 2026-08-17
 
 First tagged release. Every release publishes a coherent, verifiable
-artifact set: multi-arch image (linux/amd64, linux/arm64) on
-ghcr.io/googlecloudplatform/k8s-aibom with Sigstore build-provenance and
-CycloneDX SBOM attestations, a digest-pinned Helm chart on
-oci://ghcr.io/googlecloudplatform/charts, and a digest-pinned install.yaml
-release asset.
+artifact set: a multi-arch image (linux/amd64, linux/arm64) on
+ghcr.io/googlecloudplatform/k8s-aibom carrying Sigstore build-provenance
+and CycloneDX SBOM attestations; a digest-pinned Helm chart on
+oci://ghcr.io/googlecloudplatform/charts carrying a build-provenance
+attestation (the chart has no separate SBOM attestation); and a
+digest-pinned install.yaml release asset.
 
 ### Changed
 
@@ -50,9 +51,9 @@ release asset.
 - `VERSIONING.md`, this changelog, `docs/compatibility.md`,
   `docs/release-checklist.md`.
 - Release pipeline: tag-triggered publishing of the signed multi-arch
-  image, provenance and SBOM attestations (image and chart), OCI chart,
-  and digest-pinned install.yaml; a dry-run job exercises the release
-  path on every PR.
+  image (with provenance and CycloneDX SBOM attestations), the OCI chart
+  (with a provenance attestation), and digest-pinned install.yaml; a
+  dry-run job exercises the release path on every PR.
 
 ### Security
 
