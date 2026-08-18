@@ -6,6 +6,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Readiness now gates on informer cache sync: `/readyz` fails until the
+  controller can observe the cluster, and the chart wires liveness and
+  readiness probes against the health endpoints (previously no probe
+  consulted them).
+
 ## [1.0.0] - 2026-08-17
 
 First tagged release. Every release publishes a coherent, verifiable
