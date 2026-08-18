@@ -124,6 +124,11 @@ type GCSSink struct {
 // NewGCSSink constructs a GCSSink with the given config. The storage
 // client is created with the cfg.CredentialsFile auth path or via ADC
 // when CredentialsFile is empty.
+// gcsMaxAttempts caps GCS write attempts (initial try + retries),
+// mirroring the webhook sink's bounded attempt count. The 30s external
+// sink deadline remains the elapsed-time bound.
+const gcsMaxAttempts = 4
+
 func NewGCSSink(ctx context.Context, cfg GCSSinkConfig) (*GCSSink, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -189,7 +194,12 @@ func (s *GCSSink) Emit(ctx context.Context, doc *bom.Document, meta SinkMeta) (s
 	objectName := renderGCSPath(s.cfg.PathTemplate, meta)
 	url := fmt.Sprintf("gs://%s/%s", s.cfg.Bucket, objectName)
 
-	obj := s.client.Bucket(s.cfg.Bucket).Object(objectName)
+	// Bounded retry: at most gcsMaxAttempts attempts within the outer
+	// sink deadline. Writes carry DoesNotExist preconditions, so retries
+	// are idempotent by construction.
+	obj := s.client.Bucket(s.cfg.Bucket).Object(objectName).Retryer(
+		storage.WithMaxAttempts(gcsMaxAttempts),
+	)
 	w := obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
 	w.ContentType = "application/json"
 	if _, err := w.Write(doc.JSON); err != nil {

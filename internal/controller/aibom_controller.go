@@ -43,6 +43,13 @@ import (
 // next reconcile cycle retries.
 const DefaultExternalSinkTimeout = 30 * time.Second
 
+// DefaultReconcileTimeout bounds a single workload or config reconcile,
+// including every Kubernetes API operation it performs. Chosen as 2x the
+// external-sink budget so a full sink fan-out plus API traffic fits with
+// headroom; a stalled API server request fails the reconcile (and rides
+// controller-runtime backoff) instead of hanging forever.
+const DefaultReconcileTimeout = 60 * time.Second
+
 // OptInLabel is the namespace label that opts into AIBOM generation.
 // Matches PRD FR1.3.
 const OptInLabel = "aibom.k8saibom.dev/enabled"

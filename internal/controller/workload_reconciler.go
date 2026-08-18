@@ -152,6 +152,12 @@ type WorkloadReconcileRequest struct {
 // Returns standard ctrl.Result semantics. Conflict on Status().Update
 // requeues; all other errors propagate to the caller.
 func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req WorkloadReconcileRequest) (ctrl.Result, error) {
+	// Finite reconcile deadline: bounds every Kubernetes API call in
+	// this reconcile so a stalled request cannot consume an unbounded
+	// reconcile lifetime. The external-sink fan-out's own
+	// DefaultExternalSinkTimeout nests inside this budget.
+	ctx, cancel := context.WithTimeout(ctx, DefaultReconcileTimeout)
+	defer cancel()
 	logger := log.FromContext(ctx)
 
 	// Load-once: every config-driven decision in this reconcile uses
