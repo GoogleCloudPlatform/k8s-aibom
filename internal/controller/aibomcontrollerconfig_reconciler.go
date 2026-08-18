@@ -205,6 +205,9 @@ type AIBOMControllerConfigReconciler struct {
 // +kubebuilder:rbac:groups=aibom.k8saibom.dev,resources=aibomcontrollerconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Finite reconcile deadline — see DefaultReconcileTimeout.
+	ctx, cancel := context.WithTimeout(ctx, DefaultReconcileTimeout)
+	defer cancel()
 	logger := log.FromContext(ctx).WithValues("aibomcontrollerconfig", req.Name)
 
 	// Name filtering is the predicate's responsibility (see

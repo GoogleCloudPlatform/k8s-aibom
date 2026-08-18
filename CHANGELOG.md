@@ -8,6 +8,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- Every reconcile now runs under a finite 60s deadline, bounding all
+  Kubernetes API operations (previously unbounded; a stalled API request
+  could consume the reconcile forever). The 30s per-sink deadline nests
+  inside it.
+- GCS writes are capped at 4 attempts (matching the webhook sink's
+  bounded attempt count) within the existing 30s elapsed bound.
+- docs/webhook-sink-protocol.md backoff schedule corrected to match the
+  code (250ms/1s/3s, 4 total attempts).
+
 - Sink credential Secrets are now read via a direct (uncached) API
   reader. Previously the first Secret read started a cluster-wide Secret
   informer, which the namespace-scoped Role correctly forbids — with

@@ -50,7 +50,7 @@ additional framing, envelope, or transformation is applied.
 |---|---|
 | `2xx` | Success. The sink reports the endpoint URL on `BOMDocumentRef.External.URL` for this delivery. The receiver is assumed to have durably accepted the BOM; the controller does NOT re-deliver until the BOM content changes. |
 | `4xx` | **Customer configuration problem.** No retry. The controller surfaces the response status code and a truncated response body (max 256 bytes) on the AIBOM CR's `SinkFailed` condition. The next reconcile cycle retries after the customer fixes the receiver. |
-| `5xx` | **Transient receiver problem.** The controller retries with exponential backoff (1s, 2s, 4s; 3 retries total). After the final retry, the failure is recorded on `SinkFailed` and the next reconcile cycle tries again. |
+| `5xx` | **Transient receiver problem.** The controller retries with exponential backoff (250ms, 1s, 3s; 4 total attempts). After the final retry, the failure is recorded on `SinkFailed` and the next reconcile cycle tries again. |
 | Network / TLS error | Treated as transient. Same retry behavior as `5xx`. |
 
 The entire retry sequence runs inside the reconciler's per-sink
