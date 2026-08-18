@@ -42,7 +42,12 @@ commit:
    expected components/confidence, and its hashes validate.
 4. Deploy a non-AI workload; verify no AIBOM is created for it.
 5. Remove the fixture; verify the AIBOM is cleaned up (owner reference).
-6. Uninstall the release; verify no orphaned resources remain.
+6. Uninstall the release; verify no **release-owned** resources remain
+   (Deployment, RBAC, ServiceAccount, AIBOMControllerConfig). Three
+   retentions are intentional, not orphans: the CRDs (Helm never removes
+   `crds/`), the release namespace, and workload-owned AIBOMs whose
+   owners still exist (inventory outlives the collector; GC'd with the
+   workload).
 
 ## Tag & publish
 
