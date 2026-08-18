@@ -6,6 +6,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Sink credential Secrets are now read via a direct (uncached) API
+  reader. Previously the first Secret read started a cluster-wide Secret
+  informer, which the namespace-scoped Role correctly forbids — with
+  sinks configured and `rbac.sinkSecretAccess=true`, config reload stalled
+  (`Ready=True` stale at the prior observedGeneration) with repeated
+  `secrets is forbidden` list errors. Found by AICR gate-3 qualification.
+  The Role also narrows to `get` only.
+
 ### Changed
 
 - Readiness now gates on informer cache sync: `/readyz` fails until the

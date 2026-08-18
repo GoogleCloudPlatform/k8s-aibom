@@ -173,7 +173,10 @@ func main() {
 	loader := &config.Loader{
 		Client: mgr.GetClient(),
 		SinkFactory: &config.ClientSinkFactory{
-			Client:            mgr.GetClient(),
+			// APIReader, not the cached client: sink Secret reads are
+			// rare and a cached Get would start a cluster-wide Secret
+			// informer the namespace-scoped Role forbids.
+			Client:            mgr.GetAPIReader(),
 			Namespace:         controllerNamespace,
 			ControllerVersion: controllerVersion,
 		},
