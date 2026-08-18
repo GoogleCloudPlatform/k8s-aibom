@@ -6,6 +6,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-18
+
+The qualification release: every blocking finding from NVIDIA/AICR's
+ADR-019 Phase 1 qualification of v1.0.0 (gates 3 and 4), fixed with
+tests, plus readiness hardening. Details in the sections below and the
+qualification record on issue #8.
+
 ### Added
 
 - Chart `config.*` values render verbatim into the default
