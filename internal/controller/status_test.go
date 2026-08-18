@@ -17,7 +17,9 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -329,4 +331,27 @@ func conditionsByType(conds []metav1.Condition) map[string]metav1.Condition {
 		m[c.Type] = c
 	}
 	return m
+}
+
+// A failed configured sink must not produce the "no external sink is
+// configured" truncation reason (AICR gate-4 finding 5): the two states
+// are operationally different — one needs configuration, the other
+// needs the SinkFailed condition investigated.
+func TestStatusBuilder_TruncationReason_DistinguishesFailedSinks(t *testing.T) {
+	b := newTestStatusBuilder()
+	doc := buildTestBOM(t, int(testInlineThresholdBytes)+1)
+
+	failed := []SinkResult{{Sink: "webhook", Err: context.DeadlineExceeded}}
+	status := b.BuildStatus(doc, testSummaryOptions(), failed, 1, "test-input-hash", testInlineThresholdBytes)
+
+	if status.BOMDocument == nil || !status.BOMDocument.Truncated {
+		t.Fatal("expected truncated BOMDocument")
+	}
+	reason := status.BOMDocument.TruncationReason
+	if strings.Contains(reason, "no external sink is configured") {
+		t.Errorf("TruncationReason claims no sink configured, but a sink was configured and failed: %q", reason)
+	}
+	if !strings.Contains(reason, "no configured external sink succeeded") {
+		t.Errorf("TruncationReason should name the failed-sink state, got: %q", reason)
+	}
 }

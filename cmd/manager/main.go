@@ -201,6 +201,7 @@ func main() {
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("k8s-aibom"), //nolint:staticcheck
 		Scraper:           scraper.NewMultiScraper(scraper.NewInferenceSpecScraper(nil), scraper.NewVectorDBSpecScraper(), scraper.NewAgentSpecScraper(), scraper.NewTrainingSpecScraper(), scraper.NewEvalSpecScraper()),
 		BOMBuilder:        bom.NewBuilder(),
 		StatusBuilder:     controller.NewStatusBuilder(),

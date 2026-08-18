@@ -8,6 +8,17 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- Scrape and BOM-build failures now flip `Ready=False` (with reason and
+  message) on the workload's existing AIBOM, so failures are observable
+  in status rather than only in logs; prior document/summary fields are
+  preserved and the failure path never creates AIBOMs.
+- Non-conflict status-persistence failures now emit the
+  `aibom_status_persist_failures_total` metric and an
+  `AIBOMStatusPersistFailed` warning Event.
+- Truncation reason now distinguishes "no external sink is configured"
+  from "configured sinks all failed this cycle" — the latter previously
+  reported the former's message.
+
 - Every reconcile now runs under a finite 60s deadline, bounding all
   Kubernetes API operations (previously unbounded; a stalled API request
   could consume the reconcile forever). The 30s per-sink deadline nests
