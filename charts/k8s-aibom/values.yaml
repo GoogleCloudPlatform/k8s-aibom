@@ -68,6 +68,15 @@ config:
     level: info
     format: json
 
+readiness:
+  # Fail the readiness probe while the active AIBOMControllerConfig is
+  # invalid. Off by default: the controller deliberately stays Ready on
+  # last-known-good config (an operator typo should not take down
+  # inventory); config failure signals via CR conditions, metrics, and
+  # Events. Distributions requiring configuration-aware readiness set
+  # this to true.
+  strictConfig: false
+
 podAnnotations: {}
 
 podSecurityContext:

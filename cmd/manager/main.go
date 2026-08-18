@@ -84,9 +84,10 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr          string
-		probeAddr            string
-		enableLeaderElection bool
+		metricsAddr           string
+		probeAddr             string
+		enableLeaderElection  bool
+		strictConfigReadiness bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "127.0.0.1:8080",
@@ -95,6 +96,11 @@ func main() {
 		"The address the health probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election so only one manager replica is active at a time.")
+	flag.BoolVar(&strictConfigReadiness, "strict-config-readiness", false,
+		"Fail the readiness probe while the active AIBOMControllerConfig is invalid. "+
+			"Default off: the controller deliberately stays Ready on last-known-good "+
+			"config so an operator typo cannot take down inventory. Distributions that "+
+			"require configuration-aware readiness (e.g. AICR) enable this.")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -169,6 +175,22 @@ func main() {
 	// AIBOMControllerConfigReconciler hot-reloads it when the CR is
 	// applied / changed / deleted.
 	configStore := config.NewStore(config.DefaultSnapshot())
+
+	// Opt-in strict readiness: surfaces invalid active configuration at
+	// the pod level. Off by default — last-known-good keeps a functioning
+	// controller Ready by design; conditions, metrics, and Events carry
+	// the config-failure signal in that mode.
+	if strictConfigReadiness {
+		if err := mgr.AddReadyzCheck("config-valid", func(_ *http.Request) error {
+			if configStore.ConfigInvalid() {
+				return errors.New("active AIBOMControllerConfig is invalid (running on last-known-good or defaults)")
+			}
+			return nil
+		}); err != nil {
+			log.Error(err, "unable to add strict config readiness check")
+			os.Exit(1)
+		}
+	}
 
 	loader := &config.Loader{
 		Client: mgr.GetClient(),
