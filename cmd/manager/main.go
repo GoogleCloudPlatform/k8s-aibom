@@ -33,8 +33,10 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/go-logr/logr"
@@ -113,11 +115,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	// healthz is liveness: "the process is up" is exactly the right
+	// signal there, so it stays a ping.
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		log.Error(err, "unable to add healthz check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+
+	// readyz gates on informer cache sync: a live process that cannot
+	// yet observe the cluster (caches unsynced, API server unreachable
+	// at startup) is not ready. The goroutine blocks until the manager
+	// starts and its caches sync, then the check flips permanently.
+	signalCtx := ctrl.SetupSignalHandler()
+	cacheSynced := make(chan struct{})
+	go func() {
+		if mgr.GetCache().WaitForCacheSync(signalCtx) {
+			close(cacheSynced)
+		}
+	}()
+	if err := mgr.AddReadyzCheck("cache-sync", func(_ *http.Request) error {
+		select {
+		case <-cacheSynced:
+			return nil
+		default:
+			return errors.New("informer caches not synced")
+		}
+	}); err != nil {
 		log.Error(err, "unable to add readyz check")
 		os.Exit(1)
 	}
@@ -232,7 +255,7 @@ func main() {
 	emitStartupEvent(mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, log) //nolint:staticcheck
 
 	log.Info("starting manager", "version", version())
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(signalCtx); err != nil {
 		log.Error(err, "manager exited with error")
 		os.Exit(1)
 	}
