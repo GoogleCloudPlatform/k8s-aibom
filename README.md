@@ -261,7 +261,7 @@ resources as needed.
 
 See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and support policy. Summary:
 
-**Kubernetes versions.** Tested against Kubernetes 1.27 through 1.35. The controller uses only stable APIs; older versions back to 1.23 should work but are not actively tested.
+**Kubernetes versions.** Stable APIs only, no known version ceiling; tested floor 1.27, with a weekly CI matrix tracking current releases (independently verified on 1.35/1.36 during NVIDIA/AICR's qualification). Older versions back to 1.23 should work but are not actively tested.
 
 **Cloud platforms.** Runs on Google Kubernetes Engine (Standard and Autopilot), Amazon Elastic Kubernetes Service, Azure Kubernetes Service, on-premises clusters (kubeadm, kops, Rancher, OpenShift), and local development clusters (kind, minikube, k3s). The GCS sink requires Google Cloud authentication; the webhook sink works against any HTTPS endpoint; the CRD status sink works on any conformant cluster.
 

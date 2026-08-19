@@ -2,20 +2,20 @@
 
 ## Kubernetes versions
 
-k8s-aibom targets Kubernetes **1.27 through 1.35**.
+**Policy: the controller uses stable Kubernetes APIs only and has no
+known version ceiling.** The tested floor is **1.27**; newer Kubernetes
+releases are expected to work without changes, and the verification
+matrix below tracks current releases as they ship. (Older versions back
+to ~1.23 likely work but are untested.)
 
-How that claim is verified today:
+How the policy is verified:
 
 | Layer | Coverage |
 |---|---|
-| envtest (API-server behavior) | k8s 1.34 control-plane binaries |
-| kind e2e (build, deploy via chart, readiness) | kind default node image, every PR |
+| envtest (API-server behavior) | k8s 1.34 on every PR; **1.27 / 1.31 / 1.34 weekly** (version-matrix workflow) |
+| kind e2e (build, deploy via chart, readiness) | default node image every PR; **floor (1.27) and latest node image weekly** (version-matrix workflow) |
 | Real-cluster verification | GKE, current stable channel, before every release tag |
-
-A full per-version CI matrix across the supported range is planned; until
-it lands, versions inside the range but outside the table above are
-supported on a best-effort basis. The controller uses no APIs newer than
-the minimum supported version.
+| Independent third-party | NVIDIA/AICR's ADR-019 qualification of v1.2.0 passed on Kind Kubernetes **1.35.0 and 1.36.1** ([record](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)) |
 
 ## Support policy
 
