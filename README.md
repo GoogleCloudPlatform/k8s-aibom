@@ -7,7 +7,7 @@ A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] docu
 [![Static Analysis](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml)
 
 
-> **Status:** v1.0.0 [released](https://github.com/GoogleCloudPlatform/k8s-aibom/releases) — production-suitable for non-critical observation use cases. APIs stable through v1.x (see [VERSIONING.md](VERSIONING.md)); changes tracked in the [CHANGELOG](CHANGELOG.md). Feedback welcome.
+> **Status:** released — see the [latest release](https://github.com/GoogleCloudPlatform/k8s-aibom/releases/latest). Production-suitable for non-critical observation use cases. APIs stable through v1.x (see [VERSIONING.md](VERSIONING.md)); changes tracked in the [CHANGELOG](CHANGELOG.md). Feedback welcome.
 
 ---
 
@@ -226,6 +226,8 @@ The controller is the *only* identity in the system that writes BOMs to external
 
 This bounds the blast radius of a compromised AI workload: it cannot tamper with audit BOMs. The single-principal write pattern also produces a clean signature in cloud audit logs.
 
+**Configuration failure and readiness:** an invalid `AIBOMControllerConfig` never takes the controller down — it keeps operating on the last-known-good configuration, signalling via `Ready=False`/`Degraded=True` conditions, metrics, and Events. Distributions that require pod-level signal instead can enable strict mode (`readiness.strictConfig=true`), which fails the readiness probe while the active configuration is invalid.
+
 **Data visibility:** the controller's informers watch workloads cluster-wide, so workload/pod specs (including args and inline env values) pass through its in-memory cache before the namespace opt-in check — the opt-in label governs what is *reported*, never what is *cached*. Secret values are never emitted in BOMs or logs. Treat `AIBOM` resources as sensitive operational metadata: intended readers are platform/security/compliance teams. Full disclosure and retention details: [docs/security-model.md §7](docs/security-model.md).
 
 See [docs/security-model.md](docs/security-model.md) for the full threat model and design justification.
@@ -241,14 +243,19 @@ The project is built around a few load-bearing conventions documented in [CONTRI
 
 ## Performance footprint
 
-Production measurements on a real GKE cluster with the v1.0 release:
+Measured on a real GKE cluster, and independently during NVIDIA/AICR's
+qualification of v1.0.0 (0/250/1,000-workload envelope, results on
+[issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)):
 
-- Controller CPU at rest: ~15m
-- Controller memory at rest: ~85Mi
+- At rest: ~15m CPU / ~85Mi (GKE idle observation)
+- At 1,000 tracked workloads: 16m CPU / 57Mi steady (p95 26m/60Mi), ~370m CPU burst during convergence, all 1,000 AIBOMs Ready, zero restarts
+- Convergence: 250 workloads in 3s from empty; 1,000 in 7s from 250
 - Per-reconcile work for a single workload: low single-digit milliseconds
 - 256 KB inline threshold; BOMs exceeding the threshold are offloaded to an external sink and referenced by URL in the CR status
 
-The controller is comfortable on a cluster with a few hundred AI workloads. For clusters at meaningful scale (1,000+ workloads), please monitor the controller's memory usage and adjust the resources as necessary.
+Chart defaults carry this measured envelope (requests 50m/128Mi, limits
+1 CPU/256Mi). Beyond 1,000 workloads, monitor memory and adjust
+resources as needed.
 
 ## Compatibility
 
