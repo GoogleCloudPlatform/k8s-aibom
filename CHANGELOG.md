@@ -6,6 +6,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `v1beta1` API for `AIBOM` and `AIBOMControllerConfig` — schema-identical
+  to `v1alpha1` (conversion strategy remains `None`), served alongside
+  `v1alpha1`, and the storage version from this release onward.
+  `v1alpha1` remains served and field-frozen through 1.x; its removal
+  will be a separate, announced release with a documented migration step.
+  Design: docs/design/001-api-graduation-v1beta1.md.
+
 ## [1.2.0] - 2026-08-18
 
 ### Added
