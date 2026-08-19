@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 )
 
 // Tests in this file lock the auditor-facing-precision contract on
@@ -82,15 +82,15 @@ func secretWith(name string, data map[string][]byte) *corev1.Secret {
 // step naming the exact CR field to edit.
 func TestBuildSinks_SecretNotFound(t *testing.T) {
 	f := newClientFactory(t) // no Secrets seeded
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "audit-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "webhook-creds",
 							Key:  "token",
 						},
@@ -145,15 +145,15 @@ func TestBuildSinks_SecretFoundButKeyMissing(t *testing.T) {
 		"api-key": []byte("unrelated"),
 	})
 	f := newClientFactory(t, sec)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "audit-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "webhook-creds",
 							Key:  "token", // typo: should be "bearer"
 						},
@@ -217,15 +217,15 @@ func TestBuildSinks_SecretKeyEmpty(t *testing.T) {
 		"token": []byte(""), // empty value
 	})
 	f := newClientFactory(t, sec)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "audit-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "webhook-creds",
 							Key:  "token",
 						},
@@ -261,19 +261,19 @@ func TestBuildSinks_SecretKeyEmpty(t *testing.T) {
 // so the factory must reject this combination explicitly.
 func TestBuildSinks_BothBearerAndMTLS(t *testing.T) {
 	f := newClientFactory(t)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "ambiguous-auth",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{Name: "a", Key: "b"},
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{Name: "a", Key: "b"},
 					},
-					MTLS: &aibomv1alpha1.MTLSAuth{
-						ClientCertSecretRef: aibomv1alpha1.SecretKeyRef{Name: "c", Key: "d"},
-						ClientKeySecretRef:  aibomv1alpha1.SecretKeyRef{Name: "e", Key: "f"},
+					MTLS: &aibomv1beta1.MTLSAuth{
+						ClientCertSecretRef: aibomv1beta1.SecretKeyRef{Name: "c", Key: "d"},
+						ClientKeySecretRef:  aibomv1beta1.SecretKeyRef{Name: "e", Key: "f"},
 					},
 				},
 			},
@@ -308,19 +308,19 @@ func TestBuildSinks_BothBearerAndMTLS(t *testing.T) {
 // bearer-token case; the message-shape contract is identical.
 func TestBuildSinks_MTLSMissingCertSecret(t *testing.T) {
 	f := newClientFactory(t) // no Secrets seeded
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "mtls-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					MTLS: &aibomv1alpha1.MTLSAuth{
-						ClientCertSecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					MTLS: &aibomv1beta1.MTLSAuth{
+						ClientCertSecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "mtls-cert",
 							Key:  "tls.crt",
 						},
-						ClientKeySecretRef: aibomv1alpha1.SecretKeyRef{
+						ClientKeySecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "mtls-key",
 							Key:  "tls.key",
 						},
@@ -356,13 +356,13 @@ func TestBuildSinks_MTLSMissingCertSecret(t *testing.T) {
 // path for the missing-Secret diagnostic.
 func TestBuildSinks_GCSMissingCredentialsSecret(t *testing.T) {
 	f := newClientFactory(t)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "archive-gcs",
-			Type: aibomv1alpha1.SinkTypeGCS,
-			GCS: &aibomv1alpha1.GCSSinkSpec{
+			Type: aibomv1beta1.SinkTypeGCS,
+			GCS: &aibomv1beta1.GCSSinkSpec{
 				Bucket: "my-bucket",
-				CredentialsSecretRef: &aibomv1alpha1.SecretKeyRef{
+				CredentialsSecretRef: &aibomv1beta1.SecretKeyRef{
 					Name: "gcs-creds",
 					Key:  "key.json",
 				},
@@ -411,15 +411,15 @@ func TestBuildSinks_CrossNamespaceSecretIsInvisible(t *testing.T) {
 		Data: map[string][]byte{"token": []byte("would-be-leaked")},
 	}
 	f := newClientFactory(t, wrongNS)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "audit-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "webhook-creds",
 							Key:  "token",
 						},
@@ -455,15 +455,15 @@ func TestBuildSinks_HappyPath_Webhook_Bearer(t *testing.T) {
 		"token": []byte("secret-bearer-value"),
 	})
 	f := newClientFactory(t, sec)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "audit-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://example.com/sink",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{
 							Name: "webhook-creds",
 							Key:  "token",
 						},
@@ -491,11 +491,11 @@ func TestBuildSinks_HappyPath_Webhook_Bearer(t *testing.T) {
 // config.
 func TestBuildSinks_HappyPath_Webhook_NoAuth(t *testing.T) {
 	f := newClientFactory(t)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "internal-webhook",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://internal.example.com/sink",
 			},
 		},
@@ -525,35 +525,35 @@ func TestBuildSinks_HappyPath_Webhook_NoAuth(t *testing.T) {
 func TestBuildSinks_PartialFailureProducesPartialResults(t *testing.T) {
 	goodSec := secretWith("good-creds", map[string][]byte{"token": []byte("ok")})
 	f := newClientFactory(t, goodSec)
-	specs := []aibomv1alpha1.SinkConfig{
+	specs := []aibomv1beta1.SinkConfig{
 		{
 			Name: "good-bearer",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://a.example.com",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{Name: "good-creds", Key: "token"},
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{Name: "good-creds", Key: "token"},
 					},
 				},
 			},
 		},
 		{
 			Name: "bad-bearer",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://b.example.com",
-				Auth: &aibomv1alpha1.WebhookAuth{
-					BearerToken: &aibomv1alpha1.BearerTokenAuth{
-						SecretRef: aibomv1alpha1.SecretKeyRef{Name: "missing-creds", Key: "token"},
+				Auth: &aibomv1beta1.WebhookAuth{
+					BearerToken: &aibomv1beta1.BearerTokenAuth{
+						SecretRef: aibomv1beta1.SecretKeyRef{Name: "missing-creds", Key: "token"},
 					},
 				},
 			},
 		},
 		{
 			Name: "good-noauth",
-			Type: aibomv1alpha1.SinkTypeWebhook,
-			Webhook: &aibomv1alpha1.WebhookSinkSpec{
+			Type: aibomv1beta1.SinkTypeWebhook,
+			Webhook: &aibomv1beta1.WebhookSinkSpec{
 				Endpoint: "https://c.example.com",
 			},
 		},

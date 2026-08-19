@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/metrics"
 )
@@ -352,7 +352,7 @@ func (r *AIBOMControllerConfigReconciler) emitTransitionEvent(
 	// CR-existence events need the CR ObjectReference; build it lazily.
 	crRef := func() *corev1.ObjectReference {
 		return &corev1.ObjectReference{
-			APIVersion: aibomv1alpha1.GroupVersion.String(),
+			APIVersion: aibomv1beta1.GroupVersion.String(),
 			Kind:       "AIBOMControllerConfig",
 			Name:       r.configName(),
 		}
@@ -418,7 +418,7 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 	result config.LoadResult,
 	stored *config.Snapshot,
 ) error {
-	var cr aibomv1alpha1.AIBOMControllerConfig
+	var cr aibomv1beta1.AIBOMControllerConfig
 	if err := r.Get(ctx, types.NamespacedName{Name: configName}, &cr); err != nil {
 		return err
 	}
@@ -427,9 +427,9 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 	switch state {
 	case stateValid:
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               aibomv1alpha1.AIBOMControllerConfigConditionReady,
+			Type:               aibomv1beta1.AIBOMControllerConfigConditionReady,
 			Status:             metav1.ConditionTrue,
-			Reason:             aibomv1alpha1.ReasonConfigLoaded,
+			Reason:             aibomv1beta1.ReasonConfigLoaded,
 			ObservedGeneration: cr.Generation,
 			Message:            "Configuration loaded successfully; runtime snapshot is in effect.",
 			LastTransitionTime: now,
@@ -438,9 +438,9 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 		// makes the recovery path visible to customers reading
 		// kubectl describe.
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               aibomv1alpha1.AIBOMControllerConfigConditionDegraded,
+			Type:               aibomv1beta1.AIBOMControllerConfigConditionDegraded,
 			Status:             metav1.ConditionFalse,
-			Reason:             aibomv1alpha1.ReasonConfigLoaded,
+			Reason:             aibomv1beta1.ReasonConfigLoaded,
 			ObservedGeneration: cr.Generation,
 			Message:            "Controller is running on the current spec snapshot.",
 			LastTransitionTime: now,
@@ -451,17 +451,17 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 		}
 	case stateInvalid:
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               aibomv1alpha1.AIBOMControllerConfigConditionReady,
+			Type:               aibomv1beta1.AIBOMControllerConfigConditionReady,
 			Status:             metav1.ConditionFalse,
-			Reason:             aibomv1alpha1.ReasonConfigInvalid,
+			Reason:             aibomv1beta1.ReasonConfigInvalid,
 			ObservedGeneration: cr.Generation,
 			Message:            result.AggregateMessage(),
 			LastTransitionTime: now,
 		})
-		degradedReason := aibomv1alpha1.ReasonRunningOnDefaults
+		degradedReason := aibomv1beta1.ReasonRunningOnDefaults
 		degradedMsg := "Spec is invalid; running on compiled-in defaults. Edit spec to clear Ready=False."
 		if stored != nil && stored.Source == config.SourceLastKnownGood {
-			degradedReason = aibomv1alpha1.ReasonRunningOnLastKnownGood
+			degradedReason = aibomv1beta1.ReasonRunningOnLastKnownGood
 			degradedMsg = fmt.Sprintf(
 				"Spec is invalid; retaining last-known-good snapshot from generation %d. "+
 					"Edit spec to clear Ready=False.",
@@ -469,7 +469,7 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 			)
 		}
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               aibomv1alpha1.AIBOMControllerConfigConditionDegraded,
+			Type:               aibomv1beta1.AIBOMControllerConfigConditionDegraded,
 			Status:             metav1.ConditionTrue,
 			Reason:             degradedReason,
 			ObservedGeneration: cr.Generation,
@@ -532,7 +532,7 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 	startup := make(chan event.GenericEvent, 1)
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		startup <- event.GenericEvent{
-			Object: &aibomv1alpha1.AIBOMControllerConfig{
+			Object: &aibomv1beta1.AIBOMControllerConfig{
 				ObjectMeta: metav1.ObjectMeta{Name: configName},
 			},
 		}
@@ -545,7 +545,7 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("aibomcontrollerconfig").
 		For(
-			&aibomv1alpha1.AIBOMControllerConfig{},
+			&aibomv1beta1.AIBOMControllerConfig{},
 			builder.WithPredicates(singletonPredicate),
 		).
 		WatchesRawSource(source.Channel(startup, &handler.EnqueueRequestForObject{})).

@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 )
 
 // TestIntegration_KServeInferenceServiceInOptedInNamespace_ProducesAIBOM
@@ -55,7 +55,7 @@ func TestIntegration_KServeInferenceServiceInOptedInNamespace_ProducesAIBOM(t *t
 		Name:      AIBOMNameForWorkload("serving.kserve.io", "InferenceService", isvcName),
 		Namespace: nsName,
 	}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return fmt.Errorf("get AIBOM %s: %w", aibomKey, err)
@@ -133,7 +133,7 @@ func TestIntegration_KServeInferenceService_NoSignal_NoAIBOM(t *testing.T) {
 		Name:      AIBOMNameForWorkload("serving.kserve.io", "InferenceService", isvcName),
 		Namespace: nsName,
 	}
-	var aibom aibomv1alpha1.AIBOM
+	var aibom aibomv1beta1.AIBOM
 	if err := env.k8sClient.Get(ctx, aibomKey, &aibom); err == nil {
 		t.Fatalf("AIBOM unexpectedly created for empty InferenceService: %+v", aibom)
 	}
@@ -186,7 +186,7 @@ func TestIntegration_KServeNamespaceOptInWatch(t *testing.T) {
 
 	// 3. Wait a bit, verify NO AIBOM is created.
 	time.Sleep(500 * time.Millisecond)
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	if err := env.k8sClient.Get(ctx, aibomKey, &got); err == nil {
 		t.Fatalf("AIBOM unexpectedly created for non-opted-in namespace: %+v", got)
 	}

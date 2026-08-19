@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
 
@@ -42,7 +42,7 @@ func testScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(s))
-	utilruntime.Must(aibomv1alpha1.AddToScheme(s))
+	utilruntime.Must(aibomv1beta1.AddToScheme(s))
 	return s
 }
 
@@ -102,13 +102,13 @@ func TestLoad_MissingCR_FallsBackToDefaults(t *testing.T) {
 // field path, and an actionable suggestion. Generic "invalid config"
 // messages fail this test.
 func TestLoad_InvalidCR_SinkTypeWebhookButBodyNil(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{
 				{
 					Name: "audit-webhook",
-					Type: aibomv1alpha1.SinkTypeWebhook,
+					Type: aibomv1beta1.SinkTypeWebhook,
 					// Webhook field intentionally nil — this is the bug
 					// we're surfacing.
 				},
@@ -159,15 +159,15 @@ func TestLoad_InvalidCR_SinkTypeWebhookButBodyNil(t *testing.T) {
 // Type=GCS but Webhook is also populated. Customer's CR doesn't
 // satisfy "exactly one" body.
 func TestLoad_InvalidCR_SinkExtraTypeBody(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{
 				{
 					Name: "confused-sink",
-					Type: aibomv1alpha1.SinkTypeGCS,
-					GCS:  &aibomv1alpha1.GCSSinkSpec{Bucket: "ok"},
-					Webhook: &aibomv1alpha1.WebhookSinkSpec{
+					Type: aibomv1beta1.SinkTypeGCS,
+					GCS:  &aibomv1beta1.GCSSinkSpec{Bucket: "ok"},
+					Webhook: &aibomv1beta1.WebhookSinkSpec{
 						Endpoint: "https://example.com/sink",
 					},
 				},
@@ -198,23 +198,23 @@ func TestLoad_InvalidCR_SinkExtraTypeBody(t *testing.T) {
 // nothing rule with multiple distinct failures. Customer sees ALL
 // failures in one pass so a single fix-and-apply cycle clears them.
 func TestLoad_InvalidCR_MultipleErrorsAggregated(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Discovery: aibomv1alpha1.DiscoveryConfig{
-				InferenceRuntimeImagePatterns: []aibomv1alpha1.RuntimeImagePattern{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Discovery: aibomv1beta1.DiscoveryConfig{
+				InferenceRuntimeImagePatterns: []aibomv1beta1.RuntimeImagePattern{
 					{Runtime: "broken", Pattern: "[invalid-regex"}, // doesn't compile
 				},
 			},
-			Sinks: []aibomv1alpha1.SinkConfig{
+			Sinks: []aibomv1beta1.SinkConfig{
 				{
 					Name: "sink-one",
-					Type: aibomv1alpha1.SinkTypeGCS,
+					Type: aibomv1beta1.SinkTypeGCS,
 					// GCS body nil → error
 				},
 				{
 					Name: "sink-two",
-					Type: aibomv1alpha1.SinkTypeWebhook,
+					Type: aibomv1beta1.SinkTypeWebhook,
 					// Webhook body nil → error
 				},
 			},
@@ -246,12 +246,12 @@ func TestLoad_InvalidCR_MultipleErrorsAggregated(t *testing.T) {
 // +listMapKey=name on the CRD enforces this for server-side apply but
 // not all paths use SSA; loader-side enforcement is the safety net.
 func TestLoad_InvalidCR_DuplicateSinkNames(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{
-				{Name: "duplicate", Type: aibomv1alpha1.SinkTypeGCS, GCS: &aibomv1alpha1.GCSSinkSpec{Bucket: "a"}},
-				{Name: "duplicate", Type: aibomv1alpha1.SinkTypeGCS, GCS: &aibomv1alpha1.GCSSinkSpec{Bucket: "b"}},
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{
+				{Name: "duplicate", Type: aibomv1beta1.SinkTypeGCS, GCS: &aibomv1beta1.GCSSinkSpec{Bucket: "a"}},
+				{Name: "duplicate", Type: aibomv1beta1.SinkTypeGCS, GCS: &aibomv1beta1.GCSSinkSpec{Bucket: "b"}},
 			},
 		},
 	}
@@ -276,11 +276,11 @@ func TestLoad_InvalidCR_DuplicateSinkNames(t *testing.T) {
 // a SinkFactory-reported failure (Secret not found, etc.) causes the
 // same all-or-nothing fallback as shape errors.
 func TestLoad_InvalidCR_FactoryErrorTriggersAllOrNothing(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{
-				{Name: "shape-valid", Type: aibomv1alpha1.SinkTypeGCS, GCS: &aibomv1alpha1.GCSSinkSpec{Bucket: "ok"}},
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{
+				{Name: "shape-valid", Type: aibomv1beta1.SinkTypeGCS, GCS: &aibomv1beta1.GCSSinkSpec{Bucket: "ok"}},
 			},
 		},
 	}
@@ -332,17 +332,17 @@ func TestLoad_TransientAPIError_ReturnsGoError(t *testing.T) {
 // TestLoad_ValidCR_AppliesSpec exercises the happy path: a valid CR
 // produces a Snapshot derived from spec, no errors, Source=config-cr.
 func TestLoad_ValidCR_AppliesSpec(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName, Generation: 7},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			BOMGeneration: aibomv1beta1.BOMGenerationConfig{
 				InlineThresholdBytes: 65536, // 64 KiB
 			},
-			Discovery: aibomv1alpha1.DiscoveryConfig{
+			Discovery: aibomv1beta1.DiscoveryConfig{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"team": "platform"},
 				},
-				InferenceRuntimeImagePatterns: []aibomv1alpha1.RuntimeImagePattern{
+				InferenceRuntimeImagePatterns: []aibomv1beta1.RuntimeImagePattern{
 					{Runtime: "custom", Pattern: `^my-mirror/.*custom.*`},
 				},
 			},
@@ -394,11 +394,11 @@ func TestLoad_ValidCR_AppliesSpec(t *testing.T) {
 // defaults for that section (without triggering the all-or-nothing
 // fallback that would mark Source=compiled-defaults).
 func TestLoad_NilDiscovery_DefaultsApplied(t *testing.T) {
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName, Generation: 3},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
 			// Discovery omitted entirely
-			BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+			BOMGeneration: aibomv1beta1.BOMGenerationConfig{
 				InlineThresholdBytes: 0, // also omitted; resolver fills in default
 			},
 		},
@@ -459,10 +459,10 @@ func TestLoad_BOMGeneration_InlineThresholdClamping(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cr := &aibomv1alpha1.AIBOMControllerConfig{
+			cr := &aibomv1beta1.AIBOMControllerConfig{
 				ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
-				Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-					BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+				Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+					BOMGeneration: aibomv1beta1.BOMGenerationConfig{
 						InlineThresholdBytes: tc.inputValue,
 					},
 				},
@@ -562,7 +562,7 @@ type stubSinkFactory struct {
 	errs  []LoadError
 }
 
-func (f *stubSinkFactory) BuildSinks(_ context.Context, _ []aibomv1alpha1.SinkConfig) ([]sink.Sink, []LoadError) {
+func (f *stubSinkFactory) BuildSinks(_ context.Context, _ []aibomv1beta1.SinkConfig) ([]sink.Sink, []LoadError) {
 	return f.sinks, f.errs
 }
 

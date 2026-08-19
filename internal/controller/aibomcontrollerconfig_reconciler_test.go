@@ -41,7 +41,7 @@ import (
 	cfgctrl "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 )
 
@@ -106,7 +106,7 @@ func newConfigFakeScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(s))
-	utilruntime.Must(aibomv1alpha1.AddToScheme(s))
+	utilruntime.Must(aibomv1beta1.AddToScheme(s))
 	return s
 }
 
@@ -122,7 +122,7 @@ func newDirectReconciler(t *testing.T, objs ...client.Object) (*AIBOMControllerC
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(&aibomv1alpha1.AIBOMControllerConfig{}).
+		WithStatusSubresource(&aibomv1beta1.AIBOMControllerConfig{}).
 		Build()
 	rec := &captureRecorder{}
 	r := &AIBOMControllerConfigReconciler{
@@ -155,31 +155,31 @@ func reconcileOnce(t *testing.T, r *AIBOMControllerConfigReconciler) {
 	}
 }
 
-func validCR() *aibomv1alpha1.AIBOMControllerConfig {
-	return &aibomv1alpha1.AIBOMControllerConfig{
+func validCR() *aibomv1beta1.AIBOMControllerConfig {
+	return &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       config.DefaultConfigName,
 			Generation: 1,
 		},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			BOMGeneration: aibomv1beta1.BOMGenerationConfig{
 				InlineThresholdBytes: 65536,
 			},
 		},
 	}
 }
 
-func invalidCR() *aibomv1alpha1.AIBOMControllerConfig {
+func invalidCR() *aibomv1beta1.AIBOMControllerConfig {
 	// Sink with Type=GCS but GCS body nil — a shape error the loader
 	// will reject without needing the API.
-	return &aibomv1alpha1.AIBOMControllerConfig{
+	return &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       config.DefaultConfigName,
 			Generation: 2,
 		},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{
-				{Name: "broken", Type: aibomv1alpha1.SinkTypeGCS}, // GCS body missing
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{
+				{Name: "broken", Type: aibomv1beta1.SinkTypeGCS}, // GCS body missing
 			},
 		},
 	}
@@ -235,8 +235,8 @@ func TestReconcile_FreshStart_ValidCR(t *testing.T) {
 
 	// Conditions: Ready=True/ConfigLoaded, Degraded=False
 	got := getCR(t, r.Client, config.DefaultConfigName)
-	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionReady, metav1.ConditionTrue, aibomv1alpha1.ReasonConfigLoaded)
-	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionDegraded, metav1.ConditionFalse, aibomv1alpha1.ReasonConfigLoaded)
+	assertCondition(t, got, aibomv1beta1.AIBOMControllerConfigConditionReady, metav1.ConditionTrue, aibomv1beta1.ReasonConfigLoaded)
+	assertCondition(t, got, aibomv1beta1.AIBOMControllerConfigConditionDegraded, metav1.ConditionFalse, aibomv1beta1.ReasonConfigLoaded)
 }
 
 func TestReconcile_FreshStart_InvalidCR(t *testing.T) {
@@ -259,11 +259,11 @@ func TestReconcile_FreshStart_InvalidCR(t *testing.T) {
 	}
 
 	got := getCR(t, r.Client, config.DefaultConfigName)
-	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionReady, metav1.ConditionFalse, aibomv1alpha1.ReasonConfigInvalid)
-	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionDegraded, metav1.ConditionTrue, aibomv1alpha1.ReasonRunningOnDefaults)
+	assertCondition(t, got, aibomv1beta1.AIBOMControllerConfigConditionReady, metav1.ConditionFalse, aibomv1beta1.ReasonConfigInvalid)
+	assertCondition(t, got, aibomv1beta1.AIBOMControllerConfigConditionDegraded, metav1.ConditionTrue, aibomv1beta1.ReasonRunningOnDefaults)
 
 	// AggregateMessage must be on the Ready condition.
-	readyCond := meta.FindStatusCondition(got.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionReady)
+	readyCond := meta.FindStatusCondition(got.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionReady)
 	if readyCond == nil || !strings.Contains(readyCond.Message, "broken") {
 		t.Errorf("Ready Message should name failing sink \"broken\"; got: %+v", readyCond)
 	}
@@ -292,8 +292,8 @@ func TestReconcile_ValidToInvalid_PreservesLastKnownGood(t *testing.T) {
 
 	// Update CR to invalid spec (preserve resourceVersion via Update).
 	updated := getCR(t, r.Client, config.DefaultConfigName)
-	updated.Spec.Sinks = []aibomv1alpha1.SinkConfig{
-		{Name: "broken", Type: aibomv1alpha1.SinkTypeGCS}, // body nil
+	updated.Spec.Sinks = []aibomv1beta1.SinkConfig{
+		{Name: "broken", Type: aibomv1beta1.SinkTypeGCS}, // body nil
 	}
 	updated.Generation = 2
 	if err := r.Update(context.Background(), updated); err != nil {
@@ -322,7 +322,7 @@ func TestReconcile_ValidToInvalid_PreservesLastKnownGood(t *testing.T) {
 
 	// Condition: Degraded reason is RunningOnLastKnownGood.
 	got := getCR(t, r.Client, config.DefaultConfigName)
-	assertCondition(t, got, aibomv1alpha1.AIBOMControllerConfigConditionDegraded, metav1.ConditionTrue, aibomv1alpha1.ReasonRunningOnLastKnownGood)
+	assertCondition(t, got, aibomv1beta1.AIBOMControllerConfigConditionDegraded, metav1.ConditionTrue, aibomv1beta1.ReasonRunningOnLastKnownGood)
 }
 
 // ---------- State machine: recovery + deletion ----------
@@ -352,9 +352,9 @@ func TestReconcile_InvalidToValid_ClearsDegraded(t *testing.T) {
 	}
 
 	updated := getCR(t, r.Client, config.DefaultConfigName)
-	assertCondition(t, updated, aibomv1alpha1.AIBOMControllerConfigConditionReady, metav1.ConditionTrue, aibomv1alpha1.ReasonConfigLoaded)
+	assertCondition(t, updated, aibomv1beta1.AIBOMControllerConfigConditionReady, metav1.ConditionTrue, aibomv1beta1.ReasonConfigLoaded)
 	// Degraded MUST be flipped to False — recovery's whole point.
-	assertCondition(t, updated, aibomv1alpha1.AIBOMControllerConfigConditionDegraded, metav1.ConditionFalse, aibomv1alpha1.ReasonConfigLoaded)
+	assertCondition(t, updated, aibomv1beta1.AIBOMControllerConfigConditionDegraded, metav1.ConditionFalse, aibomv1beta1.ReasonConfigLoaded)
 }
 
 func TestReconcile_Deleted_RevertsToDefaults(t *testing.T) {
@@ -480,7 +480,7 @@ func startConfigEnvTest(t *testing.T) (*envTestEnv, *AIBOMControllerConfigReconc
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(aibomv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(aibomv1beta1.AddToScheme(scheme))
 
 	te := &envtest.Environment{
 		CRDDirectoryPaths: []string{
@@ -553,10 +553,10 @@ func TestReconcileEnvtest_NonDefaultCRIgnored(t *testing.T) {
 	env, r, rec := startConfigEnvTest(t)
 
 	// Create a CR with a non-default name.
-	other := &aibomv1alpha1.AIBOMControllerConfig{
+	other := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "draft-not-default"},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			BOMGeneration: aibomv1alpha1.BOMGenerationConfig{InlineThresholdBytes: 99999},
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			BOMGeneration: aibomv1beta1.BOMGenerationConfig{InlineThresholdBytes: 99999},
 		},
 	}
 	if err := env.k8sClient.Create(env.mgrCtx, other); err != nil {
@@ -616,11 +616,11 @@ func TestReconcileEnvtest_StatusUpdateDoesNotLoop(t *testing.T) {
 	}
 	// Wait for the first reconcile to patch status (Ready=True).
 	eventually(t, 10*time.Second, 100*time.Millisecond, func() error {
-		var got aibomv1alpha1.AIBOMControllerConfig
+		var got aibomv1beta1.AIBOMControllerConfig
 		if err := env.k8sClient.Get(env.mgrCtx, types.NamespacedName{Name: config.DefaultConfigName}, &got); err != nil {
 			return err
 		}
-		if meta.IsStatusConditionTrue(got.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionReady) {
+		if meta.IsStatusConditionTrue(got.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionReady) {
 			return nil
 		}
 		return apierrors.NewBadRequest("not ready yet")
@@ -654,9 +654,9 @@ func (cl *countingLoader) Load(ctx context.Context) (config.LoadResult, error) {
 
 // ---------- assertion helpers ----------
 
-func getCR(t *testing.T, c client.Client, name string) *aibomv1alpha1.AIBOMControllerConfig {
+func getCR(t *testing.T, c client.Client, name string) *aibomv1beta1.AIBOMControllerConfig {
 	t.Helper()
-	var cr aibomv1alpha1.AIBOMControllerConfig
+	var cr aibomv1beta1.AIBOMControllerConfig
 	if err := c.Get(context.Background(), types.NamespacedName{Name: name}, &cr); err != nil {
 		t.Fatalf("get %s: %v", name, err)
 	}
@@ -665,7 +665,7 @@ func getCR(t *testing.T, c client.Client, name string) *aibomv1alpha1.AIBOMContr
 
 func assertCondition(
 	t *testing.T,
-	cr *aibomv1alpha1.AIBOMControllerConfig,
+	cr *aibomv1beta1.AIBOMControllerConfig,
 	condType string,
 	wantStatus metav1.ConditionStatus,
 	wantReason string,

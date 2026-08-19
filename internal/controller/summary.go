@@ -35,7 +35,7 @@ package controller
 import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 )
 
@@ -44,12 +44,12 @@ import (
 // surfaces only the most-asked-about facts: workload identity, runtime,
 // model identities, and the aggregate confidence. The full per-component
 // detail lives in BOMDocumentRef.Inline (or in an external sink).
-func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1alpha1.AIBOMSummary {
+func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSummary {
 	if doc == nil || doc.CDX == nil {
 		return nil
 	}
-	summary := &aibomv1alpha1.AIBOMSummary{
-		Workload: aibomv1alpha1.WorkloadSummary{
+	summary := &aibomv1beta1.AIBOMSummary{
+		Workload: aibomv1beta1.WorkloadSummary{
 			Kind:       opts.WorkloadKind,
 			APIVersion: opts.WorkloadAPIVersion,
 			Name:       opts.WorkloadName,
@@ -69,14 +69,14 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1alpha1.AIBOMSu
 				// inference runtimes simultaneously is exotic and would
 				// merit a richer summary type; v1 records the first
 				// detection and the full set is in the BOM components.
-				summary.Runtime = &aibomv1alpha1.RuntimeSummary{
+				summary.Runtime = &aibomv1beta1.RuntimeSummary{
 					Name:       name,
 					Version:    c.Version,
 					Confidence: readProperty(c, "aibom.confidence"),
 				}
 			}
 		case cdx.ComponentTypeMachineLearningModel:
-			summary.Models = append(summary.Models, aibomv1alpha1.ModelSummary{
+			summary.Models = append(summary.Models, aibomv1beta1.ModelSummary{
 				Identity:   c.Name,
 				Source:     readProperty(c, "aibom.evidence.source"),
 				Confidence: readProperty(c, "aibom.confidence"),

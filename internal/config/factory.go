@@ -19,7 +19,7 @@ package config
 import (
 	"context"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
 
@@ -34,7 +34,7 @@ import (
 // LOADER applies the all-or-nothing fallback at the snapshot-decision
 // level; the factory itself just reports per-sink outcomes.
 type SinkFactory interface {
-	BuildSinks(ctx context.Context, specs []aibomv1alpha1.SinkConfig) (sinks []sink.Sink, errs []LoadError)
+	BuildSinks(ctx context.Context, specs []aibomv1beta1.SinkConfig) (sinks []sink.Sink, errs []LoadError)
 }
 
 // NoopSinkFactory is a SinkFactory that returns no sinks and no
@@ -45,6 +45,6 @@ type SinkFactory interface {
 type NoopSinkFactory struct{}
 
 // BuildSinks implements SinkFactory; returns empty results.
-func (NoopSinkFactory) BuildSinks(_ context.Context, _ []aibomv1alpha1.SinkConfig) ([]sink.Sink, []LoadError) {
+func (NoopSinkFactory) BuildSinks(_ context.Context, _ []aibomv1beta1.SinkConfig) ([]sink.Sink, []LoadError) {
 	return nil, nil
 }

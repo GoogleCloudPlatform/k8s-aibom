@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
 
@@ -69,7 +69,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	}
 
 	// ---------- Phase A: initial reconcile ----------
-	var first aibomv1alpha1.AIBOM
+	var first aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &first); err != nil {
 			return err
@@ -92,7 +92,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 		t.Fatal("Phase A: LastReconciled is nil")
 	}
 	initialLastReconciled := first.Status.LastReconciled.Time
-	initialReadyTransition := mustFindCondition(t, first.Status.Conditions, aibomv1alpha1.ConditionReady).LastTransitionTime
+	initialReadyTransition := mustFindCondition(t, first.Status.Conditions, aibomv1beta1.ConditionReady).LastTransitionTime
 
 	// ---------- Phase B: cosmetic change → dedup fast path ----------
 	// Annotation key is intentionally NOT under model.k8saibom.dev/ so the
@@ -119,7 +119,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	// pass only because of fortunate scheduling. The LastReconciled
 	// signal is the deterministic one: the dedup reconcile's
 	// Status().Update is exactly what advances it.
-	var afterCosmetic aibomv1alpha1.AIBOM
+	var afterCosmetic aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &afterCosmetic); err != nil {
 			return err
@@ -151,7 +151,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 		t.Errorf("Phase B: LastReconciled did not advance: %v -> %v",
 			initialLastReconciled, afterCosmetic.Status.LastReconciled)
 	}
-	ready2 := mustFindCondition(t, afterCosmetic.Status.Conditions, aibomv1alpha1.ConditionReady)
+	ready2 := mustFindCondition(t, afterCosmetic.Status.Conditions, aibomv1beta1.ConditionReady)
 	if !ready2.LastTransitionTime.Time.Equal(initialReadyTransition.Time) {
 		t.Errorf("Phase B: Ready.LastTransitionTime changed on dedup (should not change without a status transition): %v -> %v",
 			initialReadyTransition, ready2.LastTransitionTime)
@@ -162,7 +162,7 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	// new InputHash → no dedup → re-emit.
 	mustUpdateDeploymentImage(t, env.k8sClient, ctx, depName, nsName, "vllm/vllm-openai:v0.5.0")
 
-	var afterSubstantive aibomv1alpha1.AIBOM
+	var afterSubstantive aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if got := rs.emitCount(); got < 2 {
 			return fmt.Errorf("emit count = %d, want 2 (sink should be re-invoked on substantive change)", got)

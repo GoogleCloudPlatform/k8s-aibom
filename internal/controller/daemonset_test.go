@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 )
 
 // TestIntegration_DaemonSetInOptedInNamespace_ProducesAIBOM is the
@@ -50,7 +50,7 @@ func TestIntegration_DaemonSetInOptedInNamespace_ProducesAIBOM(t *testing.T) {
 		Name:      AIBOMNameForWorkload("apps", "DaemonSet", dsName),
 		Namespace: nsName,
 	}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return fmt.Errorf("get AIBOM %s: %w", aibomKey, err)

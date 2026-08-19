@@ -13,7 +13,11 @@ All notable changes to k8s-aibom are documented here. The format follows
   `v1alpha1`, and the storage version from this release onward.
   `v1alpha1` remains served and field-frozen through 1.x; its removal
   will be a separate, announced release with a documented migration step.
-  Design: docs/design/001-api-graduation-v1beta1.md.
+  Design: docs/design/001-api-graduation-v1beta1.md. The controller
+  operates on the `v1beta1` types internally; both versions remain
+  registered and served. An integration test proves the dual-serving
+  round-trip (write v1alpha1 → read v1beta1 and vice versa, same UID,
+  identical fields).
 
 ## [1.2.0] - 2026-08-18
 
