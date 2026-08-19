@@ -53,6 +53,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/controller"
@@ -80,6 +81,7 @@ var scheme = runtime.NewScheme()
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(aibomv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(aibomv1beta1.AddToScheme(scheme))
 }
 
 func main() {
