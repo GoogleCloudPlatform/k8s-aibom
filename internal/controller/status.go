@@ -22,7 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 )
 
@@ -111,12 +111,12 @@ type SinkResult struct {
 // here unchanged. A non-positive value falls back to
 // DefaultInlineThresholdBytes (defensive: tests can pass 0 to get
 // default behavior without restating the constant).
-func (b *StatusBuilder) BuildStatus(doc *bom.Document, opts SummaryOptions, sinkResults []SinkResult, generation int64, inputHash string, inlineThresholdBytes int64) aibomv1alpha1.AIBOMStatus {
+func (b *StatusBuilder) BuildStatus(doc *bom.Document, opts SummaryOptions, sinkResults []SinkResult, generation int64, inputHash string, inlineThresholdBytes int64) aibomv1beta1.AIBOMStatus {
 	if inlineThresholdBytes <= 0 {
 		inlineThresholdBytes = DefaultInlineThresholdBytes
 	}
 	now := metav1.NewTime(b.Now())
-	status := aibomv1alpha1.AIBOMStatus{
+	status := aibomv1beta1.AIBOMStatus{
 		Summary:            buildSummary(doc, opts),
 		LastReconciled:     &now,
 		ObservedGeneration: generation,
@@ -150,10 +150,10 @@ func (b *StatusBuilder) BuildStatus(doc *bom.Document, opts SummaryOptions, sink
 // effectively reset status — only meaningful for a "previous status
 // missing" edge case, which the reconciler should treat as not-yet-
 // reconciled and use the full BuildStatus path instead).
-func (b *StatusBuilder) BuildFastPathStatus(prev *aibomv1alpha1.AIBOMStatus, generation int64) aibomv1alpha1.AIBOMStatus {
+func (b *StatusBuilder) BuildFastPathStatus(prev *aibomv1beta1.AIBOMStatus, generation int64) aibomv1beta1.AIBOMStatus {
 	now := metav1.NewTime(b.Now())
 	if prev == nil {
-		return aibomv1alpha1.AIBOMStatus{
+		return aibomv1beta1.AIBOMStatus{
 			LastReconciled:     &now,
 			ObservedGeneration: generation,
 		}
@@ -168,9 +168,9 @@ func (b *StatusBuilder) BuildFastPathStatus(prev *aibomv1alpha1.AIBOMStatus, gen
 	return *out
 }
 
-func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []SinkResult, inlineThresholdBytes int64) *aibomv1alpha1.BOMDocumentRef {
+func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []SinkResult, inlineThresholdBytes int64) *aibomv1beta1.BOMDocumentRef {
 	size := int64(doc.Size())
-	ref := &aibomv1alpha1.BOMDocumentRef{
+	ref := &aibomv1beta1.BOMDocumentRef{
 		Format:      string(doc.Format),
 		SpecVersion: doc.Version,
 		SHA256:      doc.SHA256,
@@ -182,7 +182,7 @@ func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []Sin
 		// the source-of-truth for `kubectl get aibom -o yaml` is the
 		// inline copy here.
 		data := append([]byte(nil), doc.JSON...) // defensive copy
-		ref.Inline = &aibomv1alpha1.InlineBOM{Data: data}
+		ref.Inline = &aibomv1beta1.InlineBOM{Data: data}
 		return ref
 	}
 	// Too large for inline. Selection algorithm: prefer retrievable
@@ -192,7 +192,7 @@ func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []Sin
 	// always gets the gs:// URL in ExternalBOMRef.URL — the webhook
 	// delivery still happens, it just doesn't claim the External slot.
 	if sr := firstSuccessful(sinkResults, false); sr != nil {
-		ref.External = &aibomv1alpha1.ExternalBOMRef{
+		ref.External = &aibomv1beta1.ExternalBOMRef{
 			Sink:      sr.Sink,
 			URL:       sr.URL,
 			WriteOnly: sr.WriteOnly,
@@ -200,7 +200,7 @@ func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []Sin
 		return ref
 	}
 	if sr := firstSuccessful(sinkResults, true); sr != nil {
-		ref.External = &aibomv1alpha1.ExternalBOMRef{
+		ref.External = &aibomv1beta1.ExternalBOMRef{
 			Sink:      sr.Sink,
 			URL:       sr.URL,
 			WriteOnly: sr.WriteOnly,
@@ -247,15 +247,15 @@ func (b *StatusBuilder) buildConditions(doc *bom.Document, sinkResults []SinkRes
 
 	// Ready: we have a BOM to record.
 	readyStatus := metav1.ConditionTrue
-	readyReason := aibomv1alpha1.ReasonBOMGenerated
+	readyReason := aibomv1beta1.ReasonBOMGenerated
 	readyMessage := "BOM generated successfully"
 	if doc == nil {
 		readyStatus = metav1.ConditionFalse
-		readyReason = aibomv1alpha1.ReasonBuildFailed
+		readyReason = aibomv1beta1.ReasonBuildFailed
 		readyMessage = "no BOM available"
 	}
 	conds = append(conds, metav1.Condition{
-		Type:               aibomv1alpha1.ConditionReady,
+		Type:               aibomv1beta1.ConditionReady,
 		Status:             readyStatus,
 		Reason:             readyReason,
 		Message:            readyMessage,
@@ -270,19 +270,19 @@ func (b *StatusBuilder) buildConditions(doc *bom.Document, sinkResults []SinkRes
 		}
 	}
 	syncedStatus := metav1.ConditionTrue
-	syncedReason := aibomv1alpha1.ReasonAllSinksOK
+	syncedReason := aibomv1beta1.ReasonAllSinksOK
 	syncedMessage := "all sinks updated"
 	if len(sinkResults) == 0 {
-		syncedReason = aibomv1alpha1.ReasonCRDStatusOnly
+		syncedReason = aibomv1beta1.ReasonCRDStatusOnly
 		syncedMessage = "no external sinks configured; CR status is the sole sink"
 	}
 	if len(failedSinks) > 0 {
 		syncedStatus = metav1.ConditionFalse
-		syncedReason = aibomv1alpha1.ReasonOneOrMoreSinksDown
+		syncedReason = aibomv1beta1.ReasonOneOrMoreSinksDown
 		syncedMessage = "external sink failures: " + joinStrings(failedSinks, ", ")
 	}
 	conds = append(conds, metav1.Condition{
-		Type:               aibomv1alpha1.ConditionSynced,
+		Type:               aibomv1beta1.ConditionSynced,
 		Status:             syncedStatus,
 		Reason:             syncedReason,
 		Message:            syncedMessage,
@@ -291,15 +291,15 @@ func (b *StatusBuilder) buildConditions(doc *bom.Document, sinkResults []SinkRes
 
 	// SinkFailed: positive form of the failure signal, for alert grep.
 	sinkFailedStatus := metav1.ConditionFalse
-	sinkFailedReason := aibomv1alpha1.ReasonAllSinksOK
+	sinkFailedReason := aibomv1beta1.ReasonAllSinksOK
 	sinkFailedMessage := "no sink failures"
 	if len(failedSinks) > 0 {
 		sinkFailedStatus = metav1.ConditionTrue
-		sinkFailedReason = aibomv1alpha1.ReasonOneOrMoreSinksDown
+		sinkFailedReason = aibomv1beta1.ReasonOneOrMoreSinksDown
 		sinkFailedMessage = "external sink failures: " + joinStrings(failedSinks, ", ")
 	}
 	conds = append(conds, metav1.Condition{
-		Type:               aibomv1alpha1.ConditionSinkFailed,
+		Type:               aibomv1beta1.ConditionSinkFailed,
 		Status:             sinkFailedStatus,
 		Reason:             sinkFailedReason,
 		Message:            sinkFailedMessage,
@@ -309,9 +309,9 @@ func (b *StatusBuilder) buildConditions(doc *bom.Document, sinkResults []SinkRes
 	// Stale: explicit False; reconciler sets True from elsewhere on
 	// persistent reconcile failures (Phase 11+ retry/backoff plumbing).
 	conds = append(conds, metav1.Condition{
-		Type:               aibomv1alpha1.ConditionStale,
+		Type:               aibomv1beta1.ConditionStale,
 		Status:             metav1.ConditionFalse,
-		Reason:             aibomv1alpha1.ReasonBOMGenerated,
+		Reason:             aibomv1beta1.ReasonBOMGenerated,
 		Message:            "controller reconciled this AIBOM during the current cycle",
 		LastTransitionTime: now,
 	})

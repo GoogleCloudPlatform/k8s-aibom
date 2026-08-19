@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 )
 
@@ -67,13 +67,13 @@ func TestIntegration_HotReload_SwapWebhookSink_NextReconcileGoesToNewSink(t *tes
 	defer serverB.Close()
 
 	// Apply AIBOMControllerConfig with sink pointing at server A.
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: config.DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{{
 				Name: "primary",
-				Type: aibomv1alpha1.SinkTypeWebhook,
-				Webhook: &aibomv1alpha1.WebhookSinkSpec{
+				Type: aibomv1beta1.SinkTypeWebhook,
+				Webhook: &aibomv1beta1.WebhookSinkSpec{
 					Endpoint: serverA.URL,
 				},
 			}},
@@ -115,7 +115,7 @@ func TestIntegration_HotReload_SwapWebhookSink_NextReconcileGoesToNewSink(t *tes
 	}
 
 	// SWAP: patch the CR to point at server B.
-	var fetched aibomv1alpha1.AIBOMControllerConfig
+	var fetched aibomv1beta1.AIBOMControllerConfig
 	if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &fetched); err != nil {
 		t.Fatalf("get CR for swap: %v", err)
 	}

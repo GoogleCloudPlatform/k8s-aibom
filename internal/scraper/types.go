@@ -18,7 +18,7 @@ limitations under the License.
 // that the controller's discovery and extraction pipeline operate on. The
 // types in this package are INTERNAL — they flow Scraper -> BOMBuilder ->
 // Sink, never directly into a CR status field or BOM output. The deliberate
-// API-facing types live in github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1.
+// API-facing types live in github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1.
 package scraper
 
 import (

@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
@@ -64,7 +64,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{
 		Workload:  workload,
 		AIBOMName: AIBOMNameForWorkload("batch", "Job", job.Name),
-		SetOwnerReference: func(a *aibomv1alpha1.AIBOM) error {
+		SetOwnerReference: func(a *aibomv1beta1.AIBOM) error {
 			return controllerutil.SetControllerReference(&job, a, r.Scheme)
 		},
 		BOMBuildOptions: bom.BuildOptions{
@@ -119,7 +119,7 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.Job{}).
-		Owns(&aibomv1alpha1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
 			&corev1.Namespace{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),

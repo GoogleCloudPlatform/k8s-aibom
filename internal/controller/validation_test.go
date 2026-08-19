@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 )
 
 // These tests exercise the API-server-enforced validation on the
@@ -44,10 +44,10 @@ func TestValidation_RejectsMissingWorkloadRefName(t *testing.T) {
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "v-ns-1")
 
 	// AIBOM with workloadRef.name="" should be rejected by API server.
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "bad-1", Namespace: "v-ns-1"},
-		Spec: aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		Spec: aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
 				Name:       "", // missing
@@ -70,10 +70,10 @@ func TestValidation_RejectsUnknownBOMFormat(t *testing.T) {
 	ctx := context.Background()
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "v-ns-2")
 
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "bad-2", Namespace: "v-ns-2"},
-		Spec: aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		Spec: aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
 				Name:       "x",
@@ -96,10 +96,10 @@ func TestValidation_RejectsBadBOMSpecVersionPattern(t *testing.T) {
 	ctx := context.Background()
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "v-ns-3")
 
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "bad-3", Namespace: "v-ns-3"},
-		Spec: aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		Spec: aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
 				Name:       "x",
@@ -123,10 +123,10 @@ func TestValidation_RejectsWorkloadRefMutation(t *testing.T) {
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "v-ns-4")
 
 	// Initial valid AIBOM.
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "imm-1", Namespace: "v-ns-4"},
-		Spec: aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		Spec: aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
 				Name:       "originally-vllm",
@@ -140,7 +140,7 @@ func TestValidation_RejectsWorkloadRefMutation(t *testing.T) {
 	}
 
 	// Try to mutate workloadRef.name — must be rejected.
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	if err := env.k8sClient.Get(ctx, types.NamespacedName{
 		Name: "imm-1", Namespace: "v-ns-4",
 	}, &got); err != nil {
@@ -164,10 +164,10 @@ func TestValidation_AcceptsValidAIBOM(t *testing.T) {
 	ctx := context.Background()
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "v-ns-5")
 
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "good-1", Namespace: "v-ns-5"},
-		Spec: aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		Spec: aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
 				Name:       "vllm",

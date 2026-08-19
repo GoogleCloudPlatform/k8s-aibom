@@ -37,7 +37,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	configpkg "github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
@@ -93,7 +93,7 @@ func startEnvTestWithSinks(t *testing.T, sinks []sink.Sink) *envTestEnv {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(aibomv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(aibomv1beta1.AddToScheme(scheme))
 
 	te := &envtest.Environment{
 		CRDDirectoryPaths: []string{
@@ -185,7 +185,7 @@ func TestIntegration_ExternalSink_SuccessPath(t *testing.T) {
 	aibomKey := types.NamespacedName{
 		Name: "apps-deployment-" + depName, Namespace: nsName,
 	}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return err
@@ -225,14 +225,14 @@ func TestIntegration_ExternalSink_SuccessPath(t *testing.T) {
 
 	// Conditions: Synced=True, SinkFailed=False on success.
 	conds := conditionsByType(got.Status.Conditions)
-	if conds[aibomv1alpha1.ConditionSynced].Status != metav1.ConditionTrue {
+	if conds[aibomv1beta1.ConditionSynced].Status != metav1.ConditionTrue {
 		t.Errorf("Synced condition = %q, want True; reason=%q msg=%q",
-			conds[aibomv1alpha1.ConditionSynced].Status,
-			conds[aibomv1alpha1.ConditionSynced].Reason,
-			conds[aibomv1alpha1.ConditionSynced].Message)
+			conds[aibomv1beta1.ConditionSynced].Status,
+			conds[aibomv1beta1.ConditionSynced].Reason,
+			conds[aibomv1beta1.ConditionSynced].Message)
 	}
-	if conds[aibomv1alpha1.ConditionSinkFailed].Status != metav1.ConditionFalse {
-		t.Errorf("SinkFailed condition = %q, want False", conds[aibomv1alpha1.ConditionSinkFailed].Status)
+	if conds[aibomv1beta1.ConditionSinkFailed].Status != metav1.ConditionFalse {
+		t.Errorf("SinkFailed condition = %q, want False", conds[aibomv1beta1.ConditionSinkFailed].Status)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestIntegration_ExternalSink_FailurePath_CRDStatusStillUpdated(t *testing.T
 	aibomKey := types.NamespacedName{
 		Name: "apps-deployment-" + depName, Namespace: nsName,
 	}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return err
@@ -269,8 +269,8 @@ func TestIntegration_ExternalSink_FailurePath_CRDStatusStillUpdated(t *testing.T
 		}
 		// Conditions must reflect the failure.
 		conds := conditionsByType(got.Status.Conditions)
-		if conds[aibomv1alpha1.ConditionSinkFailed].Status != metav1.ConditionTrue {
-			return fmt.Errorf("SinkFailed condition not yet True: %+v", conds[aibomv1alpha1.ConditionSinkFailed])
+		if conds[aibomv1beta1.ConditionSinkFailed].Status != metav1.ConditionTrue {
+			return fmt.Errorf("SinkFailed condition not yet True: %+v", conds[aibomv1beta1.ConditionSinkFailed])
 		}
 		return nil
 	})
@@ -284,18 +284,18 @@ func TestIntegration_ExternalSink_FailurePath_CRDStatusStillUpdated(t *testing.T
 	}
 	// SinkFailed condition message must name the failing sink and reason.
 	conds := conditionsByType(got.Status.Conditions)
-	if !contains(conds[aibomv1alpha1.ConditionSinkFailed].Message, "recording-failure") {
+	if !contains(conds[aibomv1beta1.ConditionSinkFailed].Message, "recording-failure") {
 		t.Errorf("SinkFailed message should name the failing sink; got: %q",
-			conds[aibomv1alpha1.ConditionSinkFailed].Message)
+			conds[aibomv1beta1.ConditionSinkFailed].Message)
 	}
-	if !contains(conds[aibomv1alpha1.ConditionSinkFailed].Message, "simulated bucket-not-found") {
+	if !contains(conds[aibomv1beta1.ConditionSinkFailed].Message, "simulated bucket-not-found") {
 		t.Errorf("SinkFailed message should include underlying error; got: %q",
-			conds[aibomv1alpha1.ConditionSinkFailed].Message)
+			conds[aibomv1beta1.ConditionSinkFailed].Message)
 	}
 	// Synced=False.
-	if conds[aibomv1alpha1.ConditionSynced].Status != metav1.ConditionFalse {
+	if conds[aibomv1beta1.ConditionSynced].Status != metav1.ConditionFalse {
 		t.Errorf("Synced should be False on sink failure; got %q",
-			conds[aibomv1alpha1.ConditionSynced].Status)
+			conds[aibomv1beta1.ConditionSynced].Status)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestIntegration_ExternalSinks_FailureIsolation_OneFailsOthersSucceed(t *tes
 	mustCreate(t, env.k8sClient, ctx, vllmDeployment(nsName, depName))
 
 	aibomKey := types.NamespacedName{Name: "apps-deployment-" + depName, Namespace: nsName}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return err
@@ -349,7 +349,7 @@ func TestIntegration_ExternalSinks_FailureIsolation_OneFailsOthersSucceed(t *tes
 			return errors.New("status.summary not yet populated")
 		}
 		conds := conditionsByType(got.Status.Conditions)
-		if conds[aibomv1alpha1.ConditionSinkFailed].Status != metav1.ConditionTrue {
+		if conds[aibomv1beta1.ConditionSinkFailed].Status != metav1.ConditionTrue {
 			return errors.New("SinkFailed condition not yet True")
 		}
 		return nil
@@ -369,7 +369,7 @@ func TestIntegration_ExternalSinks_FailureIsolation_OneFailsOthersSucceed(t *tes
 	// succeeding one. A regression that attributed the failure to the
 	// wrong sink would surface here.
 	conds := conditionsByType(got.Status.Conditions)
-	msg := conds[aibomv1alpha1.ConditionSinkFailed].Message
+	msg := conds[aibomv1beta1.ConditionSinkFailed].Message
 	if !contains(msg, "failing-archival") {
 		t.Errorf("SinkFailed message should name the failing sink %q; got: %q",
 			"failing-archival", msg)
@@ -390,7 +390,7 @@ func TestIntegration_ExternalSinks_FailureIsolation_OneFailsOthersSucceed(t *tes
 	}
 
 	// Synced=False because at least one sink failed.
-	if conds[aibomv1alpha1.ConditionSynced].Status != metav1.ConditionFalse {
-		t.Errorf("Synced = %q, want False when any sink failed", conds[aibomv1alpha1.ConditionSynced].Status)
+	if conds[aibomv1beta1.ConditionSynced].Status != metav1.ConditionFalse {
+		t.Errorf("Synced = %q, want False when any sink failed", conds[aibomv1beta1.ConditionSynced].Status)
 	}
 }

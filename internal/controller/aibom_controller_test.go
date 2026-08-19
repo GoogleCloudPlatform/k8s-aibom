@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 )
 
 // TestIntegration_DeploymentInOptedInNamespace_ProducesAIBOM is the
@@ -52,7 +52,7 @@ func TestIntegration_DeploymentInOptedInNamespace_ProducesAIBOM(t *testing.T) {
 	// Wait up to 30 seconds for the AIBOM CR to appear with a populated
 	// status. controller-runtime cache+reconcile should be much faster
 	// than this in envtest, but the timeout absorbs startup variance.
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	aibomKey := types.NamespacedName{
 		Name:      "apps-deployment-" + depName,
 		Namespace: nsName,
@@ -140,7 +140,7 @@ func TestIntegration_DeploymentInNonOptedInNamespace_NoAIBOM(t *testing.T) {
 		Name:      "apps-deployment-" + depName,
 		Namespace: nsName,
 	}
-	var aibom aibomv1alpha1.AIBOM
+	var aibom aibomv1beta1.AIBOM
 	err := env.k8sClient.Get(ctx, aibomKey, &aibom)
 	if err == nil {
 		t.Fatalf("AIBOM was created for non-opted-in namespace: %+v", aibom)
@@ -172,7 +172,7 @@ func TestIntegration_NonInferenceDeployment_NoAIBOM(t *testing.T) {
 	})
 	time.Sleep(500 * time.Millisecond)
 	aibomKey := types.NamespacedName{Name: "apps-deployment-" + depName, Namespace: nsName}
-	var aibom aibomv1alpha1.AIBOM
+	var aibom aibomv1beta1.AIBOM
 	err := env.k8sClient.Get(ctx, aibomKey, &aibom)
 	if err == nil {
 		t.Fatalf("AIBOM was created for non-inference workload: %+v", aibom)
@@ -244,7 +244,7 @@ func TestIntegration_NamespaceOptInWatch(t *testing.T) {
 
 	// 3. Wait a bit, verify NO AIBOM is created.
 	time.Sleep(500 * time.Millisecond)
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	if err := env.k8sClient.Get(ctx, aibomKey, &got); err == nil {
 		t.Fatalf("AIBOM unexpectedly created for non-opted-in namespace: %+v", got)
 	}
@@ -333,7 +333,7 @@ func TestIntegration_PodImageIDWatch(t *testing.T) {
 		Name:      "apps-deployment-" + depName,
 		Namespace: nsName,
 	}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 15*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return err

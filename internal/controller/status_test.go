@@ -25,7 +25,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
@@ -263,20 +263,20 @@ func TestStatusBuilder_Conditions_HappyPath(t *testing.T) {
 	status := b.BuildStatus(doc, testSummaryOptions(), nil, 1, "test-input-hash", testInlineThresholdBytes)
 
 	conds := conditionsByType(status.Conditions)
-	if conds[aibomv1alpha1.ConditionReady].Status != metav1.ConditionTrue {
-		t.Errorf("Ready = %q, want True", conds[aibomv1alpha1.ConditionReady].Status)
+	if conds[aibomv1beta1.ConditionReady].Status != metav1.ConditionTrue {
+		t.Errorf("Ready = %q, want True", conds[aibomv1beta1.ConditionReady].Status)
 	}
-	if conds[aibomv1alpha1.ConditionSynced].Status != metav1.ConditionTrue {
-		t.Errorf("Synced = %q, want True", conds[aibomv1alpha1.ConditionSynced].Status)
+	if conds[aibomv1beta1.ConditionSynced].Status != metav1.ConditionTrue {
+		t.Errorf("Synced = %q, want True", conds[aibomv1beta1.ConditionSynced].Status)
 	}
-	if conds[aibomv1alpha1.ConditionSinkFailed].Status != metav1.ConditionFalse {
-		t.Errorf("SinkFailed = %q, want False", conds[aibomv1alpha1.ConditionSinkFailed].Status)
+	if conds[aibomv1beta1.ConditionSinkFailed].Status != metav1.ConditionFalse {
+		t.Errorf("SinkFailed = %q, want False", conds[aibomv1beta1.ConditionSinkFailed].Status)
 	}
-	if conds[aibomv1alpha1.ConditionStale].Status != metav1.ConditionFalse {
-		t.Errorf("Stale = %q, want False", conds[aibomv1alpha1.ConditionStale].Status)
+	if conds[aibomv1beta1.ConditionStale].Status != metav1.ConditionFalse {
+		t.Errorf("Stale = %q, want False", conds[aibomv1beta1.ConditionStale].Status)
 	}
 	// No-external-sink reason on Synced
-	if got, want := conds[aibomv1alpha1.ConditionSynced].Reason, aibomv1alpha1.ReasonCRDStatusOnly; got != want {
+	if got, want := conds[aibomv1beta1.ConditionSynced].Reason, aibomv1beta1.ReasonCRDStatusOnly; got != want {
 		t.Errorf("Synced.Reason = %q, want %q", got, want)
 	}
 }
@@ -290,13 +290,13 @@ func TestStatusBuilder_Conditions_SinkFailed(t *testing.T) {
 	status := b.BuildStatus(doc, testSummaryOptions(), results, 1, "test-input-hash", testInlineThresholdBytes)
 	conds := conditionsByType(status.Conditions)
 
-	if conds[aibomv1alpha1.ConditionSynced].Status != metav1.ConditionFalse {
-		t.Errorf("Synced = %q, want False when sink failed", conds[aibomv1alpha1.ConditionSynced].Status)
+	if conds[aibomv1beta1.ConditionSynced].Status != metav1.ConditionFalse {
+		t.Errorf("Synced = %q, want False when sink failed", conds[aibomv1beta1.ConditionSynced].Status)
 	}
-	if conds[aibomv1alpha1.ConditionSinkFailed].Status != metav1.ConditionTrue {
-		t.Errorf("SinkFailed = %q, want True", conds[aibomv1alpha1.ConditionSinkFailed].Status)
+	if conds[aibomv1beta1.ConditionSinkFailed].Status != metav1.ConditionTrue {
+		t.Errorf("SinkFailed = %q, want True", conds[aibomv1beta1.ConditionSinkFailed].Status)
 	}
-	if got := conds[aibomv1alpha1.ConditionSinkFailed].Message; got == "" {
+	if got := conds[aibomv1beta1.ConditionSinkFailed].Message; got == "" {
 		t.Error("SinkFailed.Message must name the failure")
 	}
 }

@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
@@ -71,7 +71,7 @@ func (l *Loader) Load(ctx context.Context) (LoadResult, error) {
 	if name == "" {
 		name = DefaultConfigName
 	}
-	cr := &aibomv1alpha1.AIBOMControllerConfig{}
+	cr := &aibomv1beta1.AIBOMControllerConfig{}
 	err := l.Client.Get(ctx, types.NamespacedName{Name: name}, cr)
 	if apierrors.IsNotFound(err) {
 		// Missing-CR fallback: compiled defaults, no errors.
@@ -90,7 +90,7 @@ func (l *Loader) Load(ctx context.Context) (LoadResult, error) {
 // LoadResult. Applies the all-or-nothing rule: any LoadError causes
 // the returned Snapshot to be DefaultSnapshot, regardless of how
 // many fields parsed successfully.
-func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1alpha1.AIBOMControllerConfig) LoadResult {
+func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMControllerConfig) LoadResult {
 	var errs []LoadError
 
 	// Parse namespaceSelector — typically fast since the CRD schema
@@ -200,7 +200,7 @@ func parseNamespaceSelector(sel *metav1.LabelSelector) (labels.Selector, *LoadEr
 // returned InferenceConfig contains successfully-compiled patterns;
 // the loader's all-or-nothing rule means this partial-success config
 // won't actually be used when errors > 0.
-func parsePatterns(specs []aibomv1alpha1.RuntimeImagePattern) (*scraper.InferenceConfig, []LoadError) {
+func parsePatterns(specs []aibomv1beta1.RuntimeImagePattern) (*scraper.InferenceConfig, []LoadError) {
 	if len(specs) == 0 {
 		// No override; compiled defaults handle everything.
 		return scraper.DefaultV1Config(), nil
@@ -230,7 +230,7 @@ func parsePatterns(specs []aibomv1alpha1.RuntimeImagePattern) (*scraper.Inferenc
 //
 // All shape errors are returned; the customer can see every failing
 // sink in one pass.
-func validateSinkShapes(sinks []aibomv1alpha1.SinkConfig) []LoadError {
+func validateSinkShapes(sinks []aibomv1beta1.SinkConfig) []LoadError {
 	var errs []LoadError
 	seenNames := make(map[string]int) // name -> first occurrence index
 	for i, s := range sinks {
@@ -242,14 +242,14 @@ func validateSinkShapes(sinks []aibomv1alpha1.SinkConfig) []LoadError {
 		}
 
 		switch s.Type {
-		case aibomv1alpha1.SinkTypeGCS:
+		case aibomv1beta1.SinkTypeGCS:
 			if s.GCS == nil {
 				errs = append(errs, errSinkMissingTypeBody(s.Name, string(s.Type)))
 			}
 			if s.Webhook != nil {
 				errs = append(errs, errSinkExtraTypeBody(s.Name, string(s.Type), "webhook"))
 			}
-		case aibomv1alpha1.SinkTypeWebhook:
+		case aibomv1beta1.SinkTypeWebhook:
 			if s.Webhook == nil {
 				errs = append(errs, errSinkMissingTypeBody(s.Name, string(s.Type)))
 			}

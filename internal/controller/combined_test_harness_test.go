@@ -31,7 +31,7 @@ import (
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
@@ -67,7 +67,7 @@ func startCombinedEnvTest(t *testing.T) *combinedEnv {
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(aibomv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(aibomv1beta1.AddToScheme(scheme))
 
 	te := &envtest.Environment{
 		CRDDirectoryPaths: []string{

@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 )
 
@@ -73,7 +73,7 @@ func TestIntegration_Bootstrap_NoCR_BOMLandsInStatus(t *testing.T) {
 	mustCreate(t, env.k8sClient, ctx, vllmDeployment(nsName, depName))
 
 	aibomKey := types.NamespacedName{Name: "apps-deployment-" + depName, Namespace: nsName}
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
 			return err
@@ -109,13 +109,13 @@ func TestIntegration_Bootstrap_ValidCR_BOMLandsInSinks(t *testing.T) {
 	server := newCountingHTTPServer(&sinkCount)
 	defer server.Close()
 
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: config.DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{{
 				Name: "primary",
-				Type: aibomv1alpha1.SinkTypeWebhook,
-				Webhook: &aibomv1alpha1.WebhookSinkSpec{
+				Type: aibomv1beta1.SinkTypeWebhook,
+				Webhook: &aibomv1beta1.WebhookSinkSpec{
 					Endpoint: server.URL,
 				},
 			}},
@@ -146,16 +146,16 @@ func TestIntegration_Bootstrap_ValidCR_BOMLandsInSinks(t *testing.T) {
 	})
 
 	// CR's Ready condition must be True/ConfigLoaded.
-	var fetched aibomv1alpha1.AIBOMControllerConfig
+	var fetched aibomv1beta1.AIBOMControllerConfig
 	if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &fetched); err != nil {
 		t.Fatalf("get CR: %v", err)
 	}
-	readyCond := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionReady)
+	readyCond := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionReady)
 	if readyCond == nil || readyCond.Status != metav1.ConditionTrue {
 		t.Errorf("Ready condition = %+v, want Status=True", readyCond)
 	}
-	if readyCond != nil && readyCond.Reason != aibomv1alpha1.ReasonConfigLoaded {
-		t.Errorf("Ready Reason = %q, want %q", readyCond.Reason, aibomv1alpha1.ReasonConfigLoaded)
+	if readyCond != nil && readyCond.Reason != aibomv1beta1.ReasonConfigLoaded {
+		t.Errorf("Ready Reason = %q, want %q", readyCond.Reason, aibomv1beta1.ReasonConfigLoaded)
 	}
 }
 
@@ -171,12 +171,12 @@ func TestIntegration_Bootstrap_InvalidCR_ReadyFalse(t *testing.T) {
 
 	// Invalid CR: Type=GCS but GCS body absent. Loader-detectable
 	// shape error.
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: config.DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{{
 				Name: "broken-gcs",
-				Type: aibomv1alpha1.SinkTypeGCS,
+				Type: aibomv1beta1.SinkTypeGCS,
 				// GCS body intentionally nil.
 			}},
 		},
@@ -185,19 +185,19 @@ func TestIntegration_Bootstrap_InvalidCR_ReadyFalse(t *testing.T) {
 
 	// Wait for the config reconciler to observe and patch status.
 	eventually(t, 15*time.Second, 100*time.Millisecond, func() error {
-		var fetched aibomv1alpha1.AIBOMControllerConfig
+		var fetched aibomv1beta1.AIBOMControllerConfig
 		if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &fetched); err != nil {
 			return err
 		}
-		readyCond := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionReady)
+		readyCond := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionReady)
 		if readyCond == nil {
 			return errors.New("Ready condition not yet set")
 		}
 		if readyCond.Status != metav1.ConditionFalse {
 			return fmt.Errorf("Ready Status = %q, want False", readyCond.Status)
 		}
-		if readyCond.Reason != aibomv1alpha1.ReasonConfigInvalid {
-			return fmt.Errorf("Ready Reason = %q, want %q", readyCond.Reason, aibomv1alpha1.ReasonConfigInvalid)
+		if readyCond.Reason != aibomv1beta1.ReasonConfigInvalid {
+			return fmt.Errorf("Ready Reason = %q, want %q", readyCond.Reason, aibomv1beta1.ReasonConfigInvalid)
 		}
 		return nil
 	})
@@ -209,14 +209,14 @@ func TestIntegration_Bootstrap_InvalidCR_ReadyFalse(t *testing.T) {
 	}
 
 	// Degraded condition: True / RunningOnDefaults.
-	var fetched aibomv1alpha1.AIBOMControllerConfig
+	var fetched aibomv1beta1.AIBOMControllerConfig
 	_ = env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &fetched)
-	degraded := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionDegraded)
+	degraded := meta.FindStatusCondition(fetched.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionDegraded)
 	if degraded == nil || degraded.Status != metav1.ConditionTrue {
 		t.Errorf("Degraded = %+v, want Status=True", degraded)
 	}
-	if degraded != nil && degraded.Reason != aibomv1alpha1.ReasonRunningOnDefaults {
-		t.Errorf("Degraded Reason = %q, want %q", degraded.Reason, aibomv1alpha1.ReasonRunningOnDefaults)
+	if degraded != nil && degraded.Reason != aibomv1beta1.ReasonRunningOnDefaults {
+		t.Errorf("Degraded Reason = %q, want %q", degraded.Reason, aibomv1beta1.ReasonRunningOnDefaults)
 	}
 }
 
@@ -242,13 +242,13 @@ func TestIntegration_Bootstrap_ValidToInvalid_PreservesLKG(t *testing.T) {
 	defer server.Close()
 
 	// 1. Apply valid CR pointing at the test sink.
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: config.DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{{
 				Name: "primary",
-				Type: aibomv1alpha1.SinkTypeWebhook,
-				Webhook: &aibomv1alpha1.WebhookSinkSpec{
+				Type: aibomv1beta1.SinkTypeWebhook,
+				Webhook: &aibomv1beta1.WebhookSinkSpec{
 					Endpoint: server.URL,
 				},
 			}},
@@ -279,13 +279,13 @@ func TestIntegration_Bootstrap_ValidToInvalid_PreservesLKG(t *testing.T) {
 	// shape error (Type=Webhook but no webhook body) is the most
 	// realistic typo class: customer intended to change something
 	// but malformed it.
-	var fetched aibomv1alpha1.AIBOMControllerConfig
+	var fetched aibomv1beta1.AIBOMControllerConfig
 	if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &fetched); err != nil {
 		t.Fatalf("get CR for invalidation: %v", err)
 	}
-	fetched.Spec.Sinks = []aibomv1alpha1.SinkConfig{{
+	fetched.Spec.Sinks = []aibomv1beta1.SinkConfig{{
 		Name: "broken-after-edit",
-		Type: aibomv1alpha1.SinkTypeWebhook,
+		Type: aibomv1beta1.SinkTypeWebhook,
 		// Webhook body intentionally nil — shape error.
 	}}
 	if err := env.k8sClient.Update(ctx, &fetched); err != nil {
@@ -296,17 +296,17 @@ func TestIntegration_Bootstrap_ValidToInvalid_PreservesLKG(t *testing.T) {
 	// mark Degraded=True/RunningOnLastKnownGood. This is the signal
 	// that the LKG path was taken.
 	eventually(t, 15*time.Second, 100*time.Millisecond, func() error {
-		var got aibomv1alpha1.AIBOMControllerConfig
+		var got aibomv1beta1.AIBOMControllerConfig
 		if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &got); err != nil {
 			return err
 		}
-		degraded := meta.FindStatusCondition(got.Status.Conditions, aibomv1alpha1.AIBOMControllerConfigConditionDegraded)
+		degraded := meta.FindStatusCondition(got.Status.Conditions, aibomv1beta1.AIBOMControllerConfigConditionDegraded)
 		if degraded == nil || degraded.Status != metav1.ConditionTrue {
 			return errors.New("Degraded not yet True")
 		}
-		if degraded.Reason != aibomv1alpha1.ReasonRunningOnLastKnownGood {
+		if degraded.Reason != aibomv1beta1.ReasonRunningOnLastKnownGood {
 			return fmt.Errorf("Degraded Reason = %q, want %q (LKG path NOT taken — customer's sinks were silently lost)",
-				degraded.Reason, aibomv1alpha1.ReasonRunningOnLastKnownGood)
+				degraded.Reason, aibomv1beta1.ReasonRunningOnLastKnownGood)
 		}
 		return nil
 	})
@@ -369,13 +369,13 @@ func TestIntegration_Bootstrap_CRDeleted_RevertsToDefaults(t *testing.T) {
 	server := newCountingHTTPServer(&sinkCount)
 	defer server.Close()
 
-	cr := &aibomv1alpha1.AIBOMControllerConfig{
+	cr := &aibomv1beta1.AIBOMControllerConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: config.DefaultConfigName},
-		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
-			Sinks: []aibomv1alpha1.SinkConfig{{
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Sinks: []aibomv1beta1.SinkConfig{{
 				Name: "soon-to-be-deleted",
-				Type: aibomv1alpha1.SinkTypeWebhook,
-				Webhook: &aibomv1alpha1.WebhookSinkSpec{
+				Type: aibomv1beta1.SinkTypeWebhook,
+				Webhook: &aibomv1beta1.WebhookSinkSpec{
 					Endpoint: server.URL,
 				},
 			}},
@@ -409,7 +409,7 @@ func TestIntegration_Bootstrap_CRDeleted_RevertsToDefaults(t *testing.T) {
 	})
 
 	// CR no longer exists.
-	var lookup aibomv1alpha1.AIBOMControllerConfig
+	var lookup aibomv1beta1.AIBOMControllerConfig
 	err := env.k8sClient.Get(ctx, types.NamespacedName{Name: config.DefaultConfigName}, &lookup)
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("post-delete Get = %v, want NotFound", err)

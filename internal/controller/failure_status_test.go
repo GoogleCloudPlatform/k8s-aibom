@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
 
@@ -45,9 +45,9 @@ func failureStatusRequest() WorkloadReconcileRequest {
 // preserving prior status fields — so the failure is observable in
 // status, not only in logs and requeue backoff.
 func TestPersistFailureStatus_FlipsReadyFalseOnExisting(t *testing.T) {
-	existing := &aibomv1alpha1.AIBOM{
+	existing := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{Name: "apps-deployment-vllm", Namespace: "ai-team"},
-		Status: aibomv1alpha1.AIBOMStatus{
+		Status: aibomv1beta1.AIBOMStatus{
 			ConsecutiveErrors: 1,
 			InputHash:         "prior-hash-preserved",
 		},
@@ -55,17 +55,17 @@ func TestPersistFailureStatus_FlipsReadyFalseOnExisting(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(newConfigFakeScheme(t)).
 		WithObjects(existing).
-		WithStatusSubresource(&aibomv1alpha1.AIBOM{}).
+		WithStatusSubresource(&aibomv1beta1.AIBOM{}).
 		Build()
 	r := &WorkloadReconciler{Client: c}
 
 	r.persistFailureStatus(context.Background(), failureStatusRequest(), "BuildFailed", "BOM build failed: boom")
 
-	var got aibomv1alpha1.AIBOM
+	var got aibomv1beta1.AIBOM
 	if err := c.Get(context.Background(), types.NamespacedName{Name: "apps-deployment-vllm", Namespace: "ai-team"}, &got); err != nil {
 		t.Fatalf("get AIBOM: %v", err)
 	}
-	cond := apimeta.FindStatusCondition(got.Status.Conditions, aibomv1alpha1.ConditionReady)
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, aibomv1beta1.ConditionReady)
 	if cond == nil {
 		t.Fatal("Ready condition not written")
 	}
@@ -94,13 +94,13 @@ func TestPersistFailureStatus_FlipsReadyFalseOnExisting(t *testing.T) {
 func TestPersistFailureStatus_NeverCreates(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(newConfigFakeScheme(t)).
-		WithStatusSubresource(&aibomv1alpha1.AIBOM{}).
+		WithStatusSubresource(&aibomv1beta1.AIBOM{}).
 		Build()
 	r := &WorkloadReconciler{Client: c}
 
 	r.persistFailureStatus(context.Background(), failureStatusRequest(), "ScrapeFailed", "scrape failed: boom")
 
-	var list aibomv1alpha1.AIBOMList
+	var list aibomv1beta1.AIBOMList
 	if err := c.List(context.Background(), &list); err != nil {
 		t.Fatalf("list AIBOMs: %v", err)
 	}

@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
 
@@ -72,19 +72,19 @@ type ClientSinkFactory struct {
 // BuildSinks implements SinkFactory. Per the loader's all-or-nothing
 // rule, the loader applies fallback to defaults if any LoadError is
 // returned; the factory's job is to report per-sink outcomes faithfully.
-func (f *ClientSinkFactory) BuildSinks(ctx context.Context, specs []aibomv1alpha1.SinkConfig) ([]sink.Sink, []LoadError) {
+func (f *ClientSinkFactory) BuildSinks(ctx context.Context, specs []aibomv1beta1.SinkConfig) ([]sink.Sink, []LoadError) {
 	var sinks []sink.Sink
 	var errs []LoadError
 	for _, s := range specs {
 		switch s.Type {
-		case aibomv1alpha1.SinkTypeGCS:
+		case aibomv1beta1.SinkTypeGCS:
 			built, le := f.buildGCSSink(ctx, s)
 			if le != nil {
 				errs = append(errs, *le)
 				continue
 			}
 			sinks = append(sinks, built)
-		case aibomv1alpha1.SinkTypeWebhook:
+		case aibomv1beta1.SinkTypeWebhook:
 			built, le := f.buildWebhookSink(ctx, s)
 			if le != nil {
 				errs = append(errs, *le)
@@ -111,7 +111,7 @@ func (f *ClientSinkFactory) BuildSinks(ctx context.Context, specs []aibomv1alpha
 // Returns a LoadError for any construction failure (missing Secret,
 // bad credentials, sink-internal validation failure). Callers MUST
 // have validated that s.GCS is non-nil before calling.
-func (f *ClientSinkFactory) buildGCSSink(ctx context.Context, s aibomv1alpha1.SinkConfig) (sink.Sink, *LoadError) {
+func (f *ClientSinkFactory) buildGCSSink(ctx context.Context, s aibomv1beta1.SinkConfig) (sink.Sink, *LoadError) {
 	cfg := sink.GCSSinkConfig{
 		Bucket:       s.GCS.Bucket,
 		PathTemplate: s.GCS.PathTemplate,
@@ -140,7 +140,7 @@ func (f *ClientSinkFactory) buildGCSSink(ctx context.Context, s aibomv1alpha1.Si
 // buildWebhookSink constructs a WebhookSink from a SinkConfig with
 // Type=Webhook. Returns a LoadError for any construction failure.
 // Callers MUST have validated that s.Webhook is non-nil before calling.
-func (f *ClientSinkFactory) buildWebhookSink(ctx context.Context, s aibomv1alpha1.SinkConfig) (sink.Sink, *LoadError) {
+func (f *ClientSinkFactory) buildWebhookSink(ctx context.Context, s aibomv1beta1.SinkConfig) (sink.Sink, *LoadError) {
 	cfg := sink.WebhookSinkConfig{
 		Endpoint:          s.Webhook.Endpoint,
 		ControllerVersion: f.ControllerVersion,
@@ -216,7 +216,7 @@ func (f *ClientSinkFactory) buildWebhookSink(ctx context.Context, s aibomv1alpha
 // "webhook.auth.bearerToken.secretRef") are combined into the error
 // message so the customer can find the failing sink in their CR
 // without scanning controller logs.
-func (f *ClientSinkFactory) readSecretKey(ctx context.Context, sinkName, sinkContext, fieldPath string, ref aibomv1alpha1.SecretKeyRef) ([]byte, *LoadError) {
+func (f *ClientSinkFactory) readSecretKey(ctx context.Context, sinkName, sinkContext, fieldPath string, ref aibomv1beta1.SecretKeyRef) ([]byte, *LoadError) {
 	var secret corev1.Secret
 	err := f.Client.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: f.Namespace}, &secret)
 

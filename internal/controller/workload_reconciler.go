@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	aibomv1alpha1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1alpha1"
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/metrics"
@@ -131,7 +131,7 @@ type WorkloadReconcileRequest struct {
 	// kind-neutral logic call SetControllerReference with the typed
 	// kind-specific owner without leaking the typed object into this
 	// package's helper logic.
-	SetOwnerReference func(*aibomv1alpha1.AIBOM) error
+	SetOwnerReference func(*aibomv1beta1.AIBOM) error
 
 	// BOMBuildOptions and SummaryOptions are workload-identity carriers
 	// for the BOM builder and status summary builder respectively.
@@ -190,7 +190,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 	if !snap.NamespaceSelector.Matches(labels.Set(ns.Labels)) {
 		logger.V(1).Info("namespace does not match selector; skipping", "workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name)
-		aibom := &aibomv1alpha1.AIBOM{}
+		aibom := &aibomv1beta1.AIBOM{}
 		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
 			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
@@ -215,7 +215,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		// docs/scraper-heuristics.md, this workload is not classified
 		// as inference; do not create an AIBOM.
 		logger.V(1).Info("workload has no inference signal; skipping AIBOM creation", "workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name)
-		aibom := &aibomv1alpha1.AIBOM{}
+		aibom := &aibomv1beta1.AIBOM{}
 		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
 			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
@@ -242,7 +242,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		Name:      req.AIBOMName,
 		Namespace: req.Workload.Namespace,
 	}
-	var existing aibomv1alpha1.AIBOM
+	var existing aibomv1beta1.AIBOM
 	existingErr := r.Get(ctx, aibomKey, &existing)
 	if existingErr == nil {
 		// Dedup fast path: input hash matches the previously-emitted BOM's
@@ -340,7 +340,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 
 	if status.ConsecutiveErrors >= staleThreshold {
 		for i, c := range status.Conditions {
-			if c.Type == aibomv1alpha1.ConditionStale {
+			if c.Type == aibomv1beta1.ConditionStale {
 				status.Conditions[i].Status = metav1.ConditionTrue
 				status.Conditions[i].Reason = "ExtractionErrorsPersistent"
 
@@ -361,7 +361,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 
 	// CreateOrUpdate the AIBOM with owner reference, then update status.
-	aibom := &aibomv1alpha1.AIBOM{
+	aibom := &aibomv1beta1.AIBOM{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.AIBOMName,
 			Namespace: req.Workload.Namespace,
@@ -370,8 +370,8 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, aibom, func() error {
 		// Spec: set on create AND update so a manual edit is rolled
 		// back. The CR is fully controller-owned in v1.
-		aibom.Spec = aibomv1alpha1.AIBOMSpec{
-			WorkloadRef: aibomv1alpha1.WorkloadRef{
+		aibom.Spec = aibomv1beta1.AIBOMSpec{
+			WorkloadRef: aibomv1beta1.WorkloadRef{
 				APIVersion: formatAPIVersion(req.Workload.Kind),
 				Kind:       req.Workload.Kind.Kind,
 				Name:       req.Workload.Name,
@@ -411,7 +411,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 // caller's original error drives the requeue either way.
 func (r *WorkloadReconciler) persistFailureStatus(ctx context.Context, req WorkloadReconcileRequest, reason, message string) {
 	logger := log.FromContext(ctx)
-	var existing aibomv1alpha1.AIBOM
+	var existing aibomv1beta1.AIBOM
 	if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, &existing); err != nil {
 		if !apierrors.IsNotFound(err) {
 			logger.V(1).Info("failure-status write skipped: fetch failed", "error", err.Error())
@@ -420,7 +420,7 @@ func (r *WorkloadReconciler) persistFailureStatus(ctx context.Context, req Workl
 	}
 	existing.Status.ConsecutiveErrors++
 	apimeta.SetStatusCondition(&existing.Status.Conditions, metav1.Condition{
-		Type:               aibomv1alpha1.ConditionReady,
+		Type:               aibomv1beta1.ConditionReady,
 		Status:             metav1.ConditionFalse,
 		Reason:             reason,
 		Message:            message,
@@ -435,7 +435,7 @@ func (r *WorkloadReconciler) persistFailureStatus(ctx context.Context, req Workl
 // recordStatusPersistFailure emits the observable signals for a
 // non-conflict status-persistence failure: a metric always, an Event
 // when a Recorder is wired.
-func (r *WorkloadReconciler) recordStatusPersistFailure(obj *aibomv1alpha1.AIBOM, req WorkloadReconcileRequest, err error) {
+func (r *WorkloadReconciler) recordStatusPersistFailure(obj *aibomv1beta1.AIBOM, req WorkloadReconcileRequest, err error) {
 	metrics.StatusPersistFailures.WithLabelValues(req.Workload.Namespace, req.Workload.Kind.Kind).Inc()
 	if r.Recorder != nil {
 		r.Recorder.Event(obj, corev1.EventTypeWarning, "AIBOMStatusPersistFailed",
