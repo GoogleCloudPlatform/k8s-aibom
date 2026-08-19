@@ -42,9 +42,13 @@ statements reconcile as follows:
 - **Within 1.x, `v1alpha1` is field-frozen:** existing fields are not
   removed or repurposed; changes are additive only. Treat it as stable in
   practice despite the alpha marker.
-- **Graduation to `v1beta1` is planned**, with a documented conversion
-  path, and will arrive in a MINOR release (both versions served) — the
-  `v1alpha1` storage version is not removed within 1.x.
+- **Graduation to `v1beta1`** ships as a MINOR release: both versions
+  served, schema-identical, storage on `v1beta1` (see
+  docs/design/001-api-graduation-v1beta1.md).
+- **Removal of `v1alpha1` is a separate, announced release with a
+  documented migration step** — it does not happen within 1.x, and it
+  gates on stored objects being rewritten to `v1beta1` and
+  `storedVersions` cleanup (see docs/migration-v1beta1.md).
 
 ## Kubernetes version support
 
