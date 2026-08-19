@@ -83,12 +83,17 @@ matters in practice.
    version in their component health check so a cluster in the wrong
    state fails their validation rather than passing quietly. We
    implement and document the full migration procedure regardless.
-2. **Pin now.** NVIDIA/aicr#2271 pins v1.2.0 under the explicit-preview
-   label; the re-pin after this release is a full requalification (they
-   qualify chart, image, CRDs, and status contract as one set), and
-   AICR will capture real-cluster **upgrade and rollback evidence
-   across the v1.2.0 → graduation boundary** — deliberately exercising
-   this project's first CRD change before any end user does.
+2. **Pin now — registry-only, no preview label.** AICR has no preview
+   mechanism: everything in its registry is assumed validated. The
+   actual mechanism: NVIDIA/aicr#2271 pins v1.2.0 as a registry-only
+   component now, and AICR's **stock GKE overlay merges only after
+   requalification against the graduation release** (same gate, same
+   storage-version assertion, different mechanism than a label). The
+   re-pin is a full requalification (chart, image, CRDs, and status
+   contract as one set), and AICR will capture real-cluster **upgrade
+   and rollback evidence across the v1.2.0 → graduation boundary** —
+   deliberately exercising this project's first CRD change before any
+   end user does.
 
 ## The stranded-CRD failure mode (and why it should fail loud)
 
@@ -108,20 +113,21 @@ visibly unhealthy rather than quietly operating on `v1alpha1`.
 
 The rc verification scripts this explicitly: upgrade the release
 *without* applying the new CRDs → assert NotReady; apply the CRDs per
-the documented step → assert recovery. Combined with AICR's
-storage-version assertion, the stranded case is caught twice — once by
-upstream readiness, once by downstream validation.
+the documented step → assert recovery. AICR concurs (their Deployment
+health check already fails on a NotReady pod) and will assert the
+storage version as **proof the flip happened** rather than as breakage
+detection — the stranded case is caught twice regardless.
 
-## Sequencing agreement with AICR
+## Sequencing (gates, not dates)
 
-1. AICR lands the NVIDIA/aicr#2264 fix (Flux `CreateReplace` or
-   equivalent) **and** the storage-version health-check assertion
-   *before* this release tags, so the graduation has a working upgrade
-   path and a stranded-CRD detector on day one.
-2. Upstream provides the release candidate for boundary testing; the
-   final tag cuts once AICR's fix has landed.
-3. AICR re-pins and requalifies, capturing the cross-boundary upgrade
-   evidence above.
+1. **Upstream cuts when the release candidate verifies** — this release
+   does not gate on any AICR work.
+2. AICR's NVIDIA/aicr#2264 fix (Flux CRD-upgrade path) and the
+   storage-version assertion gate **their requalification**, which
+   gates **their stock GKE overlay merge** — AICR lateness delays their
+   adoption, never this release.
+3. AICR re-pins and requalifies against the graduation release,
+   capturing the cross-boundary upgrade evidence above.
 
 ## Testing
 
