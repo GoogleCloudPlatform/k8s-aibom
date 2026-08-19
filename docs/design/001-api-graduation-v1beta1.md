@@ -1,8 +1,10 @@
 # Design 001: API graduation to `v1beta1`
 
-Status: Proposed (2026-08-19). Implementation follows this note; ships as
-its own release per [VERSIONING.md](../../VERSIONING.md) (API-contract
-changes never share a release with feature work).
+Status: Proposed (2026-08-19); updated same day after AICR maintainer
+review resolved both open questions and added the sequencing agreement
+below. Implementation follows this note; ships as its own release per
+[VERSIONING.md](../../VERSIONING.md) (API-contract changes never share a
+release with feature work).
 
 ## Context
 
@@ -71,17 +73,55 @@ Argo CD applies CRDs each sync. AICR's component upgrade documentation
 already records this matrix; the graduation release is where it first
 matters in practice.
 
-## Open questions (for AICR)
+## Resolved questions (AICR maintainer review, 2026-08-19)
 
-1. Does ADR-019's "non-alpha storage API" gate require (a) storage
-   version = `v1beta1` at release, or (b) additionally, migrated stored
-   objects and `storedVersions` cleanup verified? We implement and
-   document both either way; the answer determines what the
-   qualification checks.
-2. Should NVIDIA/aicr#2271's demo pin v1.2.0 under the explicit-preview
-   label and re-pin after this release, or wait for it? (Upstream
-   recommendation: pin now; this release follows within days, and
-   requalification is automated.)
+1. **"Non-alpha storage API" = the storage flip, at release.** AICR's
+   preview-label drop gates on `spec.versions[?storage].name ==
+   'v1beta1'` on the served CRD. Migration of existing stored objects
+   and `storedVersions` cleanup gate a *different, later* decision —
+   removing `v1alpha1` — not graduation. AICR will assert the storage
+   version in their component health check so a cluster in the wrong
+   state fails their validation rather than passing quietly. We
+   implement and document the full migration procedure regardless.
+2. **Pin now.** NVIDIA/aicr#2271 pins v1.2.0 under the explicit-preview
+   label; the re-pin after this release is a full requalification (they
+   qualify chart, image, CRDs, and status contract as one set), and
+   AICR will capture real-cluster **upgrade and rollback evidence
+   across the v1.2.0 → graduation boundary** — deliberately exercising
+   this project's first CRD change before any end user does.
+
+## The stranded-CRD failure mode (and why it should fail loud)
+
+On three of AICR's five deployers (Helm, Helmfile, Flux with the
+default `Skip`), upgrading a release never updates an existing CRD (see
+NVIDIA/aicr#2264). A cluster upgraded to the graduation release without
+the documented CRD apply is left with the old CRD: no `v1beta1`
+version, storage still `v1alpha1` — while every version string in the
+bundle claims graduation.
+
+**Hypothesis (to be proven at rc):** this state fails *loudly* in this
+architecture, not silently. The graduated controller's informers
+request `v1beta1`, which the stranded CRD does not serve; the informer
+caches never sync; and the readiness gate (readyz gates on cache sync
+since v1.1.0) holds the pod NotReady indefinitely — the Deployment goes
+visibly unhealthy rather than quietly operating on `v1alpha1`.
+
+The rc verification scripts this explicitly: upgrade the release
+*without* applying the new CRDs → assert NotReady; apply the CRDs per
+the documented step → assert recovery. Combined with AICR's
+storage-version assertion, the stranded case is caught twice — once by
+upstream readiness, once by downstream validation.
+
+## Sequencing agreement with AICR
+
+1. AICR lands the NVIDIA/aicr#2264 fix (Flux `CreateReplace` or
+   equivalent) **and** the storage-version health-check assertion
+   *before* this release tags, so the graduation has a working upgrade
+   path and a stranded-CRD detector on day one.
+2. Upstream provides the release candidate for boundary testing; the
+   final tag cuts once AICR's fix has landed.
+3. AICR re-pins and requalifies, capturing the cross-boundary upgrade
+   evidence above.
 
 ## Testing
 
