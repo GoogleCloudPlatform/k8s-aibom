@@ -11,8 +11,21 @@ All notable changes to k8s-aibom are documented here. The format follows
 The graduation release: the `aibom.k8saibom.dev` APIs reach `v1beta1`
 (Design 001), satisfying the non-alpha storage requirement for stock
 AICR adoption (NVIDIA/aicr ADR-019). **Upgrading requires applying the
-new CRDs** — see docs/migration-v1beta1.md; skipping the step fails
-loudly (NotReady), not silently.
+new CRDs** — see docs/migration-v1beta1.md; skipping the step stalls
+the rollout loudly and safely, with the previous pod still serving.
+
+### Fixed
+
+- Readiness gating had a start-ordering race (since v1.1.0): the
+  cache-sync check called `WaitForCacheSync` before the manager started,
+  trivially passing against an empty informer set — a pod could report
+  Ready before (or without) its informers syncing. Readiness now derives
+  from a manager Runnable, which only executes after caches genuinely
+  sync. With this fix, upgrading to the graduation release without the
+  required CRD apply stalls the rollout with the previous pod still
+  serving, instead of briefly passing readiness and completing. Found by
+  the v1.3.0 release-candidate's stranded-CRD boundary test.
+
 
 ### Added
 

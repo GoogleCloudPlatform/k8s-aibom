@@ -104,12 +104,19 @@ the documented CRD apply is left with the old CRD: no `v1beta1`
 version, storage still `v1alpha1` — while every version string in the
 bundle claims graduation.
 
-**Hypothesis (to be proven at rc):** this state fails *loudly* in this
-architecture, not silently. The graduated controller's informers
-request `v1beta1`, which the stranded CRD does not serve; the informer
-caches never sync; and the readiness gate (readyz gates on cache sync
-since v1.1.0) holds the pod NotReady indefinitely — the Deployment goes
-visibly unhealthy rather than quietly operating on `v1alpha1`.
+**Verified at rc (and it improved the code):** the stranded state fails
+*loudly and safely*. The rc's boundary test exposed a start-ordering
+race in the v1.1.0–v1.2.0 readiness gate (a pre-Start
+`WaitForCacheSync` trivially passes against an empty informer set),
+which produced a brief false-Ready window; fixed in the graduation
+release by deriving readiness from a manager Runnable, which only
+executes after caches genuinely sync. Corrected behavior: the graduated
+controller's informers request `v1beta1`, cache start fails against the
+stranded CRD, the new pod never reports Ready, and the rolling update
+stalls with the previous healthy pod still serving — inventory
+continues on the old version, the Deployment surfaces
+`ProgressDeadlineExceeded`, and the new pod logs the missing version
+explicitly.
 
 The rc verification scripts this explicitly: upgrade the release
 *without* applying the new CRDs → assert NotReady; apply the CRDs per
