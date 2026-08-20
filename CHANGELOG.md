@@ -6,6 +6,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-19
+
+The graduation release: the `aibom.k8saibom.dev` APIs reach `v1beta1`
+(Design 001), satisfying the non-alpha storage requirement for stock
+AICR adoption (NVIDIA/aicr ADR-019). **Upgrading requires applying the
+new CRDs** — see docs/migration-v1beta1.md; skipping the step fails
+loudly (NotReady), not silently.
+
 ### Added
 
 - `v1beta1` API for `AIBOM` and `AIBOMControllerConfig` — schema-identical
