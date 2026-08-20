@@ -255,20 +255,29 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"some-mirror/sglang-but-different:tag", ""},      // not lmsysorg/
 		{"openmmlab/mmdeploy:v1.0", ""},                   // mmdeploy != lmdeploy
 		{"huggingface/text-embeddings-inference:1.5", ""}, // missing ghcr.io prefix
-		// TGI's existing pattern is anchored to Docker Hub form
-		// (`^huggingface/text-generation-inference.*`). The GHCR form
-		// (`ghcr.io/huggingface/text-generation-inference`) is NOT
-		// matched. This is a deliberately preserved false negative:
-		// Phase 11 explicitly defers registry-prefix expansion until
-		// real customer signal identifies the deployed registries.
-		// TGI's pattern is anchored to its Docker Hub repository form
-		// (`^huggingface/text-generation-inference.*`). The GHCR variant
-		// (`ghcr.io/huggingface/text-generation-inference`) is intentionally
-		// not matched. This is a preserved false negative: we defer registry-prefix
-		// expansion until real-world usage warrants it, avoiding adding one-off
-		// patterns that increase regex maintenance overhead. To support additional
-		// registries, update the runtime patterns configuration holistically.
-		{"ghcr.io/huggingface/text-generation-inference:2.0.0", ""},
+		// TGI's GHCR form was a deliberately preserved false negative
+		// until real deployment signal arrived; it did (ghcr.io-published
+		// TGI observed running with no runtime attribution), so the
+		// publisher's own GHCR namespace is now covered.
+		{"ghcr.io/huggingface/text-generation-inference:2.0.0", "tgi"},
+
+		// NVIDIA NIM and Dynamo backend runtimes. Dynamo workers
+		// attribute to the backend that serves the model; the prefix
+		// patterns also cover the -nightly image variants. TRT-LLM under
+		// Triton stays attributed to triton (distinct namespace — no
+		// double-counting with the standalone Dynamo form).
+		{"nvcr.io/nim/meta/llama-3.1-8b-instruct:1.3", "nim"},
+		{"nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.0", "vllm"},
+		{"nvcr.io/nvidia/ai-dynamo/vllm-runtime-nightly:20260701-5245c0f", "vllm"},
+		{"nvcr.io/nvidia/ai-dynamo/sglang-runtime:1.4.0", "sglang"},
+		{"nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.1-efa", "tensorrt-llm"},
+		{"nvcr.io/nvidia/tritonserver:24.05-trtllm-python-py3", "triton"},
+
+		// Conservative-detection guards: Dynamo infrastructure images
+		// (not model serving) and near-miss namespaces must not match.
+		{"nvcr.io/nvidia/ai-dynamo/dynamo-frontend:1.4.0", ""},
+		{"nvcr.io/nvidia/ai-dynamo/kubernetes-operator:1.4.0", ""},
+		{"nvcr.io/nimble/foo:1.0", ""}, // nim/ org only, not nim-prefixed orgs
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
