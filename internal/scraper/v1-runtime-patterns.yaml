@@ -72,6 +72,9 @@ runtimeImagePatterns:
   # family under the dedicated nvcr.io/nim/ org (e.g.
   # nvcr.io/nim/meta/llama-3.1-8b-instruct). The org publishes only NIM
   # images, so the prefix match cannot capture unrelated NVIDIA images.
+  # The NIM operator (nvcr.io/nvidia/cloud-native/k8s-nim-operator)
+  # lives outside this org and is deliberately unmatched: it is a
+  # controller, not a serving runtime.
   - runtime: nim
     pattern: '^nvcr\.io/nim/.*'
 
@@ -80,8 +83,10 @@ runtimeImagePatterns:
   # nvcr.io/nvidia/ai-dynamo/; each maps to the backend that actually
   # serves (more useful in a BOM than a generic "dynamo" label). The
   # prefixes also match the -nightly image variants. Deliberately NOT
-  # matched: dynamo-frontend, planner, and kubernetes-operator —
-  # Dynamo infrastructure, not model serving.
+  # matched: dynamo-frontend, planner, kubernetes-operator, and
+  # epp-image (the EndpointPicker) — Dynamo infrastructure, not model
+  # serving. Excluded pods still appear in the BOM as ordinary
+  # container components; they just carry no runtime attribution.
   - runtime: vllm
     pattern: '^nvcr\.io/nvidia/ai-dynamo/vllm-runtime.*'
   - runtime: sglang
