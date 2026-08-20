@@ -273,10 +273,15 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.1-efa", "tensorrt-llm"},
 		{"nvcr.io/nvidia/tritonserver:24.05-trtllm-python-py3", "triton"},
 
-		// Conservative-detection guards: Dynamo infrastructure images
-		// (not model serving) and near-miss namespaces must not match.
+		// Conservative-detection guards: NVIDIA infrastructure images
+		// (controllers and endpoint-pickers, not model serving) and
+		// near-miss namespaces must not match. Named explicitly at the
+		// downstream distributor's request so the exclusions are on
+		// record as decisions, not accidents.
 		{"nvcr.io/nvidia/ai-dynamo/dynamo-frontend:1.4.0", ""},
 		{"nvcr.io/nvidia/ai-dynamo/kubernetes-operator:1.4.0", ""},
+		{"nvcr.io/nvidia/ai-dynamo/epp-image:1.4.0", ""},
+		{"nvcr.io/nvidia/cloud-native/k8s-nim-operator:2.0.0", ""},
 		{"nvcr.io/nimble/foo:1.0", ""}, // nim/ org only, not nim-prefixed orgs
 	}
 	for _, tc := range cases {
