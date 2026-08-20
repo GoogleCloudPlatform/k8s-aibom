@@ -10,9 +10,11 @@ the [CHANGELOG](../CHANGELOG.md); versioning policy in
 ## Shipped
 
 v1.0.0 (first release: the signed, attested, digest-pinned artifact
-set), v1.1.0 (the qualification release), and v1.2.0 (opt-in strict
-configuration readiness) — see the [CHANGELOG](../CHANGELOG.md) for
-details and the qualification record on
+set), v1.1.0 (the qualification release), v1.2.0 (opt-in strict
+configuration readiness), and v1.3.0 (API graduation to `v1beta1` with
+dual serving, plus the readiness-probe fixes found in boundary
+testing) — see the [CHANGELOG](../CHANGELOG.md) for details and the
+qualification record on
 [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8).
 
 ## Next — the verification release
@@ -52,12 +54,13 @@ details and the qualification record on
   extraction from registries; hardware (GPU/TPU) extraction from
   resource requests and node selectors.
 
-## API graduation
+## API lifecycle
 
-`v1beta1` for the AIBOM APIs with a documented conversion path
-(`v1alpha1` remains served and field-frozen through 1.x; see
-VERSIONING.md). Lands as its own release so API-contract changes never
-share a release with feature work.
+`v1beta1` shipped in v1.3.0 (dual-served, storage on `v1beta1`; see the
+[migration guide](migration-v1beta1.md)). Remaining lifecycle work:
+the chart's default `AIBOMControllerConfig` template moves to `v1beta1`
+in the next MINOR release, and `v1alpha1` removal is a separate,
+announced release outside 1.x (VERSIONING.md).
 
 ## v2 — Phase 2 capability tier
 
