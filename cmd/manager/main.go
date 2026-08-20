@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -49,8 +50,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -132,37 +133,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	// readyz gates on informer cache sync: a live process that cannot
-	// yet observe the cluster (caches unsynced, API server unreachable,
-	// required CRD versions absent) is not ready.
-	//
-	// The signal comes from a manager Runnable, NOT a pre-Start
-	// WaitForCacheSync call: before mgr.Start registers informers, an
-	// empty cache set "syncs" trivially and the gate would pass from
-	// t=0 (the v1.1.0–v1.2.0 implementation had exactly that race —
-	// caught by the v1.3.0 rc's stranded-CRD test). Non-leader-election
-	// runnables only execute after the manager's caches have actually
-	// synced, so reaching the runnable IS the readiness condition; if
-	// cache start fails (e.g. CRDs missing the storage version), the
-	// runnable never runs, the pod never reports Ready, and a rolling
-	// update stalls with the previous healthy pod still serving.
+	// readyz gates on the LOAD-BEARING informers: every probe asks the
+	// cache for the v1beta1 AIBOM and AIBOMControllerConfig informers
+	// and their sync state directly. This is deliberately per-probe and
+	// version-aware — two prior implementations were defeated by start
+	// ordering (a pre-Start WaitForCacheSync syncs an empty set
+	// trivially; a manager Runnable closes before controllers create
+	// their informers; both caught by the v1.3.0 rc's stranded-CRD
+	// boundary test). GetInformer fails while the cache isn't started
+	// AND while the API server cannot serve the requested version
+	// (e.g. a stranded CRD with no v1beta1), so a pod only reports
+	// Ready when it can genuinely observe its own APIs — and a rolling
+	// update against stranded CRDs stalls with the previous healthy
+	// pod still serving.
 	signalCtx := ctrl.SetupSignalHandler()
-	cacheSynced := make(chan struct{})
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		close(cacheSynced)
-		<-ctx.Done()
-		return nil
-	})); err != nil {
-		log.Error(err, "unable to add cache-sync readiness runnable")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("cache-sync", func(_ *http.Request) error {
-		select {
-		case <-cacheSynced:
-			return nil
-		default:
-			return errors.New("informer caches not synced")
+	if err := mgr.AddReadyzCheck("cache-sync", func(req *http.Request) error {
+		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+		defer cancel()
+		for _, obj := range []client.Object{
+			&aibomv1beta1.AIBOM{},
+			&aibomv1beta1.AIBOMControllerConfig{},
+		} {
+			informer, err := mgr.GetCache().GetInformer(ctx, obj)
+			if err != nil {
+				return fmt.Errorf("informer unavailable for %T: %w", obj, err)
+			}
+			if !informer.HasSynced() {
+				return fmt.Errorf("informer not synced for %T", obj)
+			}
 		}
+		return nil
 	}); err != nil {
 		log.Error(err, "unable to add readyz check")
 		os.Exit(1)
