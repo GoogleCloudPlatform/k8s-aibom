@@ -30,6 +30,11 @@ the rollout loudly and safely, with the previous pod still serving.
   CRD apply stalls the rollout with the previous pod still serving.
   Both defeated implementations were caught by the v1.3.0
   release-candidates' stranded-CRD boundary tests on a real cluster.
+- Chart CRD files (and generated manifests) keep their YAML document
+  separators: without them, `helm show crds` concatenates the two CRDs
+  into one invalid stream and `kubectl apply` silently applies only the
+  first — breaking the documented CRD-upgrade command exactly when it
+  matters. Found by the rc.3 boundary test's recovery step.
 
 
 ### Added

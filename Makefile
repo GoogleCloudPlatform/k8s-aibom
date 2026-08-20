@@ -60,10 +60,16 @@ manifests: controller-gen
 		output:crd:artifacts:config=config/crd/bases \
 		output:rbac:artifacts:config=config/rbac
 	@for file in config/crd/bases/*.yaml config/rbac/*.yaml; do \
-		grep -v "^---$$" $$file > $$file.no-dashes; \
-		cat hack/boilerplate.yaml.txt $$file.no-dashes > $$file; \
-		rm $$file.no-dashes; \
+		cp $$file $$file.orig; \
+		cat hack/boilerplate.yaml.txt $$file.orig > $$file; \
+		rm $$file.orig; \
 	done
+	@# Document separators are kept deliberately: the chart's crds/ files
+	@# are copies of these, and `helm show crds` concatenates them into
+	@# one stream — without separators, kubectl parses only the FIRST
+	@# CRD and the documented migration command silently half-applies
+	@# (found by the v1.3.0 rc boundary test). install.yaml assembly
+	@# strips separators per-file itself, so it is unaffected.
 
 .PHONY: generate
 generate: controller-gen
