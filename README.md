@@ -168,7 +168,7 @@ kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.statu
 kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/<version>/install.yaml --server-side --field-manager=k8s-aibom-crds
 ```
 
-(or apply the `crds/` directory from the matching chart). Within 1.x, CRD changes are additive only, so a skipped CRD update degrades gracefully — new optional fields are simply absent. See [VERSIONING.md](VERSIONING.md) for the `v1beta1` graduation plan, which will document the dual-served migration path explicitly.
+(or apply the `crds/` directory from the matching chart). Within 1.x, CRD changes are additive only. **One exception to "degrades gracefully": upgrading to the `v1beta1` graduation release requires the CRD apply** — the graduated controller's informers need the CRDs to serve `v1beta1`, and readiness stays failing (loudly, by design) until they do. Full procedure and the storage-migration details: [docs/migration-v1beta1.md](docs/migration-v1beta1.md).
 
 ### Uninstall
 
