@@ -19,12 +19,17 @@ the rollout loudly and safely, with the previous pod still serving.
 - Readiness gating had a start-ordering race (since v1.1.0): the
   cache-sync check called `WaitForCacheSync` before the manager started,
   trivially passing against an empty informer set — a pod could report
-  Ready before (or without) its informers syncing. Readiness now derives
-  from a manager Runnable, which only executes after caches genuinely
-  sync. With this fix, upgrading to the graduation release without the
-  required CRD apply stalls the rollout with the previous pod still
-  serving, instead of briefly passing readiness and completing. Found by
-  the v1.3.0 release-candidate's stranded-CRD boundary test.
+  Ready before (or without) its informers syncing. A first fix (a
+  manager Runnable) was defeated by the same class of race: controllers
+  create their informers after plain runnables start. Readiness is now
+  asserted per probe against the load-bearing informers themselves —
+  each readyz evaluation asks the cache for the v1beta1 `AIBOM` and
+  `AIBOMControllerConfig` informers and their sync state, failing while
+  the API server cannot serve those versions (e.g. stranded CRDs). With
+  this fix, upgrading to the graduation release without the required
+  CRD apply stalls the rollout with the previous pod still serving.
+  Both defeated implementations were caught by the v1.3.0
+  release-candidates' stranded-CRD boundary tests on a real cluster.
 
 
 ### Added
