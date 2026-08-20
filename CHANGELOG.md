@@ -6,6 +6,17 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Runtime image patterns for NVIDIA NIM (`nvcr.io/nim/*` → `nim`) and
+  NVIDIA Dynamo backend workers (`nvcr.io/nvidia/ai-dynamo/{vllm,sglang,
+  tensorrtllm}-runtime` → `vllm`/`sglang`/`tensorrt-llm`, nightly
+  variants included). Dynamo infrastructure images (frontend, planner,
+  operator) deliberately do not match.
+- TGI's GHCR namespace (`ghcr.io/huggingface/text-generation-inference`
+  → `tgi`) — previously a documented deferred false negative; real
+  deployment signal arrived.
+
 ## [1.3.0] - 2026-08-19
 
 The graduation release: the `aibom.k8saibom.dev` APIs reach `v1beta1`

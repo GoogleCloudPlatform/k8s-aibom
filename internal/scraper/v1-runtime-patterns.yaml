@@ -33,6 +33,13 @@ runtimeImagePatterns:
     pattern: '^ghcr\.io/[a-zA-Z0-9.\-_]+/vllm[a-zA-Z0-9.\-_]*(?:[:@]|$)'
   - runtime: tgi
     pattern: '^huggingface/text-generation-inference.*'
+  # TGI's GHCR form was a deliberately preserved false negative pending
+  # real deployment signal (see the registry-prefix note below); that
+  # signal arrived — ghcr.io-published TGI observed running with no
+  # runtime attribution — so the publisher's GHCR namespace is now
+  # covered. Same publisher, same image name; not a mirror pattern.
+  - runtime: tgi
+    pattern: '^ghcr\.io/huggingface/text-generation-inference.*'
   - runtime: triton
     pattern: '^nvcr\.io/nvidia/tritonserver.*'
   - runtime: ollama
@@ -61,12 +68,32 @@ runtimeImagePatterns:
   - runtime: tei
     pattern: '^ghcr\.io/huggingface/text-embeddings-inference.*'
 
-  # NOT added in Phase 11: TensorRT-LLM. NVIDIA's production-shipping
-  # form is `nvcr.io/nvidia/tritonserver:*-trtllm-*`, which is already
-  # covered by the existing triton pattern. Adding a separate
-  # tensorrt-llm pattern would risk double-counting the same workload.
-  # If a future customer ships a standalone TensorRT-LLM image with a
-  # distinct namespace, add a pattern then with the specific path.
+  # NVIDIA NIM — packaged inference microservices, one image per model
+  # family under the dedicated nvcr.io/nim/ org (e.g.
+  # nvcr.io/nim/meta/llama-3.1-8b-instruct). The org publishes only NIM
+  # images, so the prefix match cannot capture unrelated NVIDIA images.
+  - runtime: nim
+    pattern: '^nvcr\.io/nim/.*'
+
+  # NVIDIA Dynamo — distributed inference framework. The container that
+  # serves the model is one of three backend runtime images under
+  # nvcr.io/nvidia/ai-dynamo/; each maps to the backend that actually
+  # serves (more useful in a BOM than a generic "dynamo" label). The
+  # prefixes also match the -nightly image variants. Deliberately NOT
+  # matched: dynamo-frontend, planner, and kubernetes-operator —
+  # Dynamo infrastructure, not model serving.
+  - runtime: vllm
+    pattern: '^nvcr\.io/nvidia/ai-dynamo/vllm-runtime.*'
+  - runtime: sglang
+    pattern: '^nvcr\.io/nvidia/ai-dynamo/sglang-runtime.*'
+  - runtime: tensorrt-llm
+    pattern: '^nvcr\.io/nvidia/ai-dynamo/tensorrtllm-runtime.*'
+
+  # TensorRT-LLM appears in two forms: under Triton
+  # (`nvcr.io/nvidia/tritonserver:*-trtllm-*`, covered by the triton
+  # pattern) and standalone under Dynamo (`tensorrtllm-runtime` above).
+  # The namespaces are distinct, so the two patterns cannot
+  # double-count one workload.
   #
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
