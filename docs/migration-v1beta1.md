@@ -47,6 +47,30 @@ kubectl annotate aibomcontrollerconfig default aibom.k8saibom.dev/storage-touch=
 kubectl annotate aibomcontrollerconfig default aibom.k8saibom.dev/storage-touch-
 ```
 
+## Notes for assertion authors and adopters
+
+Three facts surfaced by downstream requalification (AICR, 2026-08-20)
+that anyone writing checks against a graduated cluster should know:
+
+1. **Rendered RBAC is byte-identical between v1.2.0 and v1.3.0.** "API
+   graduation" reasonably makes adopters re-review permissions; there is
+   nothing to find — the API version change touches no RBAC.
+2. **The chart intentionally still renders the default
+   `AIBOMControllerConfig` at `v1alpha1`** while CRD storage is
+   `v1beta1`. This is coherent under dual serving (the object is stored
+   as `v1beta1` regardless), but it means a blanket "replace v1alpha1
+   with v1beta1" assertion fails against a perfectly correct cluster.
+   **Write assertions against the CRD storage version**
+   (`spec.versions[?storage].name`), not against the apiVersion of
+   rendered or stored objects. The template moves to `v1beta1` in the
+   next MINOR release (deferred deliberately: a cosmetic chart change
+   would re-trigger downstream qualification for zero behavioral gain).
+3. **The readiness fixes ship in the controller image, not the chart.**
+   Probe configuration renders identically across chart versions; a
+   chart-version bump with an image override delivers none of the fix.
+   The digest-pinned published chart delivers both — one more reason to
+   install from release artifacts.
+
 ## Clients and manifests (no action required)
 
 `v1alpha1` clients, manifests, and GitOps pipelines keep working
