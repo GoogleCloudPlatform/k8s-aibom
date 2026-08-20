@@ -19,12 +19,15 @@ helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <new
 Server-side apply is required — the CRDs exceed the client-side
 annotation size limit.
 
-**If you skip this step, the upgrade fails loudly, not silently:** the
+**If you skip this step, the rollout stalls loudly — and safely:** the
 graduated controller's informers request `v1beta1`, which the old CRD
-does not serve; the informer caches never sync; and readiness (which
-gates on cache sync) holds the pod NotReady — the Deployment reports
-unavailable until the CRDs are applied. Applying them recovers the
-rollout without a restart.
+does not serve; cache start fails, the new pod never reports Ready, and
+the rolling update **stalls with the previous pod still running and
+serving** — inventory continues uninterrupted on the old version while
+the Deployment surfaces `ProgressDeadlineExceeded` and the new pod logs
+`no matches for kind ... v1beta1` explicitly. Applying the CRDs lets
+the rollout complete. (Verified on a real GKE cluster as part of the
+release-candidate boundary testing.)
 
 ## What happens to your existing objects (nothing you must do)
 

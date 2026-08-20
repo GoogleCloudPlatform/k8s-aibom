@@ -33,6 +33,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -49,6 +50,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -131,16 +133,29 @@ func main() {
 	}
 
 	// readyz gates on informer cache sync: a live process that cannot
-	// yet observe the cluster (caches unsynced, API server unreachable
-	// at startup) is not ready. The goroutine blocks until the manager
-	// starts and its caches sync, then the check flips permanently.
+	// yet observe the cluster (caches unsynced, API server unreachable,
+	// required CRD versions absent) is not ready.
+	//
+	// The signal comes from a manager Runnable, NOT a pre-Start
+	// WaitForCacheSync call: before mgr.Start registers informers, an
+	// empty cache set "syncs" trivially and the gate would pass from
+	// t=0 (the v1.1.0–v1.2.0 implementation had exactly that race —
+	// caught by the v1.3.0 rc's stranded-CRD test). Non-leader-election
+	// runnables only execute after the manager's caches have actually
+	// synced, so reaching the runnable IS the readiness condition; if
+	// cache start fails (e.g. CRDs missing the storage version), the
+	// runnable never runs, the pod never reports Ready, and a rolling
+	// update stalls with the previous healthy pod still serving.
 	signalCtx := ctrl.SetupSignalHandler()
 	cacheSynced := make(chan struct{})
-	go func() {
-		if mgr.GetCache().WaitForCacheSync(signalCtx) {
-			close(cacheSynced)
-		}
-	}()
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		close(cacheSynced)
+		<-ctx.Done()
+		return nil
+	})); err != nil {
+		log.Error(err, "unable to add cache-sync readiness runnable")
+		os.Exit(1)
+	}
 	if err := mgr.AddReadyzCheck("cache-sync", func(_ *http.Request) error {
 		select {
 		case <-cacheSynced:
