@@ -17,6 +17,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   → `tgi`) — previously a documented deferred false negative; real
   deployment signal arrived.
 
+### Changed
+
+- The chart now renders the default `AIBOMControllerConfig` at
+  `aibom.k8saibom.dev/v1beta1`, matching the CRD storage version
+  (#49). No behavioral change: the schema is identical under dual
+  serving, and `v1alpha1` manifests remain valid through 1.x. Tools
+  asserting on the rendered CR's `apiVersion` should follow the
+  guidance in docs/migration-v1beta1.md (assert the CRD storage
+  version, not blanket apiVersion replacement).
+
 ## [1.3.0] - 2026-08-19
 
 The graduation release: the `aibom.k8saibom.dev` APIs reach `v1beta1`

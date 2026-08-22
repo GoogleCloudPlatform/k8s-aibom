@@ -44,7 +44,7 @@ rbac:
 # Rendered verbatim into the default AIBOMControllerConfig CR spec, so
 # every config surface is a normal public value — no template patching or
 # post-install CR mutation needed. Field shapes mirror the CR spec
-# (aibom.k8saibom.dev/v1alpha1 AIBOMControllerConfig).
+# (aibom.k8saibom.dev/v1beta1 AIBOMControllerConfig).
 config:
   # Discovery scoping, e.g. a namespace selector applied IN ADDITION to
   # the aibom.k8saibom.dev/enabled=true namespace label opt-in:
