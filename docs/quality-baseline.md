@@ -12,7 +12,7 @@ All tools are configured to run automatically in CI on every Pull Request to pre
 **Status:** PASS (with documented suppressions)
 
 **Findings Triage:**
-- `unset-cpu-requirements`: **Resolved.** Requests and limits default to the measured envelope from the 0/250/1,000-workload downstream qualification (steady 16m CPU / 57Mi at 1,000 workloads; ~370m CPU burst). The 1-CPU limit is ~3x the observed burst maximum, bounding runaway consumption without throttling BOM-generation bursts.
+- `unset-cpu-requirements`: **Resolved.** Requests and limits default to a measured envelope (re-baselined 2026-08-22: steady 1–2m CPU / ~61Mi at 1,001 workloads on live GKE, v1.2.0 and v1.3.0, dual-sampled via metrics-server and kubelet counter deltas; see README “Performance footprint”). The 1-CPU limit is ~3x the ~370m convergence-burst maximum observed in the v1.1.0-era Kind qualification — retained as the burst upper bound — bounding runaway consumption without throttling BOM-generation bursts.
 - `run-as-non-root`: **Suppressed.** The container currently runs as non-root (uid 65532), but the explicit `runAsNonRoot: true` securityContext flag is missing from the default kubebuilder scaffolding. Will be fixed in v1.1.
 - `read-only-root-fs`: **Suppressed.** Requires mounting an emptyDir for `/tmp`. Will be fixed in v1.1.
 

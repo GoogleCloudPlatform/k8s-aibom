@@ -19,6 +19,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Changed
 
+- Performance documentation re-baselined on live-GKE measurements of
+  v1.2.0 and v1.3.0 (1,001 workloads, dual-sampled): steady state is
+  1–2m CPU / ~61Mi, statistically identical across both versions and
+  consistent with NVIDIA/aicr#2310's independent measurement. Every
+  published figure now carries version + environment + sampling
+  method; v1.1.0-era Kind steady-state figures are superseded, with
+  the ~370m convergence burst retained as the upper bound.
 - The chart now renders the default `AIBOMControllerConfig` at
   `aibom.k8saibom.dev/v1beta1`, matching the CRD storage version
   (#49). No behavioral change: the schema is identical under dual
