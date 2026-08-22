@@ -16,7 +16,7 @@
 # resource so install/upgrade/rollback/uninstall ownership is deterministic.
 # (Previously created via a pre-install hook, which Helm never upgrades or
 # removes, and carried an invalid namespace on a cluster-scoped object.)
-apiVersion: aibom.k8saibom.dev/v1alpha1
+apiVersion: aibom.k8saibom.dev/v1beta1
 kind: AIBOMControllerConfig
 metadata:
   name: default
