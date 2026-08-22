@@ -243,19 +243,45 @@ The project is built around a few load-bearing conventions documented in [CONTRI
 
 ## Performance footprint
 
-Measured on a real GKE cluster, and independently during NVIDIA/AICR's
-qualification of v1.0.0 (0/250/1,000-workload envelope, results on
-[issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)):
+Every figure below is labeled with version, environment, and sampling
+method; figures of mixed provenance are not aggregated. Full records:
+[issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)
+and NVIDIA/AICR's independent adoption record
+([NVIDIA/aicr#2310](https://github.com/NVIDIA/aicr/issues/2310)).
 
-- At rest: ~15m CPU / ~85Mi (GKE idle observation)
-- At 1,000 tracked workloads: 16m CPU / 57Mi steady (p95 26m/60Mi), ~370m CPU burst during convergence, all 1,000 AIBOMs Ready, zero restarts
-- Convergence: 250 workloads in 3s from empty; 1,000 in 7s from 250
-- Per-reconcile work for a single workload: low single-digit milliseconds
-- 256 KB inline threshold; BOMs exceeding the threshold are offloaded to an external sink and referenced by URL in the CR status
+Live GKE, v1.2.0 and v1.3.0 (2026-08-22; 1,001 tracked workloads via
+replica-zero Deployment fixtures; qualified image digests; sampled two
+ways — metrics-server at 30s cadence over a 15-minute steady window,
+and a raw kubelet CPU-counter delta over a stated 10-minute window):
 
-Chart defaults carry this measured envelope (requests 50m/128Mi, limits
-1 CPU/256Mi). Beyond 1,000 workloads, monitor memory and adjust
-resources as needed.
+- Steady state at 1,001 workloads: 1–2m CPU (counter-delta means
+  0.8–1.0m) / 61Mi mean, 68Mi max — statistically identical across
+  both versions and both samplers, and consistent with NVIDIA's
+  independent v1.3.0 measurement on their own GKE cluster (1–2m /
+  67–69Mi steady, NVIDIA/aicr#2310)
+- At 1 tracked workload: ~1m CPU / ~23Mi
+- Convergence: all 1,001 AIBOMs present and Ready within seconds of
+  the 1,000-Deployment apply completing (NVIDIA measured all present
+  by t+10s from empty)
+- Deletion: 1,000 AIBOMs garbage-collected in under 2 minutes, memory
+  returning toward baseline
+- API-server impact (NVIDIA's measurement, Prometheus-attributed): ~2
+  requests per inventoried workload; 4 long-running watches
+- 256 KB inline threshold; BOMs exceeding it are offloaded to an
+  external sink and referenced by URL in the CR status (boundary
+  observed live in NVIDIA/aicr#2310)
+
+Historical figures from the v1.1.0-era qualification on Kind (16m CPU
+steady and a ~370m convergence burst at 1,000 workloads) are retained
+only as the burst upper bound: the burst remains plausible and
+unrefuted (sub-15-second bursts are unresolvable by metrics-server
+sampling), while the Kind steady-state figures did not reproduce on
+GKE under either sampler and are superseded above.
+
+Chart defaults keep a conservative envelope (requests 50m/128Mi,
+limits 1 CPU/256Mi): requests sit well above observed steady state,
+and the 1-CPU limit bounds the convergence burst. Beyond 1,000
+workloads, monitor memory and adjust resources as needed.
 
 ## Compatibility
 
