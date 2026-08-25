@@ -6,6 +6,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-25
+
+The downstream-coverage release, cut the day after k8s-aibom began
+shipping in NVIDIA AICR v0.20.0: detection patterns NVIDIA's catalog
+needs, the chart CR template graduation deferred out of v1.3.0, and
+the re-baselined performance record — bundled so downstream
+distributions requalify once.
+
 ### Added
 
 - Runtime image patterns for NVIDIA NIM (`nvcr.io/nim/*` → `nim`) and
