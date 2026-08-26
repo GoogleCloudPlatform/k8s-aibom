@@ -50,6 +50,31 @@ statements reconcile as follows:
   gates on stored objects being rewritten to `v1beta1` and
   `storedVersions` cleanup (see docs/migration-v1beta1.md).
 
+## Release cadence
+
+Adopted 2026-08-26, after the v1.0.0→v1.4.0 qualification burst (five
+releases in nine days, each pulled by downstream findings) made the
+cost of a release visible: downstream distributions requalify every
+tag as a coherent artifact set. Steady-state rules:
+
+1. **MINOR releases ship on a monthly train, at most.** Features catch
+   whichever train they are ready for; a missed train waits for the
+   next one. Merging to `main` is not rate-limited — the train
+   disciplines tags, not development.
+2. **PATCH releases are exempt** for security fixes and defects that
+   block a downstream qualification, with the downstream heads-up the
+   release checklist already requires.
+3. **New capability surface requires a published design doc with a
+   stated review window before implementation begins**
+   (docs/design/; Designs 001 and 002 are the precedent). Mechanical
+   additions inside existing capability — new detection patterns, new
+   fields on existing evidence — do not.
+4. **Demand-gated backlog:** capabilities without a concrete consumer
+   asking wait for a pull signal, however good the idea. The roadmap
+   lists them; the train does not carry them.
+5. API-contract changes never share a release with feature work
+   (restating the Design 001 rule).
+
 ## Kubernetes version support
 
 See `docs/compatibility.md` for the tested matrix and support policy.
