@@ -1,7 +1,12 @@
 # Design 002: Sigstore/Rekor verifier — the `verified` signature tier
 
-Status: Draft (2026-08-25). Published for open review before any code
-(a standing commitment on
+Status: Draft (2026-08-25); **amended 2026-09-08 after external
+review** — §3's binding rules were rewritten when review showed the
+original subject-*name* gate was self-upgradable under default
+configuration (credit: @Santoshkumarpuppala, review on #55). The
+review window is **extended through 2026-09-16** for the amended
+sections (§2 identities, §3, §4, §6, Goal). Published for open review
+before any code (a standing commitment on
 [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)).
 Review is invited from anyone consuming or producing model signatures —
 the sigstore / OpenSSF model-signing community especially, since this
@@ -33,10 +38,14 @@ Ships as v1.5.0 per VERSIONING.md (additive MINOR).
 When a workload's declared model identity carries a signature
 reference, cryptographically verify it: validate the signing chain
 against configured trust roots, confirm inclusion in a Rekor
-transparency log, and confirm the signed statement's subject matches
-the declared identity. On success, the signature record's status
-becomes `verified` and the model identity's confidence may be
-reported as `verified` — the tier the README has promised since v1.0.
+transparency log, confirm the signer satisfies the operator's
+identity constraints, and confirm no declared binding is
+contradicted. On success, the signature record's status becomes
+`verified` and the model identity's confidence may be reported as
+`verified` — the tier the README has promised since v1.0. `verified`
+answers *"did someone the operator trusts sign a statement consistent
+with this claim?"* — the signer constraint is what makes the tier
+mean something (§3).
 
 ## Non-goals (stated so reviewers can hold us to them)
 
@@ -79,9 +88,11 @@ verification:
     tufMirrorURL: ""        # mode=tufMirror: self-hosted Sigstore (AICR's case)
     staticBundlePath: ""    # mode=staticBundle: air-gapped trust bundle
   rekorURL: ""              # empty = the trust root's Rekor
-  identities:               # who may sign; empty list = any identity in the
-    - issuer: ""            #   trust root chain (recorded, not constrained)
-      subjectPattern: ""    # RE2 against certificate SAN
+  identities:               # who may sign. Empty list = identities are
+    - issuer: ""            #   recorded but unconstrained — and under
+      subjectPattern: ""    #   mode=public the `verified` tier is then
+                            #   UNATTAINABLE by design (§3).
+                            #   subjectPattern is RE2 against cert SAN
   perClaimTimeout: 10s      # hard deadline per verification attempt
   cacheTTL: 24h
 ```
@@ -110,14 +121,47 @@ Binding chain, all steps recorded as evidence:
 2. The verifier fetches the referenced bundle (see fetch constraints,
    §6), validates chain → trust root, verifies the Rekor inclusion
    proof, and parses the statement.
-3. The statement's subject name must match the declared model
-   identity. If the workload also declares a content digest
-   (`model.k8saibom.dev/digest`), it must match the manifest's root
-   digest — a stronger binding, recorded as such.
-4. On full success: `SignatureResult{Status: verified, Identity,
-   RekorEntry, Timestamp}`; the model component's confidence is
-   emitted as `verified` **only when step 3's name match held** (a
-   valid signature over a *different* subject never upgrades anything).
+3. **Binding (amended 2026-09-08).** The statement's subject *name*
+   is recorded as fact but is never load-bearing: model-signing
+   documents `model_name` as informative — signer-chosen, excluded
+   from manifest equality, changeable without invalidating signatures
+   (`manifest.py:435-460` at `089602d`) — so a name comparison binds
+   nothing. What binds:
+   - **Who signed.** The certificate identity must satisfy an
+     identity constraint. A non-public trust root (`tufMirror` /
+     `staticBundle`) is an implicit constraint — only that PKI's
+     identities can produce a validating chain. Under `mode: public`
+     with `identities: []`, nothing constrains the signer, and
+     `verified` is unattainable by design; the outcome
+     `signature-valid-unconstrained` records that a real, logged
+     signature exists without pretending it binds.
+   - **What was signed.** When the workload declares a content digest
+     (`model.k8saibom.dev/digest`), it must equal the manifest root
+     digest — the format's content-bound, equality-significant field.
+4. On full success — chain valid, Rekor inclusion proven, identity
+   constraint satisfied, no declared binding contradicted:
+   `SignatureResult{Status: verified, Identity, RekorEntry,
+   Timestamp}`; the model component's confidence is emitted as
+   `verified`. Contradictions block even though their absence proves
+   nothing extra: a subject-name mismatch or declared-digest mismatch
+   each hold the status at `claimed` with the corresponding outcome
+   fact.
+
+**Why the name gate was removed.** The original step 3 gated
+`verified` on the subject name matching the declared identity, and §6
+claimed a hostile annotation "can never upgrade its own confidence
+(subject match is required)." External review (#55) showed that claim
+false under default configuration: sign any directory *named* to
+match, keylessly, with any identity the public Fulcio will issue;
+host the bundle at any HTTPS URL; declare both annotations. Chain
+validates, Rekor holds, name matches — `verified`, from inputs
+entirely under the claimant's control. The generalization goes
+further than the reviewed flaw: with no node access (non-goal 2),
+*every* input — reference, bundle, subject name, even a declared
+digest — originates in the workload spec. The signer's identity and
+the transparency log are the only elements outside the claimant's
+control, so the identity constraint is the only thing that can make
+`verified` mean something, and the design now requires it.
 
 Bundle sources are pluggable behind one interface. v1.5.0 ships one
 source: the annotation reference (HTTPS URL or inline base64). OCI
@@ -131,10 +175,12 @@ if AICR's model distribution wants it sooner.
 |---|---|---|
 | No signature reference found | `unsigned` | — (unchanged from v1.4.0) |
 | Reference found, verification disabled | `claimed` | — (unchanged) |
-| Verified: chain + Rekor + subject match | `verified` | `verified` + identity, Rekor entry, timestamp |
+| Chain + Rekor + identity constraint satisfied + no binding contradicted | `verified` | `verified` + identity, Rekor entry, timestamp |
+| Chain + Rekor valid, but no identity constraint configured (public root, empty `identities`) | `claimed` | `signature-valid-unconstrained` |
 | Chain/signature invalid | `claimed` | `failed: <reason>` |
 | Valid chain, identity pattern mismatch | `claimed` | `identity-mismatch` |
-| Valid signature, subject ≠ declared identity | `claimed` | `subject-mismatch` |
+| Subject name ≠ declared identity | `claimed` | `subject-name-mismatch` |
+| Declared digest ≠ manifest root digest | `claimed` | `digest-mismatch` |
 | Fetch/Rekor/TUF unreachable, deadline hit | `claimed` | `error: <class>` (retry next resync) |
 
 Consistent with the project's degradation rule: **no verification
@@ -172,9 +218,15 @@ downstream; verification must not move it in the steady state.
   credentials in v1.5.0 (public references only; private-registry
   auth is future work with its own review), per-claim timeout.
 - A hostile annotation can therefore cause at most: one bounded fetch
-  per TTL per unique reference, and a `failed`/`error` fact. It can
-  never upgrade its own confidence (subject match is required) nor
-  degrade the inventory.
+  per TTL per unique reference, and a recorded outcome fact. It can
+  never upgrade its own confidence, because `verified` requires the
+  signer to satisfy an operator-configured identity constraint (or a
+  non-public trust root) — precisely the input a workload author does
+  not control. Every other element of the chain originates in the
+  workload spec and is treated as claim, not proof. *(Amended
+  2026-09-08: this bullet previously relied on subject-name matching;
+  external review showed the name is informative in the format and
+  the original claim was false under default configuration.)*
 - Trust-root updates: TUF refresh failures fall back to the last
   cached root (logged); the embedded public root bounds cold-start.
 
@@ -211,10 +263,15 @@ downstream; verification must not move it in the steady state.
    registries, hub-hosted signatures) need OCI referrers in v1.5.0?
    Consumers of model-signing in production, please say how your
    signatures actually travel.
-2. **Identity defaults:** should the chart ship suggested identity
-   patterns for common signers (e.g. model-signing's keyless CI
-   identities), or is an empty (record-only) default safer for a
-   facts-only project?
+2. **Identity defaults:** now sharper post-amendment — since
+   `verified` is unattainable without an identity constraint (or
+   non-public root), should the chart ship suggested patterns for
+   common signers to make the tier reachable out of the box, or is
+   forcing the operator to state whom they trust the safer default
+   for a facts-only project? (Current position: force the
+   statement.) Related: model-transparency#659 asks the format's
+   maintainers whether any in-format identity binding is intended;
+   the answer may refine this.
 3. **Downstream surfacing:** should verification outcomes be consumable
    by distribution health checks (AICR's is the first known case), or
    only from the BOM document itself?
