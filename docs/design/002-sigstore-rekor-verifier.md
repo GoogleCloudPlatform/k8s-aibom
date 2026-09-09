@@ -1,11 +1,14 @@
 # Design 002: Sigstore/Rekor verifier — the `verified` signature tier
 
-Status: Draft (2026-08-25); **amended 2026-09-08 after external
-review** — §3's binding rules were rewritten when review showed the
-original subject-*name* gate was self-upgradable under default
-configuration (credit: @Santoshkumarpuppala, review on #55). The
-review window is **extended through 2026-09-16** for the amended
-sections (§2 identities, §3, §4, §6, Goal). Published for open review
+Status: Draft (2026-08-25); **amended 2026-09-08 and 2026-09-09 after
+external review** (credit: @Santoshkumarpuppala, review on #55 and
+model-transparency#659) — first, §3's binding rules were rewritten
+when review showed the original subject-*name* gate was
+self-upgradable under default configuration; second, mismatch
+precedence was corrected so a format-permitted rename cannot block a
+satisfied digest binding (digest over name). The review window is
+**extended through 2026-09-16** for the amended sections (§2
+identities, §3, §4, §6, Goal). Published for open review
 before any code (a standing commitment on
 [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8)).
 Review is invited from anyone consuming or producing model signatures —
@@ -142,10 +145,15 @@ Binding chain, all steps recorded as evidence:
    constraint satisfied, no declared binding contradicted:
    `SignatureResult{Status: verified, Identity, RekorEntry,
    Timestamp}`; the model component's confidence is emitted as
-   `verified`. Contradictions block even though their absence proves
-   nothing extra: a subject-name mismatch or declared-digest mismatch
-   each hold the status at `claimed` with the corresponding outcome
-   fact.
+   `verified`. Contradiction precedence (amended 2026-09-09, same
+   review thread): **digest over name**. A declared-digest mismatch
+   always blocks — it contradicts the strong binding. A subject-name
+   mismatch blocks only when no digest binding is available: the
+   format permits renaming without re-signing, so against a satisfied
+   digest match the name disagreement is a permitted publisher action,
+   recorded as fact and not treated as a failure. Symmetric to the
+   original amendment: a name match is never sufficient, and a name
+   mismatch is never authoritative against stronger evidence.
 
 **Why the name gate was removed.** The original step 3 gated
 `verified` on the subject name matching the declared identity, and §6
@@ -179,8 +187,9 @@ if AICR's model distribution wants it sooner.
 | Chain + Rekor valid, but no identity constraint configured (public root, empty `identities`) | `claimed` | `signature-valid-unconstrained` |
 | Chain/signature invalid | `claimed` | `failed: <reason>` |
 | Valid chain, identity pattern mismatch | `claimed` | `identity-mismatch` |
-| Subject name ≠ declared identity | `claimed` | `subject-name-mismatch` |
-| Declared digest ≠ manifest root digest | `claimed` | `digest-mismatch` |
+| Subject name ≠ declared identity, no digest binding declared | `claimed` | `subject-name-mismatch` |
+| Subject name ≠ declared identity, declared digest matches (+ identity constraint satisfied) | `verified` | `verified` + `subject-name-mismatch` recorded as fact (rename is format-permitted) |
+| Declared digest ≠ manifest root digest | `claimed` | `digest-mismatch` (always blocks) |
 | Fetch/Rekor/TUF unreachable, deadline hit | `claimed` | `error: <class>` (retry next resync) |
 
 Consistent with the project's degradation rule: **no verification
