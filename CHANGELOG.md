@@ -8,6 +8,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- `kubectl-aibom` plugin (#58): `summary` (per-namespace or `-A`
+  table of workload, category, runtime, models, confidence, Ready),
+  `view` (decoded, pretty-printed BOM; `--raw` for the canonical
+  bytes the published digest covers), and `verify` (recomputes
+  sha256 against `status.bomDocument.sha256`, non-zero exit on
+  mismatch — script- and CI-composable). Built via
+  `make kubectl-plugin` or `go install .../cmd/kubectl-aibom@latest`;
+  verified live against a v1.4.0 install.
 - Output sanitization guarantee (#57): every string emitted into a BOM
   passes a redaction filter at the build boundary — URI userinfo,
   known credential query parameters (pre-signed URL signatures, SAS

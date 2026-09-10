@@ -91,6 +91,10 @@ vet:
 build: fmt vet
 	go build -ldflags "-X main.controllerVersion=$(VERSION)" -o $(LOCALBIN)/manager ./cmd/manager
 
+.PHONY: kubectl-plugin
+kubectl-plugin: fmt vet ## Build the kubectl-aibom plugin binary into bin/.
+	go build -o $(LOCALBIN)/kubectl-aibom ./cmd/kubectl-aibom
+
 .PHONY: run
 run: fmt vet
 	go run ./cmd/manager
