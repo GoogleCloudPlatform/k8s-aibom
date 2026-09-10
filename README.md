@@ -116,6 +116,20 @@ kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/downl
 
 Always install from a release asset; the `install.yaml` at the repo root is a development artifact.
 
+### Read BOMs with the kubectl plugin
+
+`kubectl-aibom` turns the decode/verify walkthrough below into single commands:
+
+```bash
+go install github.com/GoogleCloudPlatform/k8s-aibom/cmd/kubectl-aibom@latest   # binary lands on PATH as kubectl-aibom
+
+kubectl aibom summary -n prod-jobs        # table: workload, category, runtime, models, confidence, Ready
+kubectl aibom view <aibom-name> -n prod-jobs        # decoded, pretty-printed BOM (--raw for canonical bytes)
+kubectl aibom verify <aibom-name> -n prod-jobs      # recompute sha256 vs the published digest; non-zero exit on mismatch
+```
+
+`verify` gains a signature mode when the Sigstore verifier ships (Design 002). Krew distribution is planned alongside.
+
 ### Verify the supply chain (optional)
 
 Every release image carries Sigstore build-provenance and SBOM attestations:
