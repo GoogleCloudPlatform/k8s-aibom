@@ -6,6 +6,20 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Output sanitization guarantee (#57): every string emitted into a BOM
+  passes a redaction filter at the build boundary — URI userinfo,
+  known credential query parameters (pre-signed URL signatures, SAS
+  tokens), and well-known secret token shapes are replaced before
+  emission, with an `aibom.redaction.applied` property recording the
+  redaction class on any affected component or service. The audit
+  behind it (issue #57) confirmed no default extraction path emits
+  credential material; the filter guarantees the residual vectors
+  (URI-shaped identity fields such as KServe `storageUri` and model
+  annotations, and operator-extended allowlists). Clean documents are
+  byte-identical to v1.4.0 output.
+
 ## [1.4.0] - 2026-08-25
 
 The downstream-coverage release, cut the day after k8s-aibom began
