@@ -209,6 +209,11 @@ func buildComponents(in []scraper.Component, opts BuildOptions, parentRef string
 // (e.g., two ml-model components both named "meta-llama/Llama-3.1-8B-Instruct"
 // but with different evidence sources).
 func toCDXComponent(c scraper.Component, opts BuildOptions, idx int, parentRef string) (cdx.Component, error) {
+	// Output sanitization boundary (redact.go / issue #57): every string
+	// leaving the cluster in a component passes through redaction here.
+	// BOMRef is computed from the redacted component so refs never carry
+	// raw credential material either.
+	c = redactComponent(c)
 	out := cdx.Component{
 		BOMRef:  componentBOMRef(opts, c, idx, parentRef),
 		Type:    mapComponentType(c.Type),
@@ -254,6 +259,18 @@ func buildServices(in []scraper.Service) []cdx.Service {
 	}
 	out := make([]cdx.Service, 0, len(in))
 	for _, s := range in {
+		// Output sanitization boundary (redact.go / issue #57): service
+		// endpoints are the likeliest future URI carriers.
+		s, redacted := redactService(s)
+		props := []cdx.Property{
+			{Name: "aibom.evidence.source", Value: string(s.Evidence.Source)},
+			{Name: "aibom.evidence.locator", Value: s.Evidence.Locator},
+		}
+		if len(redacted) > 0 {
+			props = append(props, cdx.Property{
+				Name: redactionPropertyKey, Value: strings.Join(redacted, ","),
+			})
+		}
 		out = append(out, cdx.Service{
 			Name: s.Name,
 			Endpoints: func() *[]string {
@@ -263,10 +280,7 @@ func buildServices(in []scraper.Service) []cdx.Service {
 				eps := append([]string(nil), s.Endpoints...)
 				return &eps
 			}(),
-			Properties: filterProps([]cdx.Property{
-				{Name: "aibom.evidence.source", Value: string(s.Evidence.Source)},
-				{Name: "aibom.evidence.locator", Value: s.Evidence.Locator},
-			}),
+			Properties: filterProps(props),
 		})
 	}
 	return out

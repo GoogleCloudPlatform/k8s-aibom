@@ -231,6 +231,8 @@ This bounds the blast radius of a compromised AI workload: it cannot tamper with
 
 **Data visibility:** the controller's informers watch workloads cluster-wide, so workload/pod specs (including args and inline env values) pass through its in-memory cache before the namespace opt-in check — the opt-in label governs what is *reported*, never what is *cached*. Secret values are never emitted in BOMs or logs. Treat `AIBOM` resources as sensitive operational metadata: intended readers are platform/security/compliance teams. Full disclosure and retention details: [docs/security-model.md §7](docs/security-model.md).
 
+**Output sanitization guarantee:** no credential material appears in emitted documents. The extraction paths are conservative by construction (env values only from the model-identity allowlist with `valueFrom` secrets skipped; args read only for allowlisted model flags; API-key detection records env-var *names*, never values; evidence locators are spec paths). On top of that, every string leaving the cluster passes a redaction filter at the BOM-build boundary: URI userinfo, known credential query parameters (pre-signed URL signatures, SAS tokens), and well-known secret token shapes are replaced before emission, and any component whose fields were redacted carries an `aibom.redaction.applied` property naming the redaction class — redaction is recorded, never silent. Determinism is preserved: identical inputs still produce byte-identical documents.
+
 See [docs/security-model.md](docs/security-model.md) for the full threat model and design justification.
 
 ## Engineering discipline
