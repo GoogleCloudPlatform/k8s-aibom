@@ -1,51 +1,62 @@
 # Roadmap
 
 Direction, not commitment: items may move as demand and contributions
-dictate. Version numbers are assigned at release time, not here — this
-project's releases are event-driven (v1.1.0 and v1.2.0 were both created
-by qualification findings within a week). Delivered work is recorded in
-the [CHANGELOG](../CHANGELOG.md); versioning policy in
-[VERSIONING.md](../VERSIONING.md).
+dictate. Releases ship on a monthly train (see the release-cadence
+policy in [VERSIONING.md](../VERSIONING.md)); features catch the train
+they are ready for, and new capability surface gets a published design
+doc with a review window first. Delivered work is recorded in the
+[CHANGELOG](../CHANGELOG.md).
 
 ## Shipped
 
 v1.0.0 (first release: the signed, attested, digest-pinned artifact
 set), v1.1.0 (the qualification release), v1.2.0 (opt-in strict
-configuration readiness), and v1.3.0 (API graduation to `v1beta1` with
+configuration readiness), v1.3.0 (API graduation to `v1beta1` with
 dual serving, plus the readiness-probe fixes found in boundary
-testing) — see the [CHANGELOG](../CHANGELOG.md) for details and the
-qualification record on
-[issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8).
+testing), and v1.4.0 (the downstream-coverage release: NVIDIA
+NIM/Dynamo/TGI detection patterns, chart CR at `v1beta1`, performance
+docs re-baselined on dual-sampled live-GKE runs) — see the
+[CHANGELOG](../CHANGELOG.md) for details and the qualification record
+on [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8).
+The weekly Kubernetes version matrix backing the compatibility range
+also shipped (with v1.3.0).
 
-## Next — the verification release
+## Next — v1.5.0, the trust release ([milestone 1](https://github.com/GoogleCloudPlatform/k8s-aibom/milestone/1))
 
 - **Sigstore / OMS signature verification** for model identities (the
-  `verified` confidence tier): a nested Go module on upstream Sigstore
-  libraries. Scope constraints: model artifacts only (container-image
-  verification belongs to admission tooling and is a non-goal); trust
-  roots and log endpoints are configuration in the standard Sigstore
-  TrustedRoot format (self-hosted Sigstore/Rekor deployments supported);
-  verification degrades to `claimed` when the log is unreachable —
-  never `verified`, never a failed reconcile; every `verified` claim
-  carries the verifier identity and method. A public design sketch
-  precedes implementation; contributions welcome against the module's
-  conformance test suite.
+  `verified` confidence tier) — [Design 002](design/002-sigstore-rekor-verifier.md)
+  is in open review (#55; two rounds of external review already
+  incorporated). Key properties: model artifacts only; nested Go
+  module on upstream sigstore-go; configurable trust roots
+  (public / TUF mirror / static bundle); `verified` requires an
+  operator-configured signer-identity constraint — under a public
+  trust root with no identity constraints the tier is unattainable by
+  design; verification outcomes are facts and never fail a reconcile
+  (#56).
+- **Output sanitization guarantee** — audit-backed invariant that no
+  credential material appears in emitted documents, with a redaction
+  pass at the BOM-build boundary (#57).
+- **`kubectl aibom` plugin** — view / summary / verify, so reading and
+  hash-checking a BOM is one command (#58).
+- **e2e matrix for non-default configurations** — strict readiness,
+  sinks under real RBAC, verification enabled (#59).
+
+## v1.6 train (following)
+
 - **Complete CronJob coverage** — wire the watcher and RBAC for the
   existing CronJob scraper path.
 - **Configurable workload-kind allowlist** via the
-  `AIBOMControllerConfig` CR.
-- **CI hardening** — Kubernetes version matrix backing the documented
-  compatibility range; `govulncheck` and image scanning as required
-  jobs; grouped Dependabot updates; an e2e matrix leg for non-default
-  configurations (strict readiness break/recover, sinks under real
-  RBAC — the gap class behind the one code defect external
-  qualification found).
-- **SKILL.md** — an agent-operable runbook for installing, inspecting,
-  and troubleshooting the controller.
+  `AIBOMControllerConfig` CR — with a short design note first: if the
+  allowlist narrows what the informers watch (not only what is
+  reported), it directly reduces the controller's read surface.
+- **Remaining CI hardening** — `govulncheck` and image scanning as
+  required jobs; grouped Dependabot updates.
 
 ## Later
 
 - Native GUAC sink for OpenSSF GUAC ingestion.
+- **SKILL.md** (agent-operable runbook) — deliberately parked: the
+  docs have proven sufficient so far; revisits on evidence of demand.
 - Admission webhook for `AIBOMControllerConfig` singleton enforcement.
 - Additional CRD scrapers (llm-d native CRDs, KAITO, Seldon Core); deep
   KServe extraction following `ServingRuntime` references; expanded
