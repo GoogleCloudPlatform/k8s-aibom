@@ -114,7 +114,7 @@ func (s *InferenceSpecScraper) HandlesKind(k WorkloadKind) bool {
 // cfg MUST NOT be nil — see the Scraper interface contract. The
 // reconciler is responsible for substituting DefaultV1Config when
 // its snapshot's Patterns field is nil-shaped.
-func (s *InferenceSpecScraper) Scrape(_ context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
+func (s *InferenceSpecScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
 	if w.Object == nil {
 		return nil, fmt.Errorf("inference.spec: workload Object is nil for kind %s/%s/%s",
 			w.Kind.Group, w.Kind.Version, w.Kind.Kind)
@@ -146,6 +146,22 @@ func (s *InferenceSpecScraper) Scrape(_ context.Context, w Workload, cfg *Infere
 	inputs.Components = append(inputs.Components,
 		extractAnnotationModels(w.Object.GetAnnotations(),
 			SourceWorkloadAnnotation, "metadata.annotations")...)
+
+	// Signature verification (Design 002): apply the configured
+	// verifier over ML-model components using the workload-level
+	// claim annotations; pod-template annotations are the fallback
+	// source. Outcomes are recorded facts and never fail the scrape.
+	var templateAnnotations map[string]string
+	switch obj := w.Object.(type) {
+	case *appsv1.Deployment:
+		templateAnnotations = obj.Spec.Template.Annotations
+	case *appsv1.StatefulSet:
+		templateAnnotations = obj.Spec.Template.Annotations
+	case *appsv1.DaemonSet:
+		templateAnnotations = obj.Spec.Template.Annotations
+	}
+	applySignatures(ctx, s.verifier, inputs.Components,
+		w.Object.GetAnnotations(), templateAnnotations)
 
 	// Deterministic ordering: sort components by (Type, Name, Evidence.Locator)
 	// so byte-stable BOM output is achievable downstream and tests don't

@@ -54,6 +54,13 @@ type AIBOMControllerConfigSpec struct {
 	// Logging configures the controller's log level and format.
 	// +optional
 	Logging LoggingConfig `json:"logging,omitempty"`
+
+	// Verification configures cryptographic verification of model
+	// signature claims (docs/design/002-sigstore-rekor-verifier.md).
+	// Absent or disabled means signature references are recorded as
+	// `claimed`, never `verified` — the pre-v1.5.0 behavior exactly.
+	// +optional
+	Verification *VerificationConfig `json:"verification,omitempty"`
 }
 
 // DiscoveryConfig narrows the set of workloads the controller tracks.
@@ -346,4 +353,90 @@ type AIBOMControllerConfigList struct {
 
 func init() {
 	SchemeBuilder.Register(&AIBOMControllerConfig{}, &AIBOMControllerConfigList{})
+}
+
+// VerificationConfig enables the Sigstore/Rekor signature verifier
+// (docs/design/002-sigstore-rekor-verifier.md). Outcomes are recorded
+// facts: verification failures never fail a reconcile, and enabling
+// verification can never make inventory worse than disabled mode —
+// the floor is `claimed`, the pre-v1.5.0 behavior.
+type VerificationConfig struct {
+	// Enabled turns verification on. Even when enabled, the `verified`
+	// tier additionally requires a signer-identity constraint: a
+	// non-public trust root, or a non-empty identities list. Under
+	// trustRootMode=public with no identities, valid signatures are
+	// recorded as signature-valid-unconstrained and remain `claimed`.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TrustRootMode selects the Sigstore trust root source: "public"
+	// (the Sigstore public-good instance, fetched via TUF with the
+	// client's embedded initial root), "tufMirror" (a self-hosted
+	// Sigstore TUF repository), or "staticBundle" (a trusted-root
+	// JSON file, for air-gapped clusters). A non-public mode is an
+	// implicit signer-identity constraint.
+	// +optional
+	// +kubebuilder:default=public
+	// +kubebuilder:validation:Enum=public;tufMirror;staticBundle
+	TrustRootMode string `json:"trustRootMode,omitempty"`
+
+	// TUFMirrorURL is the TUF repository base URL. Required when
+	// trustRootMode is "tufMirror"; ignored otherwise.
+	// +optional
+	// +kubebuilder:validation:MaxLength=2048
+	TUFMirrorURL string `json:"tufMirrorURL,omitempty"`
+
+	// StaticBundlePath is the file path of a trusted-root JSON
+	// (mounted into the controller pod). Required when trustRootMode
+	// is "staticBundle"; ignored otherwise.
+	// +optional
+	// +kubebuilder:validation:MaxLength=1024
+	StaticBundlePath string `json:"staticBundlePath,omitempty"`
+
+	// RekorURL overrides the transparency log endpoint. Empty means
+	// the trust root's own Rekor.
+	// +optional
+	// +kubebuilder:validation:MaxLength=2048
+	RekorURL string `json:"rekorURL,omitempty"`
+
+	// Identities constrains which signing certificate identities may
+	// produce `verified`. Matching is ANY-of across entries. An empty
+	// list records identities without constraining them — and makes
+	// `verified` unattainable under trustRootMode=public.
+	// +optional
+	// +listType=atomic
+	Identities []IdentityConstraint `json:"identities,omitempty"`
+
+	// PerClaimTimeoutSeconds bounds one verification attempt end to
+	// end, including all network I/O. Nested inside the 60s reconcile
+	// deadline, hence the ceiling.
+	// +optional
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=30
+	PerClaimTimeoutSeconds int32 `json:"perClaimTimeoutSeconds,omitempty"`
+
+	// CacheTTLMinutes bounds how long a verification result is reused
+	// for an identical (signature reference, trust-root epoch) pair.
+	// +optional
+	// +kubebuilder:default=1440
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10080
+	CacheTTLMinutes int32 `json:"cacheTTLMinutes,omitempty"`
+}
+
+// IdentityConstraint matches a signing certificate identity. Both
+// fields optional; an entry matches when every set field matches.
+type IdentityConstraint struct {
+	// Issuer is compared exactly against the certificate's OIDC
+	// issuer (e.g. "https://token.actions.githubusercontent.com").
+	// +optional
+	// +kubebuilder:validation:MaxLength=512
+	Issuer string `json:"issuer,omitempty"`
+
+	// SubjectPattern is an RE2 regular expression matched against the
+	// certificate's SubjectAlternativeName.
+	// +optional
+	// +kubebuilder:validation:MaxLength=512
+	SubjectPattern string `json:"subjectPattern,omitempty"`
 }

@@ -8,6 +8,23 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- Sigstore/Rekor signature verification — the `verified` confidence
+  tier (Design 002, #56): `spec.verification` on
+  `AIBOMControllerConfig` enables cryptographic verification of model
+  signature claims (`model.k8saibom.dev/oms-signature`, optional
+  `model.k8saibom.dev/digest`) against configurable trust roots
+  (Sigstore public-good via TUF, self-hosted TUF mirror, or a static
+  trusted-root file). `verified` requires chain validity, Rekor
+  inclusion, a satisfied signer-identity constraint (a non-public
+  trust root counts), and no contradicted declared binding —
+  digest-over-name precedence. All outcomes are recorded facts on the
+  model component (`signature.*` properties; `ModelSummary.Signed` now
+  populates); verification failures never fail a reconcile, and with
+  verification absent, output is byte-identical to v1.4.0. Retires
+  schema-divergences entry D-001. Fixed alongside: the reserved
+  signature annotations are no longer mis-extracted as phantom model
+  identities.
+
 - `kubectl-aibom` plugin (#58): `summary` (per-namespace or `-A`
   table of workload, category, runtime, models, confidence, Ready),
   `view` (decoded, pretty-printed BOM; `--raw` for the canonical

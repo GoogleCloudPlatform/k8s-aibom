@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +32,7 @@ import (
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
+	"github.com/GoogleCloudPlatform/k8s-aibom/verifier"
 )
 
 // Loader translates an AIBOMControllerConfig CR into a Snapshot,
@@ -107,6 +109,10 @@ func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMController
 	patterns, patternErrs := parsePatterns(cr.Spec.Discovery.InferenceRuntimeImagePatterns)
 	errs = append(errs, patternErrs...)
 
+	// Parse verification (Design 002). nil when absent or disabled.
+	verification, verifErrs := parseVerification(cr.Spec.Verification)
+	errs = append(errs, verifErrs...)
+
 	// Validate sink shapes BEFORE invoking the factory. Shape errors
 	// (Type=GCS but GCS body nil, duplicate names, etc.) are loader-
 	// detectable without needing the K8s API. The factory is only
@@ -140,6 +146,7 @@ func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMController
 	// Construct snapshot from spec.
 	snap := &Snapshot{
 		Patterns:                 patterns,
+		Verification:             verification,
 		InlineThreshold:          resolveInlineThreshold(cr.Spec.BOMGeneration.InlineThresholdBytes),
 		StaleThresholdReconciles: resolveStaleThreshold(cr.Spec.BOMGeneration.StaleThresholdReconciles),
 		NamespaceSelector:        namespaceSelector,
@@ -276,4 +283,64 @@ func resolveStaleThreshold(crValue int32) int32 {
 		return DefaultStaleThresholdReconciles
 	}
 	return crValue
+}
+
+// parseVerification translates spec.verification into the verifier
+// module's Config. Returns nil when verification is absent or
+// disabled. Validation mirrors verifier.NewRekorVerifier plus regex
+// compilation, so an invalid config is caught at load time (and the
+// all-or-nothing rule applies) rather than at first verification.
+func parseVerification(in *aibomv1beta1.VerificationConfig) (*verifier.Config, []LoadError) {
+	if in == nil || !in.Enabled {
+		return nil, nil
+	}
+	var errs []LoadError
+	fieldErr := func(field, msg string) {
+		errs = append(errs, LoadError{Field: "spec.verification." + field, Message: msg})
+	}
+
+	mode := verifier.TrustRootMode(in.TrustRootMode)
+	switch mode {
+	case "", verifier.TrustPublic:
+		mode = verifier.TrustPublic
+	case verifier.TrustTUFMirror:
+		if in.TUFMirrorURL == "" {
+			fieldErr("tufMirrorURL", "required when trustRootMode is tufMirror")
+		}
+	case verifier.TrustStaticBundle:
+		if in.StaticBundlePath == "" {
+			fieldErr("staticBundlePath", "required when trustRootMode is staticBundle")
+		}
+	default:
+		fieldErr("trustRootMode", fmt.Sprintf("unknown mode %q", in.TrustRootMode))
+	}
+
+	ids := make([]verifier.IdentityConstraint, 0, len(in.Identities))
+	for i, ic := range in.Identities {
+		if ic.SubjectPattern != "" {
+			if _, err := regexp.Compile(ic.SubjectPattern); err != nil {
+				fieldErr(fmt.Sprintf("identities[%d].subjectPattern", i), err.Error())
+				continue
+			}
+		}
+		ids = append(ids, verifier.IdentityConstraint{Issuer: ic.Issuer, SubjectPattern: ic.SubjectPattern})
+	}
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	cfg := &verifier.Config{
+		TrustRootMode:    mode,
+		TUFMirrorURL:     in.TUFMirrorURL,
+		StaticBundlePath: in.StaticBundlePath,
+		RekorURL:         in.RekorURL,
+		Identities:       ids,
+	}
+	if in.PerClaimTimeoutSeconds > 0 {
+		cfg.PerClaimTimeout = time.Duration(in.PerClaimTimeoutSeconds) * time.Second
+	}
+	if in.CacheTTLMinutes > 0 {
+		cfg.CacheTTL = time.Duration(in.CacheTTLMinutes) * time.Minute
+	}
+	return cfg, nil
 }
