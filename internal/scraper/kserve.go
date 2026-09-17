@@ -102,7 +102,7 @@ func (s *KServeInferenceServiceScraper) HandlesKind(k WorkloadKind) bool {
 // pattern-matching against images. When KServe gains pod-template
 // scraping (post-v1), this is where cfg starts being consulted —
 // changing it is local to this scraper, not the interface.
-func (s *KServeInferenceServiceScraper) Scrape(_ context.Context, w Workload, _ *InferenceConfig) (*BOMInputs, error) {
+func (s *KServeInferenceServiceScraper) Scrape(ctx context.Context, w Workload, _ *InferenceConfig) (*BOMInputs, error) {
 	if w.Object == nil {
 		return nil, fmt.Errorf("inference.kserve: workload Object is nil for kind %s/%s/%s",
 			w.Kind.Group, w.Kind.Version, w.Kind.Kind)
@@ -124,6 +124,10 @@ func (s *KServeInferenceServiceScraper) Scrape(_ context.Context, w Workload, _ 
 
 	// spec.predictor.model + spec.predictor.serviceAccountName extraction.
 	inputs.Components = append(inputs.Components, s.extractPredictor(u)...)
+
+	// Signature verification (Design 002) over the declared model
+	// components, from the InferenceService's own annotations.
+	applySignatures(ctx, s.verifier, inputs.Components, u.GetAnnotations())
 
 	sortComponents(inputs.Components)
 	inputs.Confidence = aggregateConfidence(inputs.Components)

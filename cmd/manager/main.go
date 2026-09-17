@@ -61,6 +61,7 @@ import (
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/controller"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sigverify"
 )
 
 // controllerVersion is the version label stamped into emitted BOMs and
@@ -232,6 +233,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Signature verification adapter (Design 002): consults the config
+	// Store per call, so spec.verification hot-reloads like every other
+	// config surface. With verification absent it behaves as
+	// NoopVerifier did.
+	sigVerifier := sigverify.New(configStore)
+
 	// Wire per-kind reconcilers. All share the same ConfigStore; each
 	// loads a Snapshot at the top of its reconcile loop. Hot-reload of
 	// patterns, sinks, namespace selector, and inline threshold is a
@@ -241,7 +248,7 @@ func main() {
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
 		Recorder:          mgr.GetEventRecorderFor("k8s-aibom"), //nolint:staticcheck
-		Scraper:           scraper.NewMultiScraper(scraper.NewInferenceSpecScraper(nil), scraper.NewVectorDBSpecScraper(), scraper.NewAgentSpecScraper(), scraper.NewTrainingSpecScraper(), scraper.NewEvalSpecScraper()),
+		Scraper:           scraper.NewMultiScraper(scraper.NewInferenceSpecScraper(sigVerifier), scraper.NewVectorDBSpecScraper(), scraper.NewAgentSpecScraper(), scraper.NewTrainingSpecScraper(), scraper.NewEvalSpecScraper()),
 		BOMBuilder:        bom.NewBuilder(),
 		StatusBuilder:     controller.NewStatusBuilder(),
 		ConfigStore:       configStore,
@@ -253,7 +260,7 @@ func main() {
 	// swap the Scraper; everything else (including the shared
 	// ConfigStore reference) is preserved.
 	kserveBase := inferenceBase
-	kserveBase.Scraper = scraper.NewKServeInferenceServiceScraper(nil)
+	kserveBase.Scraper = scraper.NewKServeInferenceServiceScraper(sigVerifier)
 
 	if err := (&controller.DeploymentReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up DeploymentReconciler")

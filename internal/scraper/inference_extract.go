@@ -439,6 +439,12 @@ func extractAnnotationModels(annotations map[string]string, source EvidenceSourc
 		if !strings.HasPrefix(k, modelAnnotationPrefix) {
 			continue
 		}
+		if reservedModelAnnotation(k) {
+			// Signature claim metadata, not a model identity
+			// (signature_apply.go); extracting these as models would
+			// emit a phantom component named after a URL or digest.
+			continue
+		}
 		if v == "" {
 			continue
 		}

@@ -435,6 +435,100 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              verification:
+                description: |-
+                  Verification configures cryptographic verification of model
+                  signature claims (docs/design/002-sigstore-rekor-verifier.md).
+                  Absent or disabled means signature references are recorded as
+                  `claimed`, never `verified` — the pre-v1.5.0 behavior exactly.
+                properties:
+                  cacheTTLMinutes:
+                    default: 1440
+                    description: |-
+                      CacheTTLMinutes bounds how long a verification result is reused
+                      for an identical (signature reference, trust-root epoch) pair.
+                    format: int32
+                    maximum: 10080
+                    minimum: 1
+                    type: integer
+                  enabled:
+                    description: |-
+                      Enabled turns verification on. Even when enabled, the `verified`
+                      tier additionally requires a signer-identity constraint: a
+                      non-public trust root, or a non-empty identities list. Under
+                      trustRootMode=public with no identities, valid signatures are
+                      recorded as signature-valid-unconstrained and remain `claimed`.
+                    type: boolean
+                  identities:
+                    description: |-
+                      Identities constrains which signing certificate identities may
+                      produce `verified`. Matching is ANY-of across entries. An empty
+                      list records identities without constraining them — and makes
+                      `verified` unattainable under trustRootMode=public.
+                    items:
+                      description: |-
+                        IdentityConstraint matches a signing certificate identity. Both
+                        fields optional; an entry matches when every set field matches.
+                      properties:
+                        issuer:
+                          description: |-
+                            Issuer is compared exactly against the certificate's OIDC
+                            issuer (e.g. "https://token.actions.githubusercontent.com").
+                          maxLength: 512
+                          type: string
+                        subjectPattern:
+                          description: |-
+                            SubjectPattern is an RE2 regular expression matched against the
+                            certificate's SubjectAlternativeName.
+                          maxLength: 512
+                          type: string
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  perClaimTimeoutSeconds:
+                    default: 10
+                    description: |-
+                      PerClaimTimeoutSeconds bounds one verification attempt end to
+                      end, including all network I/O. Nested inside the 60s reconcile
+                      deadline, hence the ceiling.
+                    format: int32
+                    maximum: 30
+                    minimum: 1
+                    type: integer
+                  rekorURL:
+                    description: |-
+                      RekorURL overrides the transparency log endpoint. Empty means
+                      the trust root's own Rekor.
+                    maxLength: 2048
+                    type: string
+                  staticBundlePath:
+                    description: |-
+                      StaticBundlePath is the file path of a trusted-root JSON
+                      (mounted into the controller pod). Required when trustRootMode
+                      is "staticBundle"; ignored otherwise.
+                    maxLength: 1024
+                    type: string
+                  trustRootMode:
+                    default: public
+                    description: |-
+                      TrustRootMode selects the Sigstore trust root source: "public"
+                      (the Sigstore public-good instance, fetched via TUF with the
+                      client's embedded initial root), "tufMirror" (a self-hosted
+                      Sigstore TUF repository), or "staticBundle" (a trusted-root
+                      JSON file, for air-gapped clusters). A non-public mode is an
+                      implicit signer-identity constraint.
+                    enum:
+                    - public
+                    - tufMirror
+                    - staticBundle
+                    type: string
+                  tufMirrorURL:
+                    description: |-
+                      TUFMirrorURL is the TUF repository base URL. Required when
+                      trustRootMode is "tufMirror"; ignored otherwise.
+                    maxLength: 2048
+                    type: string
+                type: object
             type: object
           status:
             description: |-
@@ -930,6 +1024,100 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              verification:
+                description: |-
+                  Verification configures cryptographic verification of model
+                  signature claims (docs/design/002-sigstore-rekor-verifier.md).
+                  Absent or disabled means signature references are recorded as
+                  `claimed`, never `verified` — the pre-v1.5.0 behavior exactly.
+                properties:
+                  cacheTTLMinutes:
+                    default: 1440
+                    description: |-
+                      CacheTTLMinutes bounds how long a verification result is reused
+                      for an identical (signature reference, trust-root epoch) pair.
+                    format: int32
+                    maximum: 10080
+                    minimum: 1
+                    type: integer
+                  enabled:
+                    description: |-
+                      Enabled turns verification on. Even when enabled, the `verified`
+                      tier additionally requires a signer-identity constraint: a
+                      non-public trust root, or a non-empty identities list. Under
+                      trustRootMode=public with no identities, valid signatures are
+                      recorded as signature-valid-unconstrained and remain `claimed`.
+                    type: boolean
+                  identities:
+                    description: |-
+                      Identities constrains which signing certificate identities may
+                      produce `verified`. Matching is ANY-of across entries. An empty
+                      list records identities without constraining them — and makes
+                      `verified` unattainable under trustRootMode=public.
+                    items:
+                      description: |-
+                        IdentityConstraint matches a signing certificate identity. Both
+                        fields optional; an entry matches when every set field matches.
+                      properties:
+                        issuer:
+                          description: |-
+                            Issuer is compared exactly against the certificate's OIDC
+                            issuer (e.g. "https://token.actions.githubusercontent.com").
+                          maxLength: 512
+                          type: string
+                        subjectPattern:
+                          description: |-
+                            SubjectPattern is an RE2 regular expression matched against the
+                            certificate's SubjectAlternativeName.
+                          maxLength: 512
+                          type: string
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  perClaimTimeoutSeconds:
+                    default: 10
+                    description: |-
+                      PerClaimTimeoutSeconds bounds one verification attempt end to
+                      end, including all network I/O. Nested inside the 60s reconcile
+                      deadline, hence the ceiling.
+                    format: int32
+                    maximum: 30
+                    minimum: 1
+                    type: integer
+                  rekorURL:
+                    description: |-
+                      RekorURL overrides the transparency log endpoint. Empty means
+                      the trust root's own Rekor.
+                    maxLength: 2048
+                    type: string
+                  staticBundlePath:
+                    description: |-
+                      StaticBundlePath is the file path of a trusted-root JSON
+                      (mounted into the controller pod). Required when trustRootMode
+                      is "staticBundle"; ignored otherwise.
+                    maxLength: 1024
+                    type: string
+                  trustRootMode:
+                    default: public
+                    description: |-
+                      TrustRootMode selects the Sigstore trust root source: "public"
+                      (the Sigstore public-good instance, fetched via TUF with the
+                      client's embedded initial root), "tufMirror" (a self-hosted
+                      Sigstore TUF repository), or "staticBundle" (a trusted-root
+                      JSON file, for air-gapped clusters). A non-public mode is an
+                      implicit signer-identity constraint.
+                    enum:
+                    - public
+                    - tufMirror
+                    - staticBundle
+                    type: string
+                  tufMirrorURL:
+                    description: |-
+                      TUFMirrorURL is the TUF repository base URL. Required when
+                      trustRootMode is "tufMirror"; ignored otherwise.
+                    maxLength: 2048
+                    type: string
+                type: object
             type: object
           status:
             description: |-
