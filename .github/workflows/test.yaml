@@ -37,6 +37,11 @@ jobs:
     - name: Unit Tests
       run: make test
 
+    - name: Verifier Module Tests
+      # The verifier/ nested module is not covered by the root
+      # `go test ./...` (module boundary); test it explicitly.
+      run: cd verifier && go vet ./... && go test -race ./...
+
   e2e:
     needs: [test]
     runs-on: ubuntu-latest

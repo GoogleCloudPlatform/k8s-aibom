@@ -36,6 +36,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
+	"github.com/GoogleCloudPlatform/k8s-aibom/verifier"
 )
 
 // SnapshotSource identifies where the active Snapshot came from. The
@@ -84,7 +85,12 @@ const (
 //   - LoadedAt: when this snapshot was constructed (controller wall
 //     clock).
 type Snapshot struct {
-	Patterns                 *scraper.InferenceConfig
+	Patterns *scraper.InferenceConfig
+	// Verification is the parsed spec.verification, or nil when
+	// verification is absent/disabled. Consumed by the sigverify
+	// adapter, which rebuilds its RekorVerifier when this changes
+	// (hot-reload via the same snapshot-swap contract as sinks).
+	Verification             *verifier.Config
 	InlineThreshold          int64
 	StaleThresholdReconciles int32
 	NamespaceSelector        labels.Selector

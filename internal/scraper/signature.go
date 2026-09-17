@@ -22,10 +22,12 @@ import (
 )
 
 // SignatureStatus is the three-state encoding of OMS signature presence and
-// verification for a model identity. v1 distinguishes Unsigned and Claimed.
-// Verified is reserved for a future Rekor-aware implementation and MUST NOT
-// be returned by any verifier shipped in v1 — see docs/schema-divergences.md
-// entry D-001 and the project memory entry "v1 OMS signature scope".
+// verification for a model identity. Unsigned and Claimed have been
+// emitted since v1.0. Verified is emitted by the Design 002 RekorVerifier
+// (v1.5.0+) when the full binding chain holds: valid signature chain,
+// Rekor inclusion, a satisfied signer-identity constraint, and no
+// contradicted declared binding. This retires schema-divergences entry
+// D-001 (the "v1 MUST NOT emit verified" rule).
 type SignatureStatus string
 
 const (
@@ -40,9 +42,10 @@ const (
 	// reports this state; auditors must read it as "claimed, unverified".
 	SignatureClaimed SignatureStatus = "claimed"
 
-	// SignatureVerified means a verifier has fetched the referenced
-	// signature artifact, validated the signing chain, and confirmed
-	// inclusion in a transparency log. v1 MUST NOT emit this status.
+	// SignatureVerified means a verifier validated the signing chain
+	// against the configured trust root, proved transparency-log
+	// inclusion, and the Design 002 binding rules held (identity
+	// constraint satisfied; no declared binding contradicted).
 	SignatureVerified SignatureStatus = "verified"
 )
 
@@ -62,6 +65,13 @@ type SignatureClaim struct {
 	// Empty means "no signature claimed."
 	SignatureRef string `json:"signatureRef,omitempty"`
 
+	// DeclaredDigest is the optional workload-declared model content
+	// digest ("sha256:..." or bare hex) from the
+	// model.k8saibom.dev/digest annotation. When set, verification
+	// requires it to equal the signed manifest's root digest —
+	// digest-over-name precedence (Design 002, amended 2026-09-09).
+	DeclaredDigest string `json:"declaredDigest,omitempty"`
+
 	// Evidence records where the signature claim was extracted from. Used
 	// to populate the BOM's per-attribute evidence field for the resulting
 	// signature record.
@@ -78,7 +88,21 @@ type SignatureResult struct {
 	Status     SignatureStatus `json:"status,omitempty"`
 	Identity   string          `json:"identity,omitempty"`
 	RekorEntry string          `json:"rekorEntry,omitempty"`
-	Timestamp  time.Time       `json:"timestamp,omitzero"`
+
+	// Outcome is the Design 002 §4 recorded outcome fact (e.g.
+	// "verified", "signature-valid-unconstrained", "failed",
+	// "identity-mismatch", "digest-mismatch"). Empty for Unsigned and
+	// for verifiers predating the taxonomy (NoopVerifier).
+	Outcome string `json:"outcome,omitempty"`
+
+	// Reason carries failure/error detail for non-verified outcomes.
+	Reason string `json:"reason,omitempty"`
+
+	// SubjectNameMismatch records the format-permitted rename case:
+	// verification proceeded on a satisfied digest binding while the
+	// statement's subject name disagreed with the declared identity.
+	SubjectNameMismatch bool      `json:"subjectNameMismatch,omitempty"`
+	Timestamp           time.Time `json:"timestamp,omitzero"`
 }
 
 // SignatureVerifier is the v2 extension point for cryptographic signature

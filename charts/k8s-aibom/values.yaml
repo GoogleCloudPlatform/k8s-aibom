@@ -53,6 +53,19 @@ config:
   #       matchLabels:
   #         environment: production
   discovery: {}
+
+  # Signature verification (Design 002). Disabled by default; when
+  # enabled, the `verified` tier additionally requires a signer
+  # identity constraint — a non-public trustRootMode, or a non-empty
+  # identities list. Example:
+  #   verification:
+  #     enabled: true
+  #     trustRootMode: tufMirror        # public | tufMirror | staticBundle
+  #     tufMirrorURL: https://tuf.internal.example
+  #     identities:
+  #       - issuer: https://accounts.example.com
+  #         subjectPattern: ^release@models\.example\.com$
+
   bomGeneration:
     inlineThresholdBytes: 262144
     staleThresholdReconciles: 3
