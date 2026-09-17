@@ -1,8 +1,13 @@
 # Design 003: Native scrapers for NIMService and LeaderWorkerSet
 
-Status: Draft. Published for open review before any code (per the
-release-cadence policy in VERSIONING.md); the review window is stated
-on the PR. Targets the v1.6 train — deliberately not v1.5.0, which is
+Status: Draft; amended 2026-09-17 after AICR-maintainer review on the
+PR — priority re-ranked (Dynamo CRDs promoted above NIMService on
+their recipe-footprint data; LWS re-scoped to the llm-d demand path
+after a factual correction), open question 3 resolved (scraper code,
+subordinate to declared sources), and the storage-source extraction
+generalized beyond nimCache. Published for open review before any
+code (per the release-cadence policy in VERSIONING.md); the review
+window is stated on the PR. Targets the v1.6 train — deliberately not v1.5.0, which is
 scoped to verification. Review is particularly invited from downstream
 distributions shipping the NIM Operator or lws (NVIDIA AICR ships
 both); open question 1 is a demand check, and a "not useful" answer
@@ -26,7 +31,12 @@ backlog rule.
   multi-host serving). Its `leaderTemplate` and `workerTemplate` are
   full PodTemplateSpecs — the existing inference extraction applies
   unchanged; what is missing is the watch, RBAC, and an ownership
-  roll-up rule.
+  roll-up rule. Correction from AICR review (2026-09-17): AICR does
+  NOT ship LWS (their multi-node path is DynamoGraphDeployment →
+  Grove); the demand path for LWS support is the llm-d ecosystem,
+  whose wide expert-parallelism well-lit path deploys via LWS. LWS
+  ranks last in this design accordingly and remains demand-gated on
+  that path.
 - The CronJob-coverage item on the same v1.6 train needs the same
   ownership machinery (CronJob → Job → Pod); this design's roll-up
   rule is written to serve both.
@@ -40,10 +50,15 @@ workloads those CRs own.
 
 ## Non-goals
 
-1. **No NeMo CRDs** (NemoCustomizer, NemoGuardrails, …) and **no
-   Dynamo CRDs** in this design. Both are follow-on candidates gated
-   on the same demand check; adding them later reuses this design's
-   pattern without amendment.
+1. **No NeMo CRDs** (NemoCustomizer, NemoGuardrails, …) in this
+   design. **Dynamo CRDs (DynamoGraphDeployment) are promoted**: AICR
+   review ranked them ABOVE NIMService (dynamo-platform in 15 of
+   their recipes vs 4 for the NIM operator, and both stock recipes
+   shipping k8s-aibom include a Dynamo lane, no NIM lane). A Dynamo
+   extraction section will be added to this design within the review
+   window once the DynamoGraphDeployment schema is scoped; note the
+   Dynamo caveat from the same review — Dynamo images carry no model
+   identity, so declared sources matter even more there.
 2. **No operator-infrastructure images as runtimes.** The v1.4.0
    guard cases stand: k8s-nim-operator's own controller images are
    infrastructure, not serving runtimes.
@@ -65,7 +80,7 @@ all via unstructured access:
 | CR kind itself | `application` component, runtime `nim` | `declared` (the customer chose NIM serving; no inference involved) |
 | `spec.image.repository` + `.tag` | `container` component | `declared` |
 | NIM image path (`nvcr.io/nim/<org>/<name>`) | `machine-learning-model` identity `<org>/<name>` | `inferred` (derived from the image path; NIM images encode the model, but the path is not a declaration) |
-| `spec.storage.nimCache` | model-source fact (property on the model component) | `declared` |
+| `spec.storage.*` (nimCache reference, or the storage shape: pvc / emptyDir / hostPath) | model-source fact (property on the model component) — `nimCache` is one shape, not the only one (AICR's own demo uses `emptyDir`) | `declared` |
 | `spec.env` / `spec.args` | through the existing model-identity allowlists, unchanged | as today |
 | `spec.multiNode` (presence) | topology property on the runtime component | `declared` |
 
@@ -126,7 +141,11 @@ is later.
 2. **Roll-up representation:** are suppressed-owned-workload
    properties on the owner's AIBOM sufficient, or do consumers need a
    stub AIBOM per owned workload pointing at the owner?
-3. **NIM model-from-image-path:** scraper logic (as designed) or a
-   generalized "model identity from image path" pattern in the
-   runtime-patterns config? The latter is more reusable; the former
-   keeps the pattern file's scope honest (runtime attribution only).
+3. **RESOLVED (AICR review, 2026-09-17): scraper code**, subordinate
+   to declared env/args sources — the derivation is valid only
+   because `nvcr.io/nim/` is one-model-per-image, which is a NIM
+   property, not a general pattern (Dynamo runtime images carry no
+   model). Declared NIM_MODEL_NAME/NIM_SERVED_MODEL_NAME always win;
+   the image path fills in only when nothing is declared. (The env
+   names themselves ship earlier, in v1.5.0 — a mechanical allowlist
+   addition prompted by the same review.)
