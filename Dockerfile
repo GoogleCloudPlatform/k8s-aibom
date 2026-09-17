@@ -46,6 +46,7 @@ RUN go mod download
 COPY cmd/      cmd/
 COPY api/      api/
 COPY internal/ internal/
+COPY verifier/ verifier/
 
 # Cross-compile a fully static binary.
 #   - CGO_ENABLED=0: pure-Go, no libc dependency. Required for the
