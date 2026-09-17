@@ -8,6 +8,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- NIM model-declaration env vars `NIM_MODEL_NAME` and
+  `NIM_SERVED_MODEL_NAME` join the default model-identity allowlist.
+  Reported by an AICR maintainer during Design 003 review: a NIM
+  container's served model can differ from its image default, and
+  without these names such workloads carried no declared model signal.
+
 - Sigstore/Rekor signature verification — the `verified` confidence
   tier (Design 002, #56): `spec.verification` on
   `AIBOMControllerConfig` enables cryptographic verification of model

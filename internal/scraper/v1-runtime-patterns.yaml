@@ -113,6 +113,15 @@ runtimeImagePatterns:
 modelEnvVarNames:
   - HF_MODEL_ID
   - MODEL_NAME
+  # NVIDIA NIM containers declare the served model via NIM_* variables;
+  # without these a NIM workload has no declared model signal at all,
+  # and any image-path-derived identity would mis-attribute when the
+  # served model differs from the image default (real case: image
+  # nvcr.io/nim/meta/llama-3.1-8b-instruct serving Qwen/Qwen3-0.6B via
+  # NIM_MODEL_NAME; reported by an AICR maintainer on Design 003
+  # review).
+  - NIM_MODEL_NAME
+  - NIM_SERVED_MODEL_NAME
 
 # Argument flag names that, when found in a container's args, are immediately
 # followed by (positional) or =-joined to a model identity. v1 recognizes
