@@ -14,6 +14,10 @@ All notable changes to k8s-aibom are documented here. The format follows
   container's served model can differ from its image default, and
   without these names such workloads carried no declared model signal.
 
+- kubectl-aibom: `summary` gains a SIGNED column (per-model signature
+  states, deduplicated) and `verify` appends the recorded per-model
+  signature facts to its integrity verdict — the verified tier is
+  demonstrable in one command.
 - Sigstore/Rekor signature verification — the `verified` confidence
   tier (Design 002, #56): `spec.verification` on
   `AIBOMControllerConfig` enables cryptographic verification of model
