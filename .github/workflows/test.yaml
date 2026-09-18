@@ -72,3 +72,9 @@ jobs:
     - name: Verify Deployment
       run: |
         kubectl wait --for=condition=Available deployment/k8s-aibom -n k8s-aibom-system --timeout=120s
+
+    - name: Non-default configuration matrix (issue #59)
+      # Strict readiness break/recover; sinks under real RBAC with a
+      # bearer-token Secret; signature verification (staticBundle trust
+      # root via extraVolumes) with verified and tampered outcomes.
+      run: bash hack/e2e-matrix.sh
