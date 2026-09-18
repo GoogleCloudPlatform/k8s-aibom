@@ -151,7 +151,13 @@ EOF
 aibom_cond() { kubectl -n "$NS" get aibom "$1" -o jsonpath="{.status.conditions[?(@.type==\"$2\")].status}" 2>/dev/null; }
 wait_for 90 "AIBOM Ready with sink fan-out" \
   bash -c '[ "$(kubectl -n matrix-e2e get aibom apps-deployment-sinkcheck-vllm -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null)" = "True" ]'
-[ "$(aibom_cond apps-deployment-sinkcheck-vllm SinkFailed)" = "False" ] || fail "SinkFailed != False under RBAC-gated Secret sink"
+# SinkFailed is set on the sink fan-out pass, which can land after
+# Ready; wait for it to become False rather than asserting instantly.
+wait_for 90 "SinkFailed=False under RBAC-gated Secret sink" \
+  bash -c '[ "$(kubectl -n matrix-e2e get aibom apps-deployment-sinkcheck-vllm -o jsonpath="{.status.conditions[?(@.type==\"SinkFailed\")].status}" 2>/dev/null)" = "False" ]' || {
+  kubectl -n "$NS" get aibom apps-deployment-sinkcheck-vllm -o jsonpath='{.status.conditions}' >&2 || true
+  fail "SinkFailed never reached False"
+}
 if kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=200 | grep -qi "secrets .* forbidden"; then
   fail "forbidden Secret access in controller logs"
 fi
