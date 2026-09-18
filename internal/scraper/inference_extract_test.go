@@ -320,7 +320,7 @@ func TestInferenceConfig_IsModelVolumePath(t *testing.T) {
 
 func TestInferenceConfig_IsModelEnvVarName(t *testing.T) {
 	cfg := DefaultV1Config()
-	want := []string{"HF_MODEL_ID", "MODEL_NAME"}
+	want := []string{"HF_MODEL_ID", "MODEL_NAME", "NIM_MODEL_NAME", "NIM_SERVED_MODEL_NAME"}
 	for _, n := range want {
 		if !cfg.IsModelEnvVarName(n) {
 			t.Errorf("expected %q in allowlist", n)
@@ -402,5 +402,29 @@ func TestLookupVolumeSource(t *testing.T) {
 					tc.vol, gotName, gotKind, tc.wantName, tc.wantKind)
 			}
 		})
+	}
+}
+
+// The AICR-reported NIM case (Design 003 review): a NIM image whose
+// default model differs from the served one. NIM_MODEL_NAME must
+// produce a declared model component — before NIM_* names joined the
+// allowlist, such workloads had no declared model signal at all.
+func TestExtractEnvVarModelsNIMNames(t *testing.T) {
+	cfg := DefaultV1Config()
+	s := NewInferenceSpecScraper(nil)
+	c := corev1.Container{
+		Name:  "nim",
+		Image: "nvcr.io/nim/meta/llama-3.1-8b-instruct:1.3.0",
+		Env: []corev1.EnvVar{
+			{Name: "NIM_MODEL_NAME", Value: "Qwen/Qwen3-0.6B"},
+			{Name: "NIM_SERVED_MODEL_NAME", Value: "qwen3"},
+		},
+	}
+	comps := s.extractEnvVarModels(c, false, 0, cfg)
+	if len(comps) != 2 {
+		t.Fatalf("want 2 model components from NIM_* env vars, got %d: %+v", len(comps), comps)
+	}
+	if comps[0].Name != "Qwen/Qwen3-0.6B" {
+		t.Fatalf("served model not extracted: %+v", comps[0])
 	}
 }
