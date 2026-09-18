@@ -145,6 +145,16 @@ helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --wait --timeout 2m >/dev/null
 wait_for 60 "pod Ready with sink configured" pod_ready True
 
+# The webhook sink's SSRF protection (correctly) refuses private IPs,
+# and an in-cluster Service IP is private — production intent is
+# external endpoints. This leg tests the RBAC-gated Secret path, not
+# SSRF policy, so use the sink's test-only override for the in-cluster
+# receiver. The next helm upgrade (leg C) re-renders the Deployment
+# and drops the variable again.
+kubectl -n "$NS_SYS" set env deploy/$RELEASE AIBOM_DISABLE_SSRF_CHECKS=true >/dev/null
+kubectl -n "$NS_SYS" rollout status deploy/$RELEASE --timeout=120s >/dev/null
+wait_for 60 "pod Ready with SSRF override for in-cluster receiver" pod_ready True
+
 kubectl -n "$NS" apply -f - >/dev/null <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
