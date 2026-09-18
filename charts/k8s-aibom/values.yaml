@@ -122,3 +122,11 @@ resources:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Extra volumes/volumeMounts appended to the controller pod verbatim.
+# Primary use: mounting a static Sigstore trusted-root file for
+# verification.trustRootMode=staticBundle (air-gapped clusters) — e.g.
+# a ConfigMap volume mounted read-only at the path given in
+# config.verification.staticBundlePath.
+extraVolumes: []
+extraVolumeMounts: []

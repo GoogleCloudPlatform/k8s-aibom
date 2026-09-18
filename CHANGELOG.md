@@ -8,6 +8,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- Chart: `extraVolumes` / `extraVolumeMounts` values — required to
+  mount a static trusted-root file for
+  `verification.trustRootMode=staticBundle` (air-gapped clusters).
+- e2e: non-default-configuration matrix (#59) — strict-readiness
+  break/recover, webhook sink with a bearer-token Secret under real
+  RBAC, and signature verification with verified and tampered
+  outcomes against a static trust root. Closes the test-debt class
+  behind the one code defect external qualification found.
+
 - NIM model-declaration env vars `NIM_MODEL_NAME` and
   `NIM_SERVED_MODEL_NAME` join the default model-identity allowlist.
   Reported by an AICR maintainer during Design 003 review: a NIM

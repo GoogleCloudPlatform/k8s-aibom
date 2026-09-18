@@ -35,3 +35,7 @@ spec:
   {{- end }}
   logging:
     {{- toYaml .Values.config.logging | nindent 4 }}
+  {{- with .Values.config.verification }}
+  verification:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
