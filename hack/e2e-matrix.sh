@@ -46,6 +46,18 @@ wait_for() { # wait_for <seconds> <description> <command...>
   fail "timeout waiting for: $desc"
 }
 
+# try_wait: like wait_for but returns non-zero instead of exiting, so
+# callers can attach diagnostics before failing.
+try_wait() {
+  local t=$1 desc=$2; shift 2
+  for _ in $(seq 1 "$t"); do
+    if "$@" >/dev/null 2>&1; then log "ok: $desc"; return 0; fi
+    sleep 1
+  done
+  echo "TIMEOUT: $desc" >&2
+  return 1
+}
+
 pod_ready() {
   [ "$(kubectl -n "$NS_SYS" get pods -l app.kubernetes.io/name=k8s-aibom \
       -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')" = "$1" ]
@@ -151,13 +163,24 @@ EOF
 aibom_cond() { kubectl -n "$NS" get aibom "$1" -o jsonpath="{.status.conditions[?(@.type==\"$2\")].status}" 2>/dev/null; }
 wait_for 90 "AIBOM Ready with sink fan-out" \
   bash -c '[ "$(kubectl -n matrix-e2e get aibom apps-deployment-sinkcheck-vllm -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null)" = "True" ]'
+# Confirm the sink actually rendered into the CR before waiting on
+# its effects — a values-plumbing failure would otherwise present as
+# a mysterious condition timeout.
+kubectl get aibomcontrollerconfig default -o jsonpath='{.spec.sinks}' | grep -q "echo" \
+  || fail "sink not present in rendered AIBOMControllerConfig spec"
+
 # SinkFailed is set on the sink fan-out pass, which can land after
-# Ready; wait for it to become False rather than asserting instantly.
-wait_for 90 "SinkFailed=False under RBAC-gated Secret sink" \
-  bash -c '[ "$(kubectl -n matrix-e2e get aibom apps-deployment-sinkcheck-vllm -o jsonpath="{.status.conditions[?(@.type==\"SinkFailed\")].status}" 2>/dev/null)" = "False" ]' || {
-  kubectl -n "$NS" get aibom apps-deployment-sinkcheck-vllm -o jsonpath='{.status.conditions}' >&2 || true
+# Ready; wait, and on timeout dump everything needed to diagnose.
+if ! try_wait 90 "SinkFailed=False under RBAC-gated Secret sink" \
+  bash -c '[ "$(kubectl -n matrix-e2e get aibom apps-deployment-sinkcheck-vllm -o jsonpath="{.status.conditions[?(@.type==\"SinkFailed\")].status}" 2>/dev/null)" = "False" ]'; then
+  echo "--- AIBOM conditions ---" >&2
+  kubectl -n "$NS" get aibom apps-deployment-sinkcheck-vllm -o jsonpath='{.status.conditions}' >&2 || true; echo >&2
+  echo "--- rendered CR sinks ---" >&2
+  kubectl get aibomcontrollerconfig default -o jsonpath='{.spec.sinks}' >&2 || true; echo >&2
+  echo "--- controller logs (sink-related) ---" >&2
+  kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=120 | grep -iE "sink|secret|webhook|forbidden" >&2 || true
   fail "SinkFailed never reached False"
-}
+fi
 if kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=200 | grep -qi "secrets .* forbidden"; then
   fail "forbidden Secret access in controller logs"
 fi
