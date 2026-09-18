@@ -112,7 +112,31 @@ func runVerify(u *unstructured.Unstructured, w io.Writer) (bool, error) {
 	} else {
 		fmt.Fprintf(w, "MISMATCH: document does not match the published digest\n")
 	}
+	printSignatureFacts(u, w)
 	return match, nil
+}
+
+// printSignatureFacts appends per-model signature state (from
+// status.summary.models) to verify's output — signature verification
+// happens controller-side (Design 002); this surfaces the recorded
+// facts next to the document-integrity verdict.
+func printSignatureFacts(u *unstructured.Unstructured, w io.Writer) {
+	list, found, _ := unstructured.NestedSlice(u.Object, "status", "summary", "models")
+	if !found || len(list) == 0 {
+		return
+	}
+	for _, m := range list {
+		mm, ok := m.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := mm["identity"].(string)
+		st, _ := mm["signed"].(string)
+		if st == "" {
+			st = "unsigned"
+		}
+		fmt.Fprintf(w, "model %s: signature %s\n", id, st)
+	}
 }
 
 // summaryRow flattens one AIBOM into table columns from status.summary.
@@ -137,6 +161,28 @@ func summaryRow(u *unstructured.Unstructured) []string {
 		}
 		if len(names) > 0 {
 			models = strings.Join(names, ",")
+		}
+	}
+	signed := "-"
+	if list, found, _ := unstructured.NestedSlice(u.Object, "status", "summary", "models"); found && len(list) > 0 {
+		states := make([]string, 0, 2)
+		seen := map[string]bool{}
+		for _, m := range list {
+			mm, ok := m.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			st, _ := mm["signed"].(string)
+			if st == "" {
+				st = "unsigned"
+			}
+			if !seen[st] {
+				states = append(states, st)
+				seen[st] = true
+			}
+		}
+		if len(states) > 0 {
+			signed = strings.Join(states, ",")
 		}
 	}
 	ready := "-"
@@ -166,6 +212,7 @@ func summaryRow(u *unstructured.Unstructured) []string {
 		runtime,
 		models,
 		orDash(get("status", "summary", "confidence")),
+		signed,
 		ready,
 	}
 }
@@ -180,7 +227,7 @@ func orDash(s string) string {
 // runSummary renders the table for a list of AIBOMs.
 func runSummary(items []unstructured.Unstructured, w io.Writer) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAMESPACE\tNAME\tWORKLOAD\tWORKLOAD-NAME\tCATEGORY\tRUNTIME\tMODELS\tCONFIDENCE\tREADY")
+	fmt.Fprintln(tw, "NAMESPACE\tNAME\tWORKLOAD\tWORKLOAD-NAME\tCATEGORY\tRUNTIME\tMODELS\tCONFIDENCE\tSIGNED\tREADY")
 	for i := range items {
 		fmt.Fprintln(tw, strings.Join(summaryRow(&items[i]), "\t"))
 	}

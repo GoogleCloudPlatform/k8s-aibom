@@ -56,7 +56,7 @@ func fixtureAIBOM(t *testing.T, doc []byte, tamperSHA bool) *unstructured.Unstru
 					// Field is `identity` per ModelSummary — verified against
 					// a live v1.4.0 AIBOM after the first draft wrongly
 					// assumed `name` and rendered "-".
-					map[string]interface{}{"identity": "Qwen/Qwen2.5-0.5B-Instruct", "source": "container_arg", "confidence": "declared"},
+					map[string]interface{}{"identity": "Qwen/Qwen2.5-0.5B-Instruct", "source": "container_arg", "confidence": "declared", "signed": "verified"},
 					map[string]interface{}{"identity": "Qwen/Qwen2.5-0.5B-Instruct", "source": "env_var", "confidence": "claimed"}, // dup identity: dedup expected
 				},
 				"confidence": "declared",
@@ -144,7 +144,7 @@ func TestRunSummaryTable(t *testing.T) {
 	}
 	s := out.String()
 	for _, want := range []string{
-		"NAMESPACE", "READY",
+		"NAMESPACE", "READY", "SIGNED", "verified",
 		"apps-deployment-vllm-qwen", "Deployment", "vllm-qwen", "inference", "vllm",
 		"declared", "True",
 	} {
