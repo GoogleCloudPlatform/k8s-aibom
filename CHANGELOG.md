@@ -6,6 +6,19 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-22
+
+The trust release: the `verified` confidence tier the README has
+promised since v1.0 — cryptographic verification of model signature
+claims against configurable Sigstore trust roots with Rekor
+transparency-log inclusion — designed in public (Design 002),
+substantively amended twice by external review from the model-signing
+community, and hardened so a claim can never upgrade itself. Also:
+the output sanitization guarantee, the kubectl-aibom plugin, the
+non-default-configuration e2e matrix, and the NIM model env vars.
+With no signature annotations present, output is byte-identical to
+v1.4.0.
+
 ### Added
 
 - Chart: `extraVolumes` / `extraVolumeMounts` values — required to

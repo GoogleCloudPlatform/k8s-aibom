@@ -18,3 +18,17 @@ description: Kubernetes AI-BOM Controller
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: security
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/GoogleCloudPlatform/k8s-aibom#readme
+    - name: Design docs
+      url: https://github.com/GoogleCloudPlatform/k8s-aibom/tree/main/docs/design
+    - name: Ships in NVIDIA AI Cluster Runtime
+      url: https://github.com/NVIDIA/aicr/releases/tag/v0.20.0
+  artifacthub.io/signKey: |
+    fingerprint: see release attestations
+    url: https://github.com/GoogleCloudPlatform/k8s-aibom/releases

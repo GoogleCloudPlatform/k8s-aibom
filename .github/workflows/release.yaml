@@ -152,6 +152,24 @@ jobs:
     - name: Build binary
       run: make build VERSION="${TAG}"
 
+    - name: Build kubectl-aibom plugin archives
+      # Multi-platform tarballs for krew and direct download. LICENSE is
+      # included because krew requires it in the archive.
+      run: |
+        for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${platform%/*}"; GOARCH="${platform#*/}"
+          CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
+            go build -trimpath -o kubectl-aibom ./cmd/kubectl-aibom
+          tar czf "kubectl-aibom_${TAG}_${GOOS}_${GOARCH}.tar.gz" kubectl-aibom LICENSE
+          rm kubectl-aibom
+        done
+        sha256sum kubectl-aibom_*.tar.gz > kubectl-aibom_checksums.txt
+
+    - name: Attest plugin archives
+      uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+      with:
+        subject-path: "kubectl-aibom_*.tar.gz"
+
     - name: Create GitHub release
       env:
         GH_TOKEN: ${{ github.token }}
@@ -176,4 +194,6 @@ jobs:
           install.yaml \
           "k8s-aibom-${TAG}.sbom.cdx.json" \
           "dist/k8s-aibom-${VERSION}.tgz" \
-          bin/manager
+          bin/manager \
+          kubectl-aibom_*.tar.gz \
+          kubectl-aibom_checksums.txt
