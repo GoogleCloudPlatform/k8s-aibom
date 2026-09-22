@@ -68,3 +68,10 @@ commit:
    public and confirm repository linkage.
 5. Update the adoption metrics log (image pull baseline for the new
    version).
+
+## Plugin distribution (after publishing)
+
+1. Fill `hack/krew/aibom.yaml` version + sha256 fields from
+   `kubectl-aibom_checksums.txt` on the release.
+2. Validate locally: `kubectl krew install --manifest=hack/krew/aibom.yaml`.
+3. PR the manifest to kubernetes-sigs/krew-index (plugin name `aibom`).

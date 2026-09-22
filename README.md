@@ -102,7 +102,7 @@ Releases publish a signed multi-arch image (linux/amd64, linux/arm64) with build
 
 ```bash
 helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
-  --version 1.4.0 \
+  --version 1.5.0 \
   --namespace k8s-aibom-system \
   --create-namespace
 ```
@@ -112,7 +112,7 @@ The published chart pins the controller image **by digest** — you install exac
 ### Install with kubectl
 
 ```bash
-kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.4.0/install.yaml
+kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.5.0/install.yaml
 ```
 
 Always install from a release asset; the `install.yaml` at the repo root is a development artifact.
@@ -146,6 +146,7 @@ The image digest is printed in the release notes. Admission policies can verify 
 
 - **NVIDIA AI Cluster Runtime (AICR)** — k8s-aibom is a qualified AICR component (adopted via [ADR-019](https://github.com/NVIDIA/aicr/blob/main/docs/design/019-k8s-aibom-runtime-inventory.md)). Since AICR v0.20.0 the stock `h100-gke-cos-inference` recipe selects it by default (decline at generation time with `aicr recipe --runtime-inventory disabled`); on any other recipe, add a `componentRef` in a custom overlay — see AICR's component catalog for values and health-contract details.
 - **Terraform** — GitOps-style deployment: see the [Terraform Automation Guide](terraform/README.md).
+- **Amazon EKS, Azure AKS, OpenShift, on-prem** — identical install; cloud-specific notes in [Installing on EKS, AKS, and other conformant clusters](docs/install-eks-aks.md).
 - **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
 
 ### Opt in a namespace
