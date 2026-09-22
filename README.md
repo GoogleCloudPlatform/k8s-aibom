@@ -278,6 +278,12 @@ and a raw kubelet CPU-counter delta over a stated 10-minute window):
   both versions and both samplers, and consistent with NVIDIA's
   independent v1.3.0 measurement on their own GKE cluster (1–2m /
   67–69Mi steady, NVIDIA/aicr#2310)
+- With signature verification enabled (v1.5.0, staticBundle trust
+  root, signed workload present): statistically unchanged — 1.17m CPU
+  (kubelet counter delta over a stated 10.5-minute window) / ~63Mi
+  working set at 1,001 tracked workloads; verification results are
+  cached per (reference, trust-root epoch), so steady-state cost of
+  the verified tier approaches zero
 - At 1 tracked workload: ~1m CPU / ~23Mi
 - Convergence: all 1,001 AIBOMs present and Ready within seconds of
   the 1,000-Deployment apply completing (NVIDIA measured all present
