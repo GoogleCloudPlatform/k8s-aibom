@@ -150,6 +150,8 @@ func NewWebhookSink(cfg WebhookSinkConfig) (*WebhookSink, error) {
 	}
 
 	tlsConfig := &tls.Config{
+		// #nosec G402 -- explicit, documented user opt-in for endpoints
+		// with private CAs; defaults to false and is surfaced in config.
 		InsecureSkipVerify: cfg.InsecureSkipVerify,
 	}
 

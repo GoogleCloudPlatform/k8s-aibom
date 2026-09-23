@@ -75,7 +75,7 @@ func fetchBundle(ctx context.Context, httpClient *http.Client, ref string) ([]by
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("signature fetch: HTTP %d", resp.StatusCode)
 	}
