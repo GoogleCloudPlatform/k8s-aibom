@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k8s-aibom — runtime ML-BOMs for Kubernetes</title>
+<meta name="description" content="k8s-aibom: one CycloneDX 1.6 ML-BOM per AI workload, generated at runtime, with evidence and a confidence tier on every attribute.">
+<style>
+:root{--bg:#0b0f14;--panel:#121820;--line:#1f2937;--ink:#eef2f6;--mute:#9aa6b4;--dim:#6b7684;--acc:#5ee1b2;--acc-ink:#0b0f14;--W:1280px;--H:720px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+code,pre,kbd,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+#stage{position:fixed;inset:0;overflow:hidden}
+#deck{position:absolute;left:50%;top:50%;width:var(--W);height:var(--H);transform:translate(-50%,-50%) scale(var(--s,1));transform-origin:center}
+body.notes #deck{top:0;transform:translate(-50%,0) scale(var(--s,1));transform-origin:top center}
+section.slide{position:absolute;inset:0;width:var(--W);height:var(--H);padding:72px 88px 64px;display:none;flex-direction:column;background:var(--bg)}
+section.slide.active{display:flex}
+.foot{position:absolute;left:88px;bottom:28px;font-size:13px;color:var(--dim);letter-spacing:.02em}
+.foot code{font-size:13px;color:var(--dim)}
+.kicker{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);font-weight:600;margin-bottom:22px}
+h1{font-size:64px;line-height:1.04;letter-spacing:-.025em;font-weight:700;text-wrap:balance}
+h2{font-size:46px;line-height:1.08;letter-spacing:-.02em;font-weight:700;text-wrap:balance;margin-bottom:34px}
+.lead{font-size:24px;line-height:1.4;color:var(--mute);max-width:820px;text-wrap:pretty}
+.lead strong,.body strong{color:var(--ink);font-weight:600}
+.body{font-size:20px;line-height:1.45;color:var(--mute);text-wrap:pretty}
+.grow{flex:1;min-height:0}
+.acc{color:var(--acc)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.tag{display:inline-block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:4px 9px;border-radius:5px;border:1px solid var(--line);color:var(--mute)}
+.tag.acc{border-color:var(--acc);color:var(--acc)}
+.tag.fill{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;font-size:16px;line-height:1.5;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+pre.cmd .p{color:var(--acc);user-select:none}
+pre.cmd .c{color:var(--dim)}
+/* nav chrome */
+#counter{position:fixed;right:22px;bottom:16px;font-size:12px;color:var(--dim);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+#hint{position:fixed;left:22px;bottom:16px;font-size:12px;color:var(--dim);opacity:0;transition:opacity .4s}
+body.fresh #hint{opacity:1}
+.nav{position:fixed;top:50%;transform:translateY(-50%);width:44px;height:64px;color:var(--dim);font-size:28px;border-radius:8px;opacity:.5}
+.nav:hover{opacity:1;color:var(--ink)}
+.nav:focus-visible,a:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+#prev{left:6px}#next{right:6px}
+#notes{position:fixed;left:0;right:0;bottom:0;height:var(--nh,30vh);background:#05080b;border-top:1px solid var(--line);padding:18px 32px 28px;overflow:auto;display:none;font-size:15px;line-height:1.55;color:var(--mute)}
+#notes h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin-bottom:8px}
+#notes p{margin-bottom:10px;max-width:1000px}
+body.notes #notes{display:block}
+/* slide 2 contrast */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:stretch}
+.two .col{padding:36px 40px;display:flex;flex-direction:column;gap:16px}
+.two .col h3{font-size:30px;letter-spacing:-.01em;font-weight:700}
+.two .col .body{font-size:21px}
+.two .col.hi{border-color:var(--acc)}
+.two .col .tag{align-self:flex-start}
+/* slide 3 architecture */
+.arch{display:grid;grid-template-columns:1fr 36px 1fr 36px 1fr 36px 1fr;align-items:center;gap:0;margin-top:6px}
+.arch .box{padding:22px 24px;min-height:150px;display:flex;flex-direction:column;gap:8px}
+.arch .box b{font-size:20px;font-weight:700;color:var(--ink)}
+.arch .box span{font-size:15px;color:var(--mute);line-height:1.4}
+.arch .box code{font-size:13px;color:var(--acc)}
+.arch .box.ctl{border-color:var(--acc)}
+.arch .box.dashed{border-style:dashed}
+.arch .arr{height:2px;background:var(--line);position:relative}
+.arch .arr::after{content:"";position:absolute;right:-1px;top:-5px;border:6px solid transparent;border-left-color:var(--line);border-right:0}
+.arch .stack{display:flex;flex-direction:column;gap:10px}
+.arch .stack .box{min-height:0}
+.posture{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px}
+.posture .tag{font-size:12px;padding:7px 11px}
+/* slide 4 tiers */
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.tier{padding:28px 30px;display:flex;flex-direction:column;gap:14px;min-height:300px}
+.tier .name{font-size:26px;font-weight:700}
+.tier .def{font-size:18px;color:var(--mute);line-height:1.4}
+.tier .ex{margin-top:auto;font-size:14px;line-height:1.5;color:var(--dim)}
+.tier .ex code{color:var(--ink);font-size:14px}
+.tier.v{border-color:var(--acc)}
+/* slide 5 calibrations */
+.cal{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.cal .card{padding:28px 30px;display:flex;flex-direction:column;gap:12px}
+.cal .n{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700}
+.cal .card p{font-size:19px;line-height:1.45;color:var(--mute);text-wrap:pretty}
+.cal .card p strong{color:var(--ink)}
+.cal code{font-size:17px;color:var(--ink)}
+/* slide 6 terminal */
+.term{border-radius:10px;background:#05080b;border:1px solid var(--line);overflow:hidden}
+.term .bar{height:34px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--line)}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:var(--line);display:block}
+.term .bar em{margin-left:auto;font-style:normal;font-size:12px;color:var(--dim)}
+.term pre{padding:16px 20px 18px;font-size:14.5px;line-height:1.55;color:var(--mute);overflow:hidden;white-space:pre}
+.term pre .p{color:var(--acc)}
+.term pre .h{color:var(--ink);font-weight:700}
+.term pre .ok{color:var(--acc);font-weight:700}
+.term pre .w{color:var(--ink)}
+.cmds{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.cmds .card{padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.cmds code{font-size:15px;color:var(--ink)}
+.cmds span{font-size:14px;color:var(--mute);line-height:1.4}
+/* slide 7 cost */
+.big{display:flex;gap:64px;align-items:flex-end;margin:26px 0 42px}
+.big .num{font-size:120px;line-height:.95;letter-spacing:-.04em;font-weight:700;font-variant-numeric:tabular-nums}
+.big .num small{display:block;font-size:20px;letter-spacing:.02em;color:var(--mute);font-weight:500;margin-top:12px}
+.attrib{font-size:18px;line-height:1.5;color:var(--mute);max-width:900px;border-top:1px solid var(--line);padding-top:22px}
+/* slide 8 gates */
+.gates{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:8px 0 30px}
+.gates .card{padding:20px 22px;display:flex;flex-direction:column;gap:10px}
+.gates .card i{font-style:normal;font-size:12px;letter-spacing:.12em;color:var(--acc);font-weight:700}
+.gates .card b{font-size:19px;font-weight:600}
+/* slide 9 flow */
+.flow{display:grid;grid-template-columns:1.1fr 36px 1fr 36px 1.3fr;align-items:center;margin-top:8px}
+.flow .box{padding:22px 24px;display:flex;flex-direction:column;gap:10px}
+.flow .box b{font-size:20px}
+.flow .box span{font-size:16px;color:var(--mute);line-height:1.45}
+.flow .box ul{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:16px;color:var(--mute)}
+.flow .box ul li::before{content:"— ";color:var(--acc)}
+.flow .arr{height:2px;background:var(--line);position:relative}
+.flow .arr::after{content:"";position:absolute;right:-1px;top:-5px;border:6px solid transparent;border-left-color:var(--line);border-right:0}
+.rule{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:baseline;margin-top:34px}
+.rule .tag{transform:translateY(-4px)}
+/* slide 10 */
+.start{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:40px;align-items:start;min-width:0}
+.start .steps{display:flex;flex-direction:column;gap:12px;min-width:0}
+.start .side{min-width:0}
+.start .side code{overflow-wrap:anywhere}
+.start .steps label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700;margin-bottom:-4px}
+.start .side{display:flex;flex-direction:column;gap:22px;padding-top:6px}
+.start .side h3{font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700;margin-bottom:8px}
+.start .side p{font-size:18px;line-height:1.45;color:var(--mute)}
+.close{font-size:26px;font-weight:600;letter-spacing:-.01em;margin-top:auto;padding-top:20px}
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{background:#fff;height:auto}
+  #stage{position:static;overflow:visible}
+  #deck{position:static;transform:none;width:auto;height:auto}
+  section.slide{position:relative;display:flex !important;inset:auto;page-break-after:always;break-after:page;page-break-inside:avoid;overflow:hidden}
+  section.slide:last-child{page-break-after:auto;break-after:auto}
+  #counter,#hint,.nav,#notes{display:none !important}
+  .term,pre.cmd,.card{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+
+</head>
+<body class="fresh">
+<div id="stage">
+<div id="deck" role="region" aria-label="Slides" aria-roledescription="slide deck">
+
+<section class="slide" id="s1" aria-label="Slide 1 of 10">
+  <div class="kicker">k8s-aibom · Apache-2.0 · v1.5.0</div>
+  <div class="grow" style="display:flex;flex-direction:column;justify-content:center;gap:40px">
+    <h1>Your cluster is already running models nobody registered.</h1>
+    <div class="lead" style="display:flex;flex-direction:column;gap:14px">
+      <p><strong>Shadow AI</strong> — a pulled image and a <code>--model</code> flag is all it takes to serve a model.</p>
+      <p><strong>Compliance pull</strong> — AI inventory obligations assume you can list what is actually running.</p>
+    </div>
+  </div>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s2" aria-label="Slide 2 of 10">
+  <div class="kicker">Why runtime</div>
+  <h2>Build-time BOMs record intent. This records what is actually serving.</h2>
+  <div class="two grow">
+    <div class="col card">
+      <span class="tag">Build time</span>
+      <h3>Intent</h3>
+      <p class="body">Produced in CI, from the artifact you meant to ship. Frozen at the moment of build.</p>
+      <p class="body">Blind to a hot-swapped <code>HF_MODEL_ID</code>, an edited Deployment, or a digest that was actually pulled.</p>
+    </div>
+    <div class="col card hi">
+      <span class="tag acc">Runtime · k8s-aibom</span>
+      <h3>Reality</h3>
+      <p class="body">Generated from live Kubernetes API objects: the args, env, image and digest serving right now.</p>
+      <p class="body">Every attribute carries evidence pointing at the exact spec field it came from.</p>
+    </div>
+  </div>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s3" aria-label="Slide 3 of 10">
+  <div class="kicker">What it is</div>
+  <h2>A controller that emits one CycloneDX 1.6 ML-BOM per AI workload.</h2>
+  <div class="arch grow" style="align-content:center">
+    <div class="box card ctl">
+      <b>Controller</b>
+      <span>One unprivileged Deployment in <code>k8s-aibom-system</code></span>
+      <span>Reads the Kubernetes API. Nothing else.</span>
+    </div>
+    <div class="arr" aria-hidden="true"></div>
+    <div class="box card dashed">
+      <b>Opted-in namespaces</b>
+      <span><code>aibom.k8saibom.dev/enabled=true</code></span>
+      <span>Inference, agents, RAG, training, eval — vLLM, TGI, Triton, NIM, Dynamo, Ollama, Ray Serve, SGLang, KServe</span>
+    </div>
+    <div class="arr" aria-hidden="true"></div>
+    <div class="box card">
+      <b>AIBOM CR per workload</b>
+      <span>ML-BOM stored inline, published <code>sha256</code></span>
+      <span>Byte-deterministic → GitOps-diffable</span>
+    </div>
+    <div class="arr" aria-hidden="true"></div>
+    <div class="stack">
+      <div class="box card dashed"><b>GCS</b><span>optional sink</span></div>
+      <div class="box card dashed"><b>Webhook</b><span>optional sink</span></div>
+    </div>
+  </div>
+  <div class="posture">
+    <span class="tag">No DaemonSet</span><span class="tag">No privileged container</span><span class="tag">No kernel / eBPF</span><span class="tag">No sidecars</span><span class="tag">No pod-spec changes</span><span class="tag acc">Namespace opt-in</span>
+  </div>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s4" aria-label="Slide 4 of 10">
+  <div class="kicker">Confidence model</div>
+  <h2>Every claim carries checkable evidence.</h2>
+  <div class="tiers grow" style="align-content:start">
+    <div class="tier card">
+      <span class="tag acc" style="align-self:flex-start">declared</span>
+      <div class="def">The customer wrote it into the spec.</div>
+      <div class="ex">Example: a <code>--model</code> container arg, or an <code>HF_MODEL_ID</code> env var.</div>
+    </div>
+    <div class="tier card">
+      <span class="tag" style="align-self:flex-start">inferred</span>
+      <div class="def">Derived by heuristic.</div>
+      <div class="ex">Example: runtime <code>vllm</code>, from matching the image against a pattern.</div>
+    </div>
+    <div class="tier card">
+      <span class="tag" style="align-self:flex-start">unresolved</span>
+      <div class="def">Could not be determined — and the document says so.</div>
+      <div class="ex">Example: the image digest of a pod that hasn't pulled yet.</div>
+    </div>
+  </div>
+  <p class="body" style="margin-top:28px">Each attribute ships with an <strong>evidence locator</strong> pointing at the exact spec field it came from.</p>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s5" aria-label="Slide 5 of 10">
+  <div class="kicker">New in v1.5.0</div>
+  <h2>The <span class="acc">verified</span> tier — Sigstore-backed, and deliberately calibrated.</h2>
+  <p class="body" style="margin:-14px 0 26px;max-width:980px">Model signature claims are checked against operator-configured trust roots (Sigstore public-good via TUF, self-hosted TUF mirror, or a static trusted-root file for air-gapped clusters) plus Rekor transparency-log inclusion.</p>
+  <div class="cal grow" style="align-content:start">
+    <div class="card">
+      <span class="n">Calibration A</span>
+      <p><strong><code>verified</code> requires a signer-identity constraint the workload author does not control.</strong> A claim can never upgrade itself. Under a public trust root with no identity constraints the verifier reports <code>signature-valid-unconstrained</code> and the tier stays <code>claimed</code>.</p>
+    </div>
+    <div class="card">
+      <span class="n">Calibration B</span>
+      <p><strong><code>verified</code> means a signer the operator trusts signed a statement consistent with this claim.</strong> It does <em>not</em> mean the bytes on the accelerator were hashed — the controller has no node access, by design.</p>
+    </div>
+  </div>
+  <p class="body" style="margin-top:24px">Designed in an <strong>open review window</strong>; substantively amended twice by community review from the model-signing ecosystem.</p>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s6" aria-label="Slide 6 of 10">
+  <div class="kicker">Demo · kubectl-aibom plugin</div>
+  <h2>See it from the command line.</h2>
+    <div class="term">
+    <div class="bar"><i></i><i></i><i></i><em>live output — v1.5.0 release verification, GKE, 2026-09-22</em></div>
+<pre style="font-size:12px;line-height:1.6"><span class="p">$</span> <span class="w">kubectl aibom summary -n rc-verify</span>
+<span class="h">NAMESPACE  NAME                     WORKLOAD    WORKLOAD-NAME  CATEGORY   RUNTIME  MODELS                  CONFIDENCE  SIGNED    READY</span>
+rc-verify  apps-deployment-goodsig  Deployment  goodsig        inference  vllm     pkg:npm/sigstore@1.3.0  inferred    <span class="ok">verified</span>  True
+
+<span class="p">$</span> <span class="w">kubectl aibom verify apps-deployment-goodsig -n rc-verify</span>
+published: e15230d35f8561617f94012d8782ca3cd10591d13968e0adf24e5eb555566a99
+computed:  e15230d35f8561617f94012d8782ca3cd10591d13968e0adf24e5eb555566a99
+<span class="ok">OK: document bytes match the published digest</span>
+model pkg:npm/sigstore@1.3.0: signature verified</pre>
+  </div>
+  <div class="cmds">
+    <div class="card"><code>kubectl aibom summary</code><span>Table of tracked workloads, incl. per-model SIGNED state.</span></div>
+    <div class="card"><code>kubectl aibom view &lt;name&gt;</code><span>Decoded ML-BOM for one workload.</span></div>
+    <div class="card"><code>kubectl aibom verify &lt;name&gt;</code><span>Recompute sha256 vs the published digest; non-zero exit on mismatch.</span></div>
+  </div>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s7" aria-label="Slide 7 of 10">
+  <div class="kicker">Cost</div>
+  <h2>Steady state at 1,001 tracked workloads.</h2>
+  <div class="big">
+    <div class="num">1–2<small>mCPU</small></div>
+    <div class="num">~63<small>MiB</small></div>
+  </div>
+  <p class="attrib">Measured on live GKE, dual-sampled (metrics-server and kubelet counter deltas), and independently reproduced by NVIDIA on their own cluster (NVIDIA/aicr issue #2310).</p>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s8" aria-label="Slide 8 of 10">
+  <div class="kicker">Adoption</div>
+  <h2>Qualified into NVIDIA AI Cluster Runtime — four gates, in public, one thread.</h2>
+  <p class="body" style="margin:-14px 0 26px;max-width:980px">Ships in NVIDIA AI Cluster Runtime as a qualified component since <strong>AICR v0.20</strong>. Enabled by default in exactly one stock recipe — the <strong>GKE H100 inference recipe</strong> — and available opt-in on every AICR platform.</p>
+  <div class="gates">
+    <div class="card"><i>GATE 1</i><b>Supply chain</b></div>
+    <div class="card"><i>GATE 2</i><b>Code review</b></div>
+    <div class="card"><i>GATE 3</i><b>Operational safety</b></div>
+    <div class="card"><i>GATE 4</i><b>1,000-workload regression</b></div>
+  </div>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s9" aria-label="Slide 9 of 10">
+  <div class="kicker">Where the BOM goes</div>
+  <h2>The controller emits facts. Judgments belong in consumers.</h2>
+  <div class="flow grow" style="align-content:center">
+    <div class="box card">
+      <b>AIBOM CR</b>
+      <span>Inline ML-BOM + published <code>sha256</code></span>
+      <span>Optional sinks: GCS, webhook</span>
+    </div>
+    <div class="arr" aria-hidden="true"></div>
+    <div class="box card" style="border-style:dashed">
+      <b>Relay</b>
+      <span>Documented webhook relay recipe</span>
+    </div>
+    <div class="arr" aria-hidden="true"></div>
+    <div class="box card">
+      <b>Consumers decide</b>
+      <ul>
+        <li>OWASP Dependency-Track</li>
+        <li>OpenSSF GUAC path</li>
+        <li>Kyverno / Gatekeeper policy cookbook</li>
+      </ul>
+    </div>
+  </div>
+  <p class="body" style="margin-top:20px">Outputs are designed as evidence for EU AI Act Articles 12/50 logging &amp; transparency, NIST AI RMF inventory controls, and ISO/IEC 42001 inventory clauses.</p>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+<section class="slide" id="s10" aria-label="Slide 10 of 10">
+  <div class="kicker">Get started</div>
+  <h2>Three commands to inventory.</h2>
+  <div class="start grow">
+    <div class="steps">
+      <label>1 · Install the controller</label>
+<pre class="cmd">helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version 1.5.0 --namespace k8s-aibom-system --create-namespace</pre>
+      <label>2 · Opt a namespace in</label>
+<pre class="cmd">kubectl label namespace &lt;ns&gt; aibom.k8saibom.dev/enabled=true</pre>
+      <label>3 · Install the plugin</label>
+<pre class="cmd">kubectl krew install --manifest=hack/krew/aibom.yaml</pre>
+      <p class="body" style="font-size:16px;margin-top:4px">Chart is digest-pinned; releases ship provenance and SBOM attestations.</p>
+    </div>
+    <div class="side">
+      <div><h3>Repo</h3><p><a href="https://github.com/GoogleCloudPlatform/k8s-aibom"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></a></p></div>
+      <div><h3>Roadmap</h3><p>v1.6 train: CronJob coverage, workload-kind allowlist, NIM-operator/LeaderWorkerSet scrapers under design review.</p></div>
+    </div>
+  </div>
+  <p class="close">Designed and reviewed in public — <span class="acc">contributions welcome.</span></p>
+  <div class="foot"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></div>
+</section>
+
+</div>
+</div>
+<button class="nav" id="prev" aria-label="Previous slide">‹</button>
+<button class="nav" id="next" aria-label="Next slide">›</button>
+<div id="counter" aria-live="polite"></div>
+<div id="hint">← → to navigate · add <code>?notes</code> for speaker notes</div>
+<aside id="notes" aria-label="Speaker notes"><h4>Speaker notes</h4><div id="notesBody"></div></aside>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('section.slide')),n=slides.length,cur=-1;
+  var deck=document.getElementById('deck'),counter=document.getElementById('counter'),notesBody=document.getElementById('notesBody');
+  var notesOn=/[?&]notes(=|&|$)/.test(location.search);
+  if(notesOn)document.body.classList.add('notes');
+  // collect notes from the HTML comments preceding each section
+  var notes=[];slides.forEach(function(s){var p=s.previousSibling,t='';while(p){if(p.nodeType===8&&/^\s*NOTES\s+\d+/.test(p.nodeValue)){t=p.nodeValue.replace(/^\s*NOTES\s+\d+\s*/,'');break;}if(p.nodeType===1)break;p=p.previousSibling;}notes.push(t.trim());});
+  function fit(){var W=1280,H=720,vw=innerWidth,vh=innerHeight;if(notesOn){var nh=Math.max(160,Math.round(vh*0.3));document.documentElement.style.setProperty('--nh',nh+'px');vh-=nh;}var s=Math.min(vw/W,vh/H);deck.style.setProperty('--s',s);}
+  function go(i,push){i=Math.max(0,Math.min(n-1,i));if(i===cur)return;if(cur>=0)slides[cur].classList.remove('active');cur=i;slides[cur].classList.add('active');counter.textContent=(i+1)+'/'+n;
+    if(notesOn){notesBody.innerHTML='';notes[i].split(/\n+/).forEach(function(par){if(!par.trim())return;var p=document.createElement('p');p.textContent=par.trim();notesBody.appendChild(p);});}
+    var h='#'+(i+1);if(location.hash!==h){if(push)history.pushState(null,'',h);else history.replaceState(null,'',h);}
+    document.body.classList.remove('fresh');}
+  function fromHash(){var m=location.hash.match(/^#(?:s)?(\d+)$/);return m?parseInt(m[1],10)-1:0;}
+  addEventListener('hashchange',function(){go(fromHash(),false);});
+  addEventListener('keydown',function(e){if(e.target.tagName==='A'&&e.key===' ')return;var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||k===' '||k==='Enter'){e.preventDefault();go(cur+1,true);}
+    else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'||k==='Backspace'){e.preventDefault();go(cur-1,true);}
+    else if(k==='Home'){go(0,true);}else if(k==='End'){go(n-1,true);}});
+  document.getElementById('prev').addEventListener('click',function(e){e.stopPropagation();go(cur-1,true);});
+  document.getElementById('next').addEventListener('click',function(e){e.stopPropagation();go(cur+1,true);});
+  document.getElementById('stage').addEventListener('click',function(e){if(e.target.closest('a,pre,code,button'))return;if(getSelection().toString())return;
+    go(e.clientX<innerWidth*0.25?cur-1:cur+1,true);});
+  var tx=null,ty=null;addEventListener('touchstart',function(e){var t=e.changedTouches[0];tx=t.clientX;ty=t.clientY;},{passive:true});
+  addEventListener('touchend',function(e){if(tx===null)return;var t=e.changedTouches[0],dx=t.clientX-tx,dy=t.clientY-ty;tx=ty=null;if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5)go(dx<0?cur+1:cur-1,true);},{passive:true});
+  addEventListener('resize',fit);
+  matchMedia('print').addEventListener('change',function(m){if(m.matches){slides.forEach(function(s){s.classList.add('active');});}else{slides.forEach(function(s,i){s.classList.toggle('active',i===cur);});}});
+  addEventListener('beforeprint',function(){slides.forEach(function(s){s.classList.add('active');});});
+  addEventListener('afterprint',function(){slides.forEach(function(s,i){s.classList.toggle('active',i===cur);});});
+  fit();go(fromHash(),false);
+  setTimeout(function(){document.body.classList.remove('fresh');},6000);
+})();
+</script>
+
+
+
+</body></html>
