@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/k8s-aibom
 
-go 1.26.0
+go 1.26.6
 
 require (
 	cloud.google.com/go/storage v1.62.2
