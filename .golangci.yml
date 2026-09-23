@@ -1,0 +1,19 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - gosec
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
+  exclusions:
+    rules:
+      # Test fixtures deliberately contain fake credentials (redaction
+      # tests) and variable-path file IO (golden files); gosec's
+      # production-code rules don't apply there.
+      - path: _test\.go
+        linters:
+          - gosec

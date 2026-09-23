@@ -256,7 +256,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
 			if err := r.Status().Update(ctx, &existing); err != nil {
 				if apierrors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
+					return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
 				}
 				r.recordStatusPersistFailure(&existing, req, err)
 				return ctrl.Result{}, fmt.Errorf("update AIBOM status (fast path): %w", err)
@@ -392,7 +392,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		if apierrors.IsConflict(err) {
 			// Conflict means another reconcile cycle is racing us;
 			// requeue and the next pass picks up the latest state.
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
 		}
 		r.recordStatusPersistFailure(aibom, req, err)
 		return ctrl.Result{}, fmt.Errorf("update AIBOM status: %w", err)

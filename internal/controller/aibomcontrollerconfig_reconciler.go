@@ -299,7 +299,7 @@ func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctr
 			// and the event already emitted. Log and move on.
 			if apierrors.IsConflict(err) {
 				logger.V(1).Info("status conflict; will reapply on next reconcile", "err", err.Error())
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
 			} else if !apierrors.IsNotFound(err) {
 				// NotFound means the CR was deleted between our
 				// Load and our status patch — handled on the next

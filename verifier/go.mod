@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/k8s-aibom/verifier
 
-go 1.26.0
+go 1.26.6
 
 require github.com/sigstore/sigstore-go v1.3.0
 
