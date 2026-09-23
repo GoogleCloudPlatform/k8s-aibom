@@ -1,0 +1,27 @@
+# k8s-aibom
+
+> An open-source (Apache-2.0), unprivileged Kubernetes controller that generates CycloneDX 1.6 ML-BOM documents for AI workloads at runtime — inference services, agent stacks, RAG pipelines, training jobs, and evaluation harnesses — with evidence locators and a confidence tier on every attribute.
+
+Key facts:
+
+- Detects AI workloads (vLLM, TGI, Triton, Ollama, NVIDIA NIM, Dynamo, llm-d, and others) from running pod specs; no sidecars, no DaemonSets, no privileged access, no pod mutation. Namespaces opt in via the label `aibom.k8saibom.dev/enabled=true`.
+- Every attribute carries a confidence tier: `declared` (stated by the workload), `inferred` (derived from evidence), `unresolved` (observed but unidentified), or `verified` (a signature claim verified against Sigstore trust roots and the Rekor transparency log; requires a signer-identity constraint).
+- Output is byte-deterministic CycloneDX 1.6 JSON, stored inline in an `AIBOM` custom resource with a published sha256, and optionally shipped to GCS or webhook sinks.
+- Measured cost: ~1.17 mCPU and ~63 MiB at 1,001 tracked workloads, with signature verification enabled, on live GKE.
+- Ships in NVIDIA AI Cluster Runtime as a qualified component (default-on in the stock GKE H100 inference recipe since AICR v0.20); runs on any conformant Kubernetes, with install docs for GKE, EKS, and AKS.
+- Releases are digest-pinned with provenance and SBOM attestations; the Helm chart is on ghcr.io (`oci://ghcr.io/googlecloudplatform/charts/k8s-aibom`).
+- A kubectl plugin (`kubectl aibom`) provides summary, view, and verify subcommands.
+
+## Docs
+
+- [README](https://github.com/GoogleCloudPlatform/k8s-aibom#readme): full project documentation, install, configuration
+- [Overview deck](https://googlecloudplatform.github.io/k8s-aibom/deck/): 10-slide project overview
+- [Design docs](https://github.com/GoogleCloudPlatform/k8s-aibom/tree/main/docs/design): numbered design documents, including 002 (Sigstore signature verification semantics)
+- [Versioning policy](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/VERSIONING.md): monthly release train, API stability guarantees
+- [Releases](https://github.com/GoogleCloudPlatform/k8s-aibom/releases): attested artifacts and changelogs
+
+## Integrations
+
+- [Dependency-Track recipe](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/docs/integrations/dependency-track.md): shipping ML-BOMs to Dependency-Track via the webhook sink
+- [Policy cookbook](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/docs/policy-cookbook.md): Kyverno and Gatekeeper audit-mode recipes
+- [EKS/AKS install](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/docs/install-eks-aks.md)
