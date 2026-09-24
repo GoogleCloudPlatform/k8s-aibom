@@ -76,12 +76,13 @@ For each tracked workload, the controller scrapes the workload spec and current 
 Every attribute in a k8s-aibom BOM carries a confidence flag and an evidence locator. This is the difference between a useful BOM and a misleading one.
 
 - **`declared`** — the customer wrote this into their workload spec. A `--model` container arg is declared. An `HF_MODEL_ID` set on the container is declared. A model name in a `model.k8saibom.dev/name` annotation is declared.
+- **`verified`** — a declared claim the controller cryptographically verified (since v1.5.0). A model identity whose workload-referenced [Sigstore][sigstore] / OMS signature verifies against the operator's trust roots — transparency-log inclusion checked, signer identity matching an operator-configured constraint and recorded as evidence — is verified. A claim can never upgrade itself; the binding rules are in [Design 002](docs/design/002-sigstore-rekor-verifier.md).
 - **`inferred`** — the controller derived this from a heuristic. The runtime name `vllm` derived from matching the image against `^vllm/.*` is inferred. The agent framework identified from a `langchain` import pattern in container args is inferred.
 - **`unresolved`** — the controller could not determine the value with confidence. The image digest of a pod that has not pulled yet is unresolved.
 
 For compliance reviewers, this distinction is the entire point: a BOM that says "this workload runs vLLM and serves Phi-3-mini" is dramatically more useful when the reviewer can tell at a glance which parts of that claim are the customer's own declaration versus the controller's pattern-matching inference.
 
-The v1.1 roadmap extends the confidence model with cryptographic verification — `verified` for model identities backed by a [Sigstore][sigstore] / OMS signature with a valid Rekor entry. v1.0.x releases ship with the verification interface in place but use a `NoopVerifier` that never marks anything verified, leaving signing for v1.1.
+Verification is configured via the `spec.verification` block of `AIBOMControllerConfig`: a trust root (Sigstore public-good via TUF, a self-hosted TUF mirror, or a static trusted-root file for air-gapped clusters) plus the signer-identity constraints that gate the `verified` tier. Under a trust root with no identity constraint, a valid signature is recorded as a fact (`signature-valid-unconstrained`) but never upgrades confidence.
 
 ## Compliance framework mapping
 
@@ -322,7 +323,7 @@ See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and sup
 
 ## Roadmap
 
-v1.0.0 is released — see the [CHANGELOG](CHANGELOG.md) for what shipped. Headline directions: **v1.1** brings Sigstore/OMS model-signature verification (the `verified` confidence tier) and a native GUAC sink; **v1.2–v1.3** expand scraper and registry coverage; **v2** explores eBPF-based extraction and SPDX 3.0 emission.
+Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Latest: **v1.5.0**, the trust release — Sigstore/OMS signature verification (the `verified` tier), the output sanitization guarantee, and the `kubectl aibom` plugin. Next: **v1.6** extends workload coverage (operator-managed CRD kinds, CronJob completeness, a configurable workload-kind allowlist).
 
 Full detail in [docs/roadmap.md](docs/roadmap.md).
 
@@ -332,8 +333,8 @@ k8s-aibom complements, rather than replaces, the broader AI supply-chain transpa
 
 - **[OWASP CycloneDX][cyclonedx]** defines the BOM schema. k8s-aibom emits CycloneDX 1.6 ML-BOM documents that validate against the official schema and use the project's ML-BOM extensions for model identity and runtime metadata.
 - **[OWASP AIBOM Project][owasp-aibom]** is standardizing AIBOM concepts at the framework level. k8s-aibom is a Kubernetes-runtime implementation of those concepts.
-- **[OpenSSF GUAC][guac]** aggregates and graphs supply-chain metadata. The v1.1 native GUAC sink will publish BOMs directly to GUAC's ingestion path; the v1.0 webhook sink can be pointed at a GUAC blob-storage collector for the same result with one additional hop.
-- **[Sigstore][sigstore]** provides the signing and verification infrastructure that the v1.1 `verified` confidence level depends on.
+- **[OpenSSF GUAC][guac]** aggregates and graphs supply-chain metadata. The webhook sink can be pointed at a GUAC blob-storage collector today; a native GUAC sink sits in the demand-gated backlog ([roadmap](docs/roadmap.md)).
+- **[Sigstore][sigstore]** provides the signing and verification infrastructure behind the `verified` confidence tier (shipped in v1.5.0).
 - **Build-time AIBOM tools** (AIBoMGen, OWASP AIBOM Generator, vendor tools) describe what was built. k8s-aibom describes what is running. Both are needed for full supply-chain visibility.
 
 ## Contributing

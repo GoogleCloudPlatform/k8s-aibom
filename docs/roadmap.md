@@ -19,38 +19,26 @@ docs re-baselined on dual-sampled live-GKE runs) — see the
 [CHANGELOG](../CHANGELOG.md) for details and the qualification record
 on [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8).
 The weekly Kubernetes version matrix backing the compatibility range
-also shipped (with v1.3.0).
+also shipped (with v1.3.0). **v1.5.0 — the trust release — shipped
+2026-09-22**: Sigstore/OMS signature verification (the `verified`
+tier, [Design 002](design/002-sigstore-rekor-verifier.md), two rounds
+of external review), the output sanitization guarantee, the
+`kubectl aibom` plugin, and the non-default-configuration e2e matrix.
 
-## Next — v1.5.0, the trust release ([milestone 1](https://github.com/GoogleCloudPlatform/k8s-aibom/milestone/1))
+## Next — v1.6, the coverage release
 
-- **Sigstore / OMS signature verification** for model identities (the
-  `verified` confidence tier) — [Design 002](design/002-sigstore-rekor-verifier.md)
-  is in open review (#55; two rounds of external review already
-  incorporated). Key properties: model artifacts only; nested Go
-  module on upstream sigstore-go; configurable trust roots
-  (public / TUF mirror / static bundle); `verified` requires an
-  operator-configured signer-identity constraint — under a public
-  trust root with no identity constraints the tier is unattainable by
-  design; verification outcomes are facts and never fail a reconcile
-  (#56).
-- **Output sanitization guarantee** — audit-backed invariant that no
-  credential material appears in emitted documents, with a redaction
-  pass at the BOM-build boundary (#57).
-- **`kubectl aibom` plugin** — view / summary / verify, so reading and
-  hash-checking a BOM is one command (#58).
-- **e2e matrix for non-default configurations** — strict readiness,
-  sinks under real RBAC, verification enabled (#59).
-
-## v1.6 train (following)
-
+- **CRD workload scrapers: NIMService, LeaderWorkerSet, Dynamo** —
+  [Design 003](design/003-nimservice-lws-scrapers.md) is in open
+  review (window closes 2026-10-01).
 - **Complete CronJob coverage** — wire the watcher and RBAC for the
   existing CronJob scraper path.
 - **Configurable workload-kind allowlist** via the
   `AIBOMControllerConfig` CR — with a short design note first: if the
   allowlist narrows what the informers watch (not only what is
   reported), it directly reduces the controller's read surface.
-- **Remaining CI hardening** — `govulncheck` and image scanning as
-  required jobs; grouped Dependabot updates.
+- **Remaining CI hardening** — `golangci-lint` (with `gosec`) and
+  `govulncheck` landed as required jobs after v1.5.0; remaining: image
+  scanning as a required job and grouped Dependabot updates.
 
 ## Later
 
@@ -75,12 +63,19 @@ announced release outside 1.x (VERSIONING.md).
 
 ## v2 — Phase 2 capability tier
 
-- eBPF-based scraper for higher-fidelity attribute extraction:
-  in-container model load events, egress destination capture, runtime
-  version verification against running processes.
 - Native SPDX 3.0 AI profile emission alongside CycloneDX.
 - Service mesh telemetry integration (Istio / Linkerd / Cilium) for
   network posture in the BOM.
 - Upstream CycloneDX profile contribution — a "Kubernetes runtime ML-BOM
   profile" codifying the conventions developed in v1.x as a CycloneDX
   upstream specification.
+
+## Out of scope — permanently
+
+The controller's unprivileged posture is identity, not a phase: no
+DaemonSets, no privileged containers, no kernel-level access
+(including eBPF), no sidecars, no pod-spec mutation. Extraction ideas
+that would require kernel access do not belong on this roadmap. If
+such fidelity is ever warranted, it would be a separate, explicitly
+opt-in component with its own threat model — not an evolution of this
+controller.
