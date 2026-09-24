@@ -283,6 +283,14 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/ai-dynamo/epp-image:1.4.0", ""},
 		{"nvcr.io/nvidia/cloud-native/k8s-nim-operator:2.0.0", ""},
 		{"nvcr.io/nimble/foo:1.0", ""}, // nim/ org only, not nim-prefixed orgs
+
+		// LiteLLM gateway — publisher's own GHCR org, all image
+		// variants; near-miss orgs must not match.
+		{"ghcr.io/berriai/litellm:main-v1.81.0", "litellm"},
+		{"ghcr.io/berriai/litellm-database:main-v1.81.0", "litellm"},
+		{"ghcr.io/berriai/litellm-non_root:main-v1.81.0", "litellm"},
+		{"ghcr.io/berriai-forks/litellm:1.0", ""},
+		{"docker.io/berriai/litellm:main", ""}, // ghcr only: the publisher's canonical registry
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {

@@ -6,6 +6,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Runtime detection for LiteLLM (`ghcr.io/berriai/litellm*`), the
+  widely deployed LLM gateway. Demand signal: the litellm 1.82.8
+  supply-chain incident (BerriAI/litellm#24512), where the first
+  incident-response question — "where is this running?" — requires
+  runtime attribution. A new docs page,
+  `docs/incident-response.md`, documents that workflow.
+
 ## [1.5.0] - 2026-09-22
 
 The trust release: the `verified` confidence tier the README has
