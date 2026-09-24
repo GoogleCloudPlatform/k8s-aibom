@@ -1,4 +1,4 @@
-# Design 003: Native scrapers for NIMService and LeaderWorkerSet
+# Design 003: Native CRD scrapers — Dynamo, NIMService, LeaderWorkerSet
 
 Status: Draft; amended 2026-09-17 after AICR-maintainer review on the
 PR — priority re-ranked (Dynamo CRDs promoted above NIMService on
@@ -26,6 +26,16 @@ backlog rule.
   `InferenceService` scraper is the in-repo precedent for CRD-declared
   extraction: unstructured access, no Go dependency on the external
   project, declared-tier confidence for fields the customer wrote.
+- `DynamoGraphDeployment` (`nvidia.com/v1beta1`, ai-dynamo/dynamo
+  operator; `v1alpha1` also served, with conversion) declares an
+  inference graph as typed components. Schema facts (scoped
+  2026-09-24 against the operator's `v1beta1` types): a validated
+  `spec.backendFramework` enum (`vllm|sglang|trtllm`); per-component
+  `modelRef {name, revision}`; a component `type` enum
+  (`frontend|worker|prefill|decode|planner|epp`); and a full
+  `PodTemplateSpec` per component. Components materialize as child
+  `DynamoComponentDeployment` CRs, which in turn create Deployments,
+  LeaderWorkerSets, or Grove resources depending on topology.
 - `LeaderWorkerSet` (`leaderworkerset.x-k8s.io/v1`, kubernetes-sigs/lws)
   is the emerging primitive for multi-node inference (vLLM/SGLang
   multi-host serving). Its `leaderTemplate` and `workerTemplate` are
@@ -43,7 +53,8 @@ backlog rule.
 
 ## Goal
 
-One AIBOM per NIMService and per LeaderWorkerSet, carrying
+One AIBOM per DynamoGraphDeployment, per NIMService, and per
+LeaderWorkerSet, carrying
 declared-tier facts from the CR spec where the customer wrote them,
 inferred-tier facts where derived, and no duplicate AIBOMs for
 workloads those CRs own.
@@ -51,14 +62,14 @@ workloads those CRs own.
 ## Non-goals
 
 1. **No NeMo CRDs** (NemoCustomizer, NemoGuardrails, …) in this
-   design. **Dynamo CRDs (DynamoGraphDeployment) are promoted**: AICR
-   review ranked them ABOVE NIMService (dynamo-platform in 15 of
-   their recipes vs 4 for the NIM operator, and both stock recipes
-   shipping k8s-aibom include a Dynamo lane, no NIM lane). A Dynamo
-   extraction section will be added to this design within the review
-   window once the DynamoGraphDeployment schema is scoped; note the
-   Dynamo caveat from the same review — Dynamo images carry no model
-   identity, so declared sources matter even more there.
+   design. **Dynamo CRDs are in** (Decision §4, added in-window
+   2026-09-24 as committed): AICR review ranked them ABOVE NIMService
+   (dynamo-platform in 15 of their recipes vs 4 for the NIM operator,
+   and both stock recipes shipping k8s-aibom include a Dynamo lane,
+   no NIM lane) — implementation order follows that ranking, not the
+   section numbering. The Dynamo caveat from the same review (Dynamo
+   images carry no model identity, so declared sources matter even
+   more) is binding on §4's extraction rules.
 2. **No operator-infrastructure images as runtimes.** The v1.4.0
    guard cases stand: k8s-nim-operator's own controller images are
    infrastructure, not serving runtimes.
@@ -110,6 +121,48 @@ workload is reported as today — coverage never regresses by adding
 this rule. Suppressed-owned-workload identities are recorded as
 properties on the owner's AIBOM so nothing silently disappears.
 
+### 4. DynamoGraphDeployment scraper (added in-window, 2026-09-24)
+
+Scoped against `ai-dynamo/dynamo` `deploy/operator/api/v1beta1`.
+
+- Watch `DynamoGraphDeployment` (`nvidia.com/v1beta1`); RBAC adds
+  get/list/watch on `dynamographdeployments.nvidia.com` and
+  `dynamocomponentdeployments.nvidia.com`.
+- One AIBOM per DGD, keyed to the DGD UID. Extraction map:
+  - `spec.backendFramework` (validated enum `vllm|sglang|trtllm`) →
+    serving runtime, **declared** — the customer wrote it and the API
+    server enforced the vocabulary. Per-component pod-template
+    extraction remains the digest source and the inferred fallback.
+  - `spec.components[i].modelRef.{name,revision}` → model identity,
+    **declared**, attributed to the component that carries it.
+    Honoring the AICR-review caveat: Dynamo runtime images carry no
+    model identity, so there is NO image-path model derivation for
+    Dynamo — absent `modelRef` and declared env, the model stays
+    `unresolved`. Conservative-detection rule, applied strictly.
+  - `spec.components[i].type`
+    (`frontend|worker|prefill|decode|planner|epp`) → recorded as
+    component-role properties (graph topology is an auditable fact);
+    model attribution follows wherever `modelRef`/env actually sit
+    (typically worker/prefill/decode). Roles never imply models.
+  - `spec.components[i].podTemplate` is a full `PodTemplateSpec` —
+    the existing inference extraction applies unchanged (args, env
+    allowlist including the v1.5.0 `NIM_*` names, images); evidence
+    locators are prefixed `spec.components[i].podTemplate…`.
+- The §3 roll-up applies unchanged and is materialization-agnostic:
+  DGD → `DynamoComponentDeployment` → (Deployment | LeaderWorkerSet |
+  Grove resources) → Pods all roll up to the DGD's AIBOM via
+  `ownerReferences`, whatever the operator chose to create. AICR's
+  multi-node path (DGD → Grove) and the LWS path are therefore the
+  same case. A `DynamoComponentDeployment` created standalone (no DGD
+  parent) is tracked as its own root with the same extraction map —
+  the fields above live on the shared component spec.
+- Version skew: the extraction map is defined against `v1beta1`.
+  Clusters serving only `v1alpha1` are read through the dynamic
+  client as today; fields absent at runtime degrade per the standard
+  rules (that fact `unresolved` or omitted, never a failed
+  reconcile). Whether `v1alpha1` warrants its own fixtures is Open
+  Question 4.
+
 ## Degradation
 
 Unchanged philosophy: absent CRDs mean the kind is not watched;
@@ -122,9 +175,14 @@ nothing here can fail another workload's reconcile.
   fixtures with runtime signal in leader-only, worker-only, and both
   templates; roll-up fixtures (LWS→StatefulSet, CronJob→Job, and the
   untracked-owner fallback).
-- e2e (kind): both CRDs installed as test-only fixtures (the KServe
-  suite pattern), one live CR each. No GPU required — extraction is
-  spec-level.
+- Unit (Dynamo): one fixture per §4 extraction row — per-component
+  `modelRef` attribution, the `backendFramework` enum, role
+  recording, the no-image-derivation rule (Dynamo image + no
+  declarations → model `unresolved`), and roll-up
+  (DGD→DynamoComponentDeployment→Deployment, plus standalone DCD).
+- e2e (kind): all three CRD sets installed as test-only fixtures (the
+  KServe suite pattern), one live CR each. No GPU required —
+  extraction is spec-level.
 
 ## Rollout
 
@@ -149,3 +207,7 @@ is later.
    the image path fills in only when nothing is declared. (The env
    names themselves ship earlier, in v1.5.0 — a mechanical allowlist
    addition prompted by the same review.)
+4. **Dynamo `v1alpha1`:** is a `v1alpha1` fixture set worth carrying,
+   or is `v1beta1`-only acceptable for the v1.6 train given the
+   operator versions AICR actually ships? (The scraper degrades
+   gracefully either way; this only decides test surface.)
