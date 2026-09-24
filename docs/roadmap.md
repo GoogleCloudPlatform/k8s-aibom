@@ -63,12 +63,19 @@ announced release outside 1.x (VERSIONING.md).
 
 ## v2 — Phase 2 capability tier
 
-- eBPF-based scraper for higher-fidelity attribute extraction:
-  in-container model load events, egress destination capture, runtime
-  version verification against running processes.
 - Native SPDX 3.0 AI profile emission alongside CycloneDX.
 - Service mesh telemetry integration (Istio / Linkerd / Cilium) for
   network posture in the BOM.
 - Upstream CycloneDX profile contribution — a "Kubernetes runtime ML-BOM
   profile" codifying the conventions developed in v1.x as a CycloneDX
   upstream specification.
+
+## Out of scope — permanently
+
+The controller's unprivileged posture is identity, not a phase: no
+DaemonSets, no privileged containers, no kernel-level access
+(including eBPF), no sidecars, no pod-spec mutation. Extraction ideas
+that would require kernel access do not belong on this roadmap. If
+such fidelity is ever warranted, it would be a separate, explicitly
+opt-in component with its own threat model — not an evolution of this
+controller.
