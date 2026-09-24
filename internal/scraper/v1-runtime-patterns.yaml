@@ -94,6 +94,18 @@ runtimeImagePatterns:
   - runtime: tensorrt-llm
     pattern: '^nvcr\.io/nvidia/ai-dynamo/tensorrtllm-runtime.*'
 
+  # LiteLLM — the widely deployed LLM gateway/proxy (OpenAI-compatible
+  # front door to many providers). ghcr.io/berriai/ is the publisher's
+  # own org and publishes only LiteLLM images (litellm,
+  # litellm-database, litellm-non_root), so the prefix cannot capture
+  # unrelated images. In the serving path, so it attributes as a
+  # runtime; demand signal: the litellm 1.82.8 PyPI supply-chain
+  # incident (BerriAI/litellm#24512), where the fleet-wide question
+  # was "where is litellm running?" — unanswerable without runtime
+  # attribution.
+  - runtime: litellm
+    pattern: '^ghcr\.io/berriai/litellm.*'
+
   # TensorRT-LLM appears in two forms: under Triton
   # (`nvcr.io/nvidia/tritonserver:*-trtllm-*`, covered by the triton
   # pattern) and standalone under Dynamo (`tensorrtllm-runtime` above).
