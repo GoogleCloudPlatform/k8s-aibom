@@ -7,6 +7,7 @@ A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] docu
 [![Static Analysis](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/GoogleCloudPlatform/k8s-aibom/actions/workflows/static-analysis.yml)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/k8s-aibom)](https://artifacthub.io/packages/helm/k8s-aibom/k8s-aibom)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/GoogleCloudPlatform/k8s-aibom/badge)](https://scorecard.dev/viewer/?uri=github.com/GoogleCloudPlatform/k8s-aibom)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14779/badge)](https://www.bestpractices.dev/projects/14779)
 
 **New to the project?** The [overview deck](https://googlecloudplatform.github.io/k8s-aibom/deck/) covers what it does, the confidence model, signature verification, and measured cost in 10 slides ([PDF](https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.5.0/k8s-aibom-v1.5.0-deck.pdf) on the release).
 
