@@ -335,7 +335,7 @@ model pkg:npm/sigstore@1.3.0: signature verified</pre>
       <label>2 · Opt a namespace in</label>
 <pre class="cmd">kubectl label namespace &lt;ns&gt; aibom.k8saibom.dev/enabled=true</pre>
       <label>3 · Install the plugin</label>
-<pre class="cmd">kubectl krew install --manifest=hack/krew/aibom.yaml</pre>
+<pre class="cmd">kubectl krew install aibom</pre>
       <p class="body" style="font-size:16px;margin-top:4px">Chart is digest-pinned; releases ship provenance and SBOM attestations.</p>
     </div>
     <div class="side">

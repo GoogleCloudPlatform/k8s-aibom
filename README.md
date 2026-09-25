@@ -126,14 +126,14 @@ Always install from a release asset; the `install.yaml` at the repo root is a de
 `kubectl-aibom` turns the decode/verify walkthrough below into single commands:
 
 ```bash
-go install github.com/GoogleCloudPlatform/k8s-aibom/cmd/kubectl-aibom@latest   # binary lands on PATH as kubectl-aibom
+kubectl krew install aibom   # or: go install github.com/GoogleCloudPlatform/k8s-aibom/cmd/kubectl-aibom@latest
 
 kubectl aibom summary -n prod-jobs        # table: workload, category, runtime, models, confidence, Ready
 kubectl aibom view <aibom-name> -n prod-jobs        # decoded, pretty-printed BOM (--raw for canonical bytes)
 kubectl aibom verify <aibom-name> -n prod-jobs      # recompute sha256 vs the published digest; non-zero exit on mismatch
 ```
 
-`verify` gains a signature mode when the Sigstore verifier ships (Design 002). Krew distribution is planned alongside.
+`summary` includes per-model signature state, and `verify` prints signature facts (since v1.5.0, Design 002). The plugin is distributed via [krew](https://krew.sigs.k8s.io/) as `aibom`, with attested binaries on each release.
 
 ### Verify the supply chain (optional)
 

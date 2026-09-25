@@ -71,7 +71,10 @@ commit:
 
 ## Plugin distribution (after publishing)
 
+0. The plugin is live on krew-index (`kubectl krew install aibom`,
+   since 2026-09-25); each release updates the existing
+   `plugins/aibom.yaml` there rather than adding a new file.
 1. Fill `hack/krew/aibom.yaml` version + sha256 fields from
    `kubectl-aibom_checksums.txt` on the release.
 2. Validate locally: `kubectl krew install --manifest=hack/krew/aibom.yaml`.
-3. PR the manifest to kubernetes-sigs/krew-index (plugin name `aibom`).
+3. PR the updated manifest over kubernetes-sigs/krew-index `plugins/aibom.yaml` (version-bump PRs are lightly reviewed; consider krew-release-bot to automate this step).
