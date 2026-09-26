@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -262,6 +263,16 @@ func validateSinkShapes(sinks []aibomv1beta1.SinkConfig) []LoadError {
 			}
 			if s.GCS != nil {
 				errs = append(errs, errSinkExtraTypeBody(s.Name, string(s.Type), "gcs"))
+			}
+			// A credential must never travel over cleartext: http://
+			// plus any Auth is a configuration error, caught here at
+			// load time rather than leaked at first emit. Plain http
+			// WITHOUT auth stays legal (in-cluster receivers), so
+			// this breaks nobody who is not currently leaking a
+			// credential.
+			if s.Webhook != nil && s.Webhook.Auth != nil &&
+				strings.HasPrefix(strings.ToLower(strings.TrimSpace(s.Webhook.Endpoint)), "http://") {
+				errs = append(errs, errWebhookAuthOverCleartext(s.Name))
 			}
 		default:
 			// CRD enum should prevent this. Defensive in case the

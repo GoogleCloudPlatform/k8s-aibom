@@ -101,9 +101,9 @@ func (r *StatefulSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	})
 }
 
-// listOwnedPods returns pods in the StatefulSet's namespace matching
-// the StatefulSet's selector. Same pattern as
-// DeploymentReconciler.listOwnedPods.
+// listOwnedPods returns the pods owned by this StatefulSet: selector
+// match narrows, the direct controller ownerReference decides
+// membership (see pod_ownership.go).
 func (r *StatefulSetReconciler) listOwnedPods(ctx context.Context, ss *appsv1.StatefulSet) ([]corev1.Pod, error) {
 	if ss.Spec.Selector == nil {
 		return nil, nil
@@ -118,7 +118,7 @@ func (r *StatefulSetReconciler) listOwnedPods(ctx context.Context, ss *appsv1.St
 	); err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
-	return pods.Items, nil
+	return filterPodsOwnedBy(pods.Items, singleOwner(ss.UID)), nil
 }
 
 // SetupWithManager registers this reconciler with the controller-runtime

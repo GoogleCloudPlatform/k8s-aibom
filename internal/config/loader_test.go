@@ -593,3 +593,67 @@ func labelSet(s string) labels.Set {
 	}
 	return labels.Set{parts[0]: parts[1]}
 }
+
+// TestLoad_InvalidCR_WebhookAuthOverCleartext locks the G0.2 rule: a
+// webhook sink configuring any Auth with an http:// endpoint is a
+// load-time error — credentials never travel over cleartext. Plain
+// http WITHOUT auth stays legal (in-cluster receivers), and https
+// with auth is the intended shape.
+func TestLoad_InvalidCR_WebhookAuthOverCleartext(t *testing.T) {
+	mkCR := func(endpoint string, auth *aibomv1beta1.WebhookAuth) *aibomv1beta1.AIBOMControllerConfig {
+		return &aibomv1beta1.AIBOMControllerConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName},
+			Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+				Sinks: []aibomv1beta1.SinkConfig{{
+					Name: "audit-webhook",
+					Type: aibomv1beta1.SinkTypeWebhook,
+					Webhook: &aibomv1beta1.WebhookSinkSpec{
+						Endpoint: endpoint,
+						Auth:     auth,
+					},
+				}},
+			},
+		}
+	}
+	bearer := &aibomv1beta1.WebhookAuth{
+		BearerToken: &aibomv1beta1.BearerTokenAuth{
+			SecretRef: aibomv1beta1.SecretKeyRef{Name: "tok", Key: "token"},
+		},
+	}
+
+	// http + auth: rejected, all-or-nothing fallback to defaults.
+	l := newLoader(t, nil, mkCR("http://collector.internal/bom", bearer))
+	result, err := l.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load returned Go error: %v", err)
+	}
+	if result.Snapshot.Source != SourceCompiledDefaults {
+		t.Errorf("Source = %q, want compiled defaults on cleartext-credential config", result.Snapshot.Source)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("Errors = %d, want 1: %+v", len(result.Errors), result.Errors)
+	}
+	got := result.Errors[0]
+	if got.Field != "spec.sinks[name=audit-webhook].webhook.url" {
+		t.Errorf("Field = %q", got.Field)
+	}
+	for _, sub := range []string{`"audit-webhook"`, "cleartext", "https://", "remove auth"} {
+		if !strings.Contains(got.Message, sub) {
+			t.Errorf("Message missing %q.\nGot: %q", sub, got.Message)
+		}
+	}
+
+	// http WITHOUT auth: legal.
+	l = newLoader(t, nil, mkCR("http://collector.internal/bom", nil))
+	result, err = l.Load(context.Background())
+	if err != nil || len(result.Errors) != 0 {
+		t.Errorf("http without auth must load cleanly: err=%v errors=%+v", err, result.Errors)
+	}
+
+	// https WITH auth: legal.
+	l = newLoader(t, nil, mkCR("https://collector.internal/bom", bearer))
+	result, err = l.Load(context.Background())
+	if err != nil || len(result.Errors) != 0 {
+		t.Errorf("https with auth must load cleanly: err=%v errors=%+v", err, result.Errors)
+	}
+}

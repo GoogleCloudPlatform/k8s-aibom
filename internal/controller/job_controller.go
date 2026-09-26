@@ -103,7 +103,9 @@ func (r *JobReconciler) listOwnedPods(ctx context.Context, job *batchv1.Job) ([]
 	); err != nil {
 		return nil, err
 	}
-	return pods.Items, nil
+	// Direct controller ownership decides membership; selector match
+	// alone is insufficient (see pod_ownership.go).
+	return filterPodsOwnedBy(pods.Items, singleOwner(job.UID)), nil
 }
 
 func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {

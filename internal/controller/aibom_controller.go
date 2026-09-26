@@ -139,11 +139,12 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	})
 }
 
-// listOwnedPods returns pods in the Deployment's namespace that match
-// the Deployment's selector. The match is selector-based, not strictly
-// owner-reference-based, because the Deployment owns Pods transitively
-// via ReplicaSet — but selector match is what the BOM cares about
-// (running pods with the right container names).
+// listOwnedPods returns the pods owned by this Deployment: selector
+// match narrows the candidate list, and the controller ownerReference
+// chain (Pod → ReplicaSet → Deployment) decides membership. Selector
+// match alone is NOT sufficient — overlapping selectors in one
+// namespace would let one workload's pods (or a tenant's planted pod)
+// contaminate another workload's digests (see pod_ownership.go).
 func (r *DeploymentReconciler) listOwnedPods(ctx context.Context, dep *appsv1.Deployment) ([]corev1.Pod, error) {
 	if dep.Spec.Selector == nil {
 		return nil, nil
@@ -158,7 +159,11 @@ func (r *DeploymentReconciler) listOwnedPods(ctx context.Context, dep *appsv1.De
 	); err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
-	return pods.Items, nil
+	owners, err := replicaSetOwnerUIDs(ctx, r.Client, dep)
+	if err != nil {
+		return nil, err
+	}
+	return filterPodsOwnedBy(pods.Items, owners), nil
 }
 
 // AIBOMNameForDeployment returns the canonical AIBOM resource name for a

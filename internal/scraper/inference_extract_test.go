@@ -206,6 +206,43 @@ func TestResolveContainerDigest_PodStatusReflectsRunningNotSpec(t *testing.T) {
 	}
 }
 
+func TestResolveContainerDigest_ForeignImageNameNeverSuppliesDigest(t *testing.T) {
+	// A same-named container running a DIFFERENT image must never
+	// supply this component's digest — the mis-attribution guard.
+	foreign := "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+	own := "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+	pods := []corev1.Pod{
+		{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "server", Image: "other/imposter:v1", ImageID: "other/imposter@" + foreign},
+		}}},
+		{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "server", Image: "vllm/vllm-openai:v0.6.3", ImageID: "vllm/vllm-openai@" + own},
+		}}},
+	}
+	d, srcE := resolveContainerDigest("vllm/vllm-openai:v0.6.3", "server", pods, false)
+	if d != own || srcE != SourcePodStatus {
+		t.Errorf("got (%q,%q), want own digest from the matching image", d, srcE)
+	}
+	// Only the foreign pod present: stay unresolved rather than borrow.
+	d, srcE = resolveContainerDigest("vllm/vllm-openai:v0.6.3", "server", pods[:1], false)
+	if d != "" || srcE != "" {
+		t.Errorf("foreign-only candidates must stay unresolved, got (%q,%q)", d, srcE)
+	}
+}
+
+func TestResolveContainerDigest_DockerHubNormalization(t *testing.T) {
+	// Kubelets commonly report the docker.io-qualified form of a Docker
+	// Hub image; the guard must treat it as the same name as the spec.
+	dg := "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+	pods := []corev1.Pod{{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+		{Name: "vllm", Image: "docker.io/vllm/vllm-openai:v0.6.3", ImageID: "docker.io/vllm/vllm-openai@" + dg},
+	}}}}
+	d, srcE := resolveContainerDigest("vllm/vllm-openai:v0.6.3", "vllm", pods, false)
+	if d != dg || srcE != SourcePodStatus {
+		t.Errorf("docker.io-qualified status image must match unqualified spec: got (%q,%q)", d, srcE)
+	}
+}
+
 func TestResolveContainerDigest_MalformedPodStatusImageIDStaysUnresolved(t *testing.T) {
 	// If a pod-status imageID is malformed (truncated, mis-encoded by a
 	// custom CRI), the scraper treats it as "no digest" rather than

@@ -141,7 +141,8 @@ func parseImageDigest(imageID string) string {
 // init=true selects initContainerStatuses on pods; init=false selects
 // containerStatuses.
 func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, init bool) (digest string, source EvidenceSource) {
-	if _, _, d := parseImageRef(specImage); d != "" {
+	specName, _, d := parseImageRef(specImage)
+	if d != "" {
 		return d, SourceImageReference
 	}
 	for _, pod := range pods {
@@ -153,12 +154,44 @@ func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, 
 			if cs.Name != containerName {
 				continue
 			}
+			// Belt-and-braces against mis-attribution: the candidate
+			// must be running the same image name the workload spec
+			// declares. Container-name equality alone is not identity
+			// — a same-named container from another image must never
+			// supply this component's digest. Tag differences are
+			// allowed (a rollout reports the running digest); name
+			// differences are disqualifying. An empty status image is
+			// treated as name-unknown and permitted: ownership
+			// filtering upstream is the primary guard, and real
+			// kubelets always populate it.
+			if cs.Image != "" {
+				csName, _, _ := parseImageRef(cs.Image)
+				if normalizeImageName(csName) != normalizeImageName(specName) {
+					continue
+				}
+			}
 			if d := parseImageDigest(cs.ImageID); d != "" {
 				return d, SourcePodStatus
 			}
 		}
 	}
 	return "", ""
+}
+
+// normalizeImageName equates the forms a registry-default image name
+// takes between a workload spec and a kubelet-reported container
+// status: "docker.io/" and "index.docker.io/" prefixes are dropped,
+// then a "library/" prefix is dropped. "vllm/vllm-openai",
+// "docker.io/vllm/vllm-openai" and "index.docker.io/vllm/vllm-openai"
+// compare equal; nothing else is rewritten.
+func normalizeImageName(name string) string {
+	for _, p := range []string{"index.docker.io/", "docker.io/"} {
+		if strings.HasPrefix(name, p) {
+			name = strings.TrimPrefix(name, p)
+			break
+		}
+	}
+	return strings.TrimPrefix(name, "library/")
 }
 
 // extractContainerComponent produces a container-class Component for a

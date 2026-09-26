@@ -4,7 +4,34 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
-## [Unreleased]
+## [1.5.1] - 2026-09-29 (security PATCH)
+
+### Fixed
+
+- **Pod attribution is now ownership-based, not selector-based**
+  (Deployment, StatefulSet, DaemonSet, Job). Previously, two
+  same-namespace workloads with overlapping selectors and a shared
+  container name could cross-contaminate image digests in each
+  other's BOMs, and a principal with pod-create permission in an
+  opted-in namespace could plant a chosen digest in another
+  workload's record. Digests now enter a BOM only from pods tied to
+  the workload through the controller ownerReference chain
+  (Deployment → ReplicaSet → Pod walked explicitly), with a
+  belt-and-braces image-name match on the candidate's container
+  status. Pods with no controller owner never contribute. Found by
+  internal review; regression-tested end to end.
+- **Webhook sinks reject credentials over cleartext at config load.**
+  An `http://` endpoint combined with any `auth` configuration is now
+  a load-time validation error (all-or-nothing fallback, named
+  LoadError). Plain http without auth remains legal for in-cluster
+  receivers; https with auth is unchanged.
+
+### Notes
+
+- Source delta over v1.5.0 is exactly the two fixes above (release
+  cut from `release/1.5`, not from main). The published image is
+  additionally rebuilt with the current Go 1.26.x toolchain, which
+  incorporates the September Go standard-library security fixes.
 
 ## [1.5.0] - 2026-09-22
 

@@ -114,7 +114,9 @@ func (r *DaemonSetReconciler) listOwnedPods(ctx context.Context, ds *appsv1.Daem
 	); err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
-	return pods.Items, nil
+	// Direct controller ownership decides membership; selector match
+	// alone is insufficient (see pod_ownership.go).
+	return filterPodsOwnedBy(pods.Items, singleOwner(ds.UID)), nil
 }
 
 // SetupWithManager registers this reconciler with the controller-runtime
