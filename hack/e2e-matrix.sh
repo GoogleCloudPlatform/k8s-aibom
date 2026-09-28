@@ -100,7 +100,15 @@ wait_for 120 "pod Ready after config fix" pod_ready True
 log "LEG A passed"
 
 # ---------------------------------------------------------------------------
-log "LEG B: webhook sink with bearer-token Secret under real RBAC"
+log "LEG B: cleartext-credential rejection + webhook sink delivery under real RBAC"
+# ---------------------------------------------------------------------------
+# Two assertions since v1.5.1:
+#  B1: bearer token + http:// endpoint is REJECTED at config load (the
+#      G0.1/G0.2 patch's cleartext rule, verified live).
+#  B2: delivery works over http WITHOUT auth (in-cluster receiver).
+# Bearer-token delivery over TLS returns to this leg when the CRD
+# gains a CA option for bearer auth (issue #96) — the echo image
+# already serves https on 8443 for that day.
 # ---------------------------------------------------------------------------
 kubectl -n "$NS_SYS" apply -f - >/dev/null <<'EOF'
 apiVersion: v1
@@ -135,6 +143,9 @@ spec:
 EOF
 kubectl -n "$NS_SYS" rollout status deploy/echo-sink --timeout=120s >/dev/null
 
+# B1: http + bearer must be rejected at load: the config CR goes
+# Ready=False naming the cleartext rule, and the controller falls
+# back all-or-nothing (no partial sink).
 helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --set rbac.sinkSecretAccess=true \
   --set 'config.sinks[0].name=echo' \
@@ -142,6 +153,16 @@ helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --set 'config.sinks[0].webhook.endpoint=http://echo-sink.k8s-aibom-system.svc/bom' \
   --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.name=sink-token' \
   --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.key=token' \
+  --wait --timeout 2m >/dev/null
+wait_for 60 "config rejected: credentials over cleartext" \
+  bash -c 'kubectl get aibomcontrollerconfig default -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].message}" 2>/dev/null | grep -qi cleartext'
+
+# B2: same endpoint, no auth — legal, and delivery must work.
+helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
+  --set rbac.sinkSecretAccess=true \
+  --set 'config.sinks[0].name=echo' \
+  --set 'config.sinks[0].type=Webhook' \
+  --set 'config.sinks[0].webhook.endpoint=http://echo-sink.k8s-aibom-system.svc/bom' \
   --wait --timeout 2m >/dev/null
 wait_for 60 "pod Ready with sink configured" pod_ready True
 
@@ -190,9 +211,6 @@ if ! try_wait 90 "SinkFailed=False under RBAC-gated Secret sink" \
   echo "--- controller logs (sink-related) ---" >&2
   kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=120 | grep -iE "sink|secret|webhook|forbidden" >&2 || true
   fail "SinkFailed never reached False"
-fi
-if kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=200 | grep -qi "secrets .* forbidden"; then
-  fail "forbidden Secret access in controller logs"
 fi
 log "LEG B passed"
 
