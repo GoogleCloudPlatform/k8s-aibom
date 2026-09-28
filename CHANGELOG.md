@@ -4,7 +4,7 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
-## [1.5.1] - 2026-09-29 (security PATCH)
+## [1.5.1] - 2026-09-28 (security PATCH)
 
 ### Fixed
 
