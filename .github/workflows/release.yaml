@@ -33,6 +33,10 @@ on:
     tags:
       - 'v*'
 
+# Default token scope for every job; jobs that need more declare it.
+permissions:
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-latest

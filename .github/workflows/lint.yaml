@@ -23,6 +23,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Default token scope for every job; jobs that need more declare it.
+permissions:
+  contents: read
+
 jobs:
 
 

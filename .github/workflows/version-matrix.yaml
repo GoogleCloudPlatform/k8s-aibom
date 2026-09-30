@@ -28,6 +28,10 @@ on:
     - cron: '0 6 * * 1'   # Mondays 06:00 UTC
   workflow_dispatch: {}
 
+# Default token scope for every job; jobs that need more declare it.
+permissions:
+  contents: read
+
 jobs:
   envtest-matrix:
     runs-on: ubuntu-latest
