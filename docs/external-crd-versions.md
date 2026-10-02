@@ -26,6 +26,42 @@ real-shape CRs; each file carries a do-not-apply warning. In a real
 cluster the controller only reads third-party CRs, and registers a
 watch for a kind only when its CRD is already present.
 
+## Watch isolation and health (Design 004)
+
+Every third-party kind below runs under the `WatchSupervisor`
+(`internal/controller/watch_supervisor.go`): its own informer cache,
+never the manager's, and an unmanaged controller the supervisor
+probes, starts, and rebuilds with capped backoff (5 s → 5 min). A kind
+whose CRD is present but unservable — the canonical case is a Dynamo
+conversion webhook whose operator is down — degrades **that kind
+only**:
+
+| Signal | Where |
+|---|---|
+| `Degraded=True`, reason `ThirdPartyWatchUnhealthy`, message naming each kind and the verbatim API error | `AIBOMControllerConfig` status (same place as the served-schema skew check) |
+| `WatchUnhealthy` (Warning) once per outage; `WatchRecovered` (Normal) once on recovery | Events on the controller Pod |
+| `aibom_watch_healthy{kind}` 1/0; `aibom_watch_errors_total{kind}` | Metrics endpoint |
+
+While a kind is unhealthy: its existing AIBOMs are kept as last known,
+new or changed workloads of that kind are not inventoried, no cleanup
+runs for it, every other kind keeps working, and readiness is
+unchanged (a down Dynamo operator must not make k8s-aibom unready).
+Recovery is automatic: a clean probe clears the condition and the
+informer picks up what it missed.
+
+Steady-state detection is a `Limit: 1` list per present kind every two
+minutes. It has to be: when an established watch stream hits a
+conversion error, client-go's reflector does not call its error
+handler — it logs at warning level and re-opens the watch from the
+same resource version, so the object is never delivered and nothing
+fails loudly. The probe takes the same conversion path and fails
+honestly. Cost with AICR's two kinds: about one request per minute on
+top of the measured sub-1-req/min steady state.
+
+Watching a third-party CRD installed *after* the controller starts
+still requires a restart; the presence check at startup decides which
+kinds the supervisor runs.
+
 ## Pinned CRDs
 
 ### KServe `serving.kserve.io/v1beta1.InferenceService`

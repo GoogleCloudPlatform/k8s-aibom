@@ -6,6 +6,31 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A third-party CRD that is present but unservable no longer takes
+  the controller down or goes silent** (#127, Design 004). Dynamo's
+  deployed CRDs (dynamo-platform ≤ 1.4) store `v1alpha1` behind a
+  conversion webhook served by the Dynamo operator. Before: with that
+  operator down at startup, controller-runtime's shared cache never
+  synced, *every* reconciler failed its cache-sync wait and the process
+  exited (a crash-loop of all of k8s-aibom, with a log blaming an
+  unrelated kind); with the operator dying after startup, new Dynamo
+  graphs were silently never inventoried. Now: third-party kinds
+  (KServe, Dynamo, NIMService, LeaderWorkerSet) run under a supervisor
+  on their own caches; a kind that cannot list, sync or convert is
+  retried with capped backoff and reported — `Degraded=True` with
+  reason `ThirdPartyWatchUnhealthy` on `AIBOMControllerConfig` naming
+  the kind and the verbatim API error, one `WatchUnhealthy` Warning
+  event per outage and one `WatchRecovered` on recovery,
+  `aibom_watch_healthy{kind}` and `aibom_watch_errors_total{kind}`.
+  Existing AIBOMs for the kind are kept; apps/v1 kinds and readiness
+  are unaffected; recovery is automatic. Steady-state detection is a
+  `Limit: 1` list per present kind every two minutes, because
+  client-go's reflector swallows conversion errors on an established
+  watch stream (measured). Found by the AICR maintainer's review of
+  the v1.6 Dynamo scraper.
+
 ### Added
 
 - **`LeaderWorkerSet` scraper** (Design 003 §2; v1.6 coverage release).

@@ -153,17 +153,16 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	if err := (&JobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager JobReconciler: %v", err)
 	}
-	if err := (&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager KServeInferenceServiceReconciler: %v", err)
-	}
-	if err := (&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager DynamoGraphDeploymentReconciler: %v", err)
-	}
-	if err := (&NIMServiceReconciler{WorkloadReconciler: nimBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager NIMServiceReconciler: %v", err)
-	}
-	if err := (&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager LeaderWorkerSetReconciler: %v", err)
+	// Third-party kinds through the supervisor, exactly as cmd/manager
+	// wires them (Design 004), with test-speed knobs.
+	watchHealth := NewWatchHealth()
+	if err := RegisterThirdPartyWatches(mgr, watchHealth, nil, nil, []ThirdPartyWatch{
+		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
+		(&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
+		(&NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
+		(&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
+	}, testWatchKnobs); err != nil {
+		t.Fatalf("RegisterThirdPartyWatches: %v", err)
 	}
 
 	mgrCtx, mgrCancel := context.WithCancel(context.Background())
@@ -209,4 +208,13 @@ func eventually(t *testing.T, timeout time.Duration, interval time.Duration, fn 
 		time.Sleep(interval)
 	}
 	t.Fatalf("eventually timed out after %v: %v", timeout, lastErr)
+}
+
+// testWatchKnobs shortens the WatchSupervisor's production backoffs so
+// envtests observe transitions in seconds.
+func testWatchKnobs(s *WatchSupervisor) {
+	s.InitialBackoff = 500 * time.Millisecond
+	s.MaxBackoff = 2 * time.Second
+	s.CacheSyncTimeout = 10 * time.Second
+	s.ReprobeInterval = 500 * time.Millisecond
 }

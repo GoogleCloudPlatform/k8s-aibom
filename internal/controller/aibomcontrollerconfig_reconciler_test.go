@@ -489,6 +489,14 @@ func startConfigEnvTest(t *testing.T) (*envTestEnv, *AIBOMControllerConfigReconc
 // asserts the no-false-positive path.
 func startConfigEnvTestWithCRDs(t *testing.T, crdDirs []string) (*envTestEnv, *AIBOMControllerConfigReconciler, *captureRecorder) {
 	t.Helper()
+	return startConfigEnvTestFull(t, crdDirs, nil)
+}
+
+// startConfigEnvTestFull additionally wires a WatchHealth registry into
+// the reconciler (Design 004), so a test can drive third-party watch
+// transitions and assert the Degraded condition follows.
+func startConfigEnvTestFull(t *testing.T, crdDirs []string, health *WatchHealth) (*envTestEnv, *AIBOMControllerConfigReconciler, *captureRecorder) {
+	t.Helper()
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -537,7 +545,8 @@ func startConfigEnvTestWithCRDs(t *testing.T, crdDirs []string) (*envTestEnv, *A
 			APIVersion: "v1", Kind: "Pod",
 			Name: "aibom-controller-test", Namespace: "k8s-aibom-system",
 		},
-		ConfigName: config.DefaultConfigName,
+		ConfigName:  config.DefaultConfigName,
+		WatchHealth: health,
 	}
 	if err := r.SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager: %v", err)

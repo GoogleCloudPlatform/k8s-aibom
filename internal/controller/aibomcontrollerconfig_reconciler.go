@@ -186,6 +186,12 @@ type AIBOMControllerConfigReconciler struct {
 	// skipping event emission with a debug log.
 	ControllerPod *corev1.ObjectReference
 
+	// WatchHealth, when set, feeds the Degraded condition with the
+	// health of third-party kind watches (Design 004). Transitions
+	// trigger a reconcile through a channel source so the condition
+	// follows an outage without waiting for a spec change.
+	WatchHealth *WatchHealth
+
 	// ConfigName is the singleton CR's metadata.name. Defaults to
 	// config.DefaultConfigName when empty. Exposed for test
 	// determinism; production always uses the default.
@@ -506,20 +512,41 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 			Message:            "Configuration loaded successfully; runtime snapshot is in effect.",
 			LastTransitionTime: now,
 		})
-		if len(skew) > 0 {
+		var degradedWatches []WatchStatus
+		if r.WatchHealth != nil {
+			degradedWatches = r.WatchHealth.Degraded()
+		}
+		switch {
+		case len(skew) > 0:
 			// The spec parsed cleanly, but the server discarded fields
 			// this controller depends on. Ready stays True (the load
 			// succeeded); Degraded says why the status must not be
-			// read as green.
+			// read as green. An unhealthy watch, if any, rides along in
+			// the message so neither cause hides the other.
+			msg := schemaSkewMessage(skew)
+			if len(degradedWatches) > 0 {
+				msg += " Also: " + watchHealthMessage(degradedWatches)
+			}
 			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 				Type:               aibomv1beta1.AIBOMControllerConfigConditionDegraded,
 				Status:             metav1.ConditionTrue,
 				Reason:             aibomv1beta1.ReasonSchemaPredatesController,
 				ObservedGeneration: cr.Generation,
-				Message:            schemaSkewMessage(skew),
+				Message:            msg,
 				LastTransitionTime: now,
 			})
-		} else {
+		case len(degradedWatches) > 0:
+			// A third-party kind's watch cannot list or sync (Design
+			// 004). Everything else is serving; Ready stays True.
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               aibomv1beta1.AIBOMControllerConfigConditionDegraded,
+				Status:             metav1.ConditionTrue,
+				Reason:             aibomv1beta1.ReasonThirdPartyWatchUnhealthy,
+				ObservedGeneration: cr.Generation,
+				Message:            watchHealthMessage(degradedWatches),
+				LastTransitionTime: now,
+			})
+		default:
 			// Explicitly clear Degraded by setting it to False — this
 			// makes the recovery path visible to customers reading
 			// kubectl describe.
@@ -629,13 +656,26 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		return err
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		Named("aibomcontrollerconfig").
 		For(
 			&aibomv1beta1.AIBOMControllerConfig{},
 			builder.WithPredicates(singletonPredicate),
 		).
-		WatchesRawSource(source.Channel(startup, &handler.EnqueueRequestForObject{})).
+		WatchesRawSource(source.Channel(startup, &handler.EnqueueRequestForObject{}))
+	if r.WatchHealth != nil {
+		healthEvents := make(chan event.GenericEvent, 1)
+		r.WatchHealth.Subscribe(func(WatchTransition) {
+			select {
+			case healthEvents <- event.GenericEvent{Object: &aibomv1beta1.AIBOMControllerConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: configName},
+			}}:
+			default: // a reconcile is already pending
+			}
+		})
+		b = b.WatchesRawSource(source.Channel(healthEvents, &handler.EnqueueRequestForObject{}))
+	}
+	return b.
 		WithOptions(controller.Options{
 			// REQUIRED for state-machine correctness. lastObserved
 			// is unsynchronized; controller-runtime's per-controller
