@@ -32,37 +32,32 @@ import (
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
 
-// dynamoGraphDeploymentGVK is the GroupVersionKind this reconciler
+// dynamoComponentDeploymentGVK is the GroupVersionKind this reconciler
 // watches. Pinned to v1beta1 (the operator's storage version) per
 // docs/external-crd-versions.md.
-var dynamoGraphDeploymentGVK = schema.GroupVersionKind{
+var dynamoComponentDeploymentGVK = schema.GroupVersionKind{
 	Group:   "nvidia.com",
 	Version: "v1beta1",
-	Kind:    "DynamoGraphDeployment",
+	Kind:    "DynamoComponentDeployment",
 }
 
-// DynamoGraphDeploymentReconciler watches NVIDIA Dynamo
-// DynamoGraphDeployment CRs in opted-in namespaces and produces one
-// AIBOM per graph via DynamoGraphDeploymentScraper (Design 003 §4).
-//
-// Like the KServe reconciler it fetches and watches
-// *unstructured.Unstructured with an explicit GVK (no operator Go
-// module dependency) and lists no pods: the operator materializes
-// DynamoComponentDeployments → Deployments / LeaderWorkerSets / Grove
-// resources → Pods, and following that chain is the Design 003 §3
-// ownership roll-up, which lands separately. Workload.Pods is an empty
-// (non-nil) slice so downstream code sees a stable zero-length result.
-type DynamoGraphDeploymentReconciler struct {
+// DynamoComponentDeploymentReconciler watches standalone
+// DynamoComponentDeployment CRs (Design 005 §4): a component with no
+// graph parent is its own root and is scraped by the Dynamo scraper as a
+// one-component graph. Components owned by a DynamoGraphDeployment are
+// rolled up into the graph's document by the ownership rule and never
+// reach the scrape here.
+type DynamoComponentDeploymentReconciler struct {
 	WorkloadReconciler
 }
 
-// +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=nvidia.com,resources=dynamocomponentdeployments,verbs=get;list;watch
 
-func (r *DynamoGraphDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("dynamographdeployment", req.NamespacedName))
+func (r *DynamoComponentDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("dynamocomponentdeployment", req.NamespacedName))
 
 	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(dynamoGraphDeploymentGVK)
+	u.SetGroupVersionKind(dynamoComponentDeploymentGVK)
 	if err := r.Get(ctx, req.NamespacedName, u); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -74,7 +69,7 @@ func (r *DynamoGraphDeploymentReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	workload := scraper.Workload{
-		Kind:      scraper.WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoGraphDeployment"},
+		Kind:      scraper.WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"},
 		Category:  scraper.CategoryInference,
 		Namespace: u.GetNamespace(),
 		Name:      u.GetName(),
@@ -84,12 +79,12 @@ func (r *DynamoGraphDeploymentReconciler) Reconcile(ctx context.Context, req ctr
 	}
 	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{
 		Workload:  workload,
-		AIBOMName: AIBOMNameForWorkload("nvidia.com", "DynamoGraphDeployment", u.GetName()),
+		AIBOMName: AIBOMNameForWorkload("nvidia.com", "DynamoComponentDeployment", u.GetName()),
 		SetOwnerReference: func(a *aibomv1beta1.AIBOM) error {
 			return controllerutil.SetControllerReference(u, a, r.Scheme)
 		},
 		BOMBuildOptions: bom.BuildOptions{
-			WorkloadKind:      "DynamoGraphDeployment",
+			WorkloadKind:      "DynamoComponentDeployment",
 			WorkloadGroup:     "nvidia.com",
 			WorkloadAPIVer:    "v1beta1",
 			WorkloadNamespace: u.GetNamespace(),
@@ -100,7 +95,7 @@ func (r *DynamoGraphDeploymentReconciler) Reconcile(ctx context.Context, req ctr
 			ControllerVersion: r.ControllerVersion,
 		},
 		SummaryOptions: SummaryOptions{
-			WorkloadKind:       "DynamoGraphDeployment",
+			WorkloadKind:       "DynamoComponentDeployment",
 			WorkloadAPIVersion: "nvidia.com/v1beta1",
 			WorkloadName:       u.GetName(),
 			WorkloadNamespace:  u.GetNamespace(),
@@ -114,10 +109,10 @@ func (r *DynamoGraphDeploymentReconciler) Reconcile(ctx context.Context, req ctr
 // Watch describes this kind for the WatchSupervisor (Design 004): the
 // kind runs on its own cache, isolated from the manager's, so a CRD
 // that is present but unservable degrades only this kind.
-func (r *DynamoGraphDeploymentReconciler) Watch() ThirdPartyWatch {
+func (r *DynamoComponentDeploymentReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
-		Name:       "DynamoGraphDeployment",
-		GVK:        dynamoGraphDeploymentGVK,
+		Name:       "DynamoComponentDeployment",
+		GVK:        dynamoComponentDeploymentGVK,
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}

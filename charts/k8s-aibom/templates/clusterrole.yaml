@@ -31,7 +31,7 @@ rules:
   resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["batch"]
-  resources: ["jobs"]
+  resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["serving.kserve.io"]
   resources: ["inferenceservices"]
@@ -39,8 +39,13 @@ rules:
 # NVIDIA Dynamo graphs (Design 003 §4). Harmless when the CRD is absent:
 # the controller skips the watch at startup.
 - apiGroups: ["nvidia.com"]
-  resources: ["dynamographdeployments"]
+  resources: ["dynamographdeployments", "dynamocomponentdeployments"]
   verbs: ["get", "list", "watch"]
+# Grove pod-owning kinds (Design 005): read only, to complete the
+# ownership chain under multi-node Dynamo graphs. Never watched.
+- apiGroups: ["grove.io"]
+  resources: ["podcliquesets", "podcliques", "podcliquescalinggroups"]
+  verbs: ["get", "list"]
 # NVIDIA NIM Operator services (Design 003 §1). Same absent-CRD behavior.
 - apiGroups: ["apps.nvidia.com"]
   resources: ["nimservices"]

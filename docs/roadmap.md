@@ -35,10 +35,10 @@ of external review), the output sanitization guarantee, the
   [Design 003](design/003-nimservice-lws-scrapers.md) merged
   2026-10-01 after the open review window. Implementation order
   follows the AICR-review ranking: the `DynamoGraphDeployment`,
-  `NIMService` and `LeaderWorkerSet` scrapers are on main; the §3
-  ownership roll-up (shared with CronJob) follows on the same train.
-- **Complete CronJob coverage** — wire the watcher and RBAC for the
-  existing CronJob scraper path.
+  `NIMService` and `LeaderWorkerSet` scrapers are on main, and the §3
+  ownership roll-up (Design 005) with them.
+- **Complete CronJob coverage** — landed with the ownership roll-up
+  (Design 005): one AIBOM per CronJob, spawned Jobs absorbed.
 - **Configurable workload-kind allowlist** via the
   `AIBOMControllerConfig` CR — with a short design note first: if the
   allowlist narrows what the informers watch (not only what is

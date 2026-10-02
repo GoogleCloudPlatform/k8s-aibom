@@ -106,6 +106,12 @@ type WorkloadReconciler struct {
 	// (metadata.tools) and into per-workload property blocks.
 	ControllerName    string
 	ControllerVersion string
+
+	// Tracked is the set of kinds this process reports on (Design
+	// 005). When set, a workload whose controller-owner chain reaches a
+	// tracked kind is rolled up into the owner's document instead of
+	// getting its own. nil disables suppression.
+	Tracked *TrackedKinds
 }
 
 // WorkloadReconcileRequest carries everything the kind-neutral reconcile
@@ -141,6 +147,11 @@ type WorkloadReconcileRequest struct {
 	// Generation is the workload's metadata.generation, recorded as
 	// Status.ObservedGeneration.
 	Generation int64
+
+	// Owned lists the tracked workloads this root absorbed (Design 005),
+	// recorded on the document as aibom.rollup.owned.<i>. Set by root
+	// reconcilers from rootDescendants; empty for everything else.
+	Owned []OwnedWorkload
 }
 
 // reconcileWorkload runs the kind-neutral reconcile logic:
@@ -202,6 +213,31 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, nil
 	}
 
+	// Ownership roll-up (Design 005): a tracked kind that owns this
+	// workload reports it; this workload gets no document of its own.
+	// Objects with no controller owner skip this at zero cost.
+	if owner, outcome, err := resolveTrackedOwner(ctx, r.Client, req.Workload.Object, r.Tracked); outcome == ownerTracked {
+		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "rolled_up").Inc()
+		logger.V(1).Info("workload is owned by a tracked kind; rolled up into the owner's AIBOM",
+			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name,
+			"owner_kind", owner.Kind, "owner_name", owner.Name)
+		aibom := &aibomv1beta1.AIBOM{}
+		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
+			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("delete rolled-up AIBOM: %w", err)
+			}
+		} else if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("get rolled-up AIBOM: %w", err)
+		}
+		return ctrl.Result{}, nil
+	} else if outcome == ownerUnresolved {
+		// Coverage never regresses because of a missing permission or
+		// a kind we cannot read: report as today, but say so.
+		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "rollup_unresolved").Inc()
+		logger.V(1).Info("owner chain unresolved; reporting workload as a root",
+			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name, "err", err.Error())
+	}
+
 	// Scrape, passing the snapshot's patterns/allowlists. Scrapers are
 	// stateless w.r.t. config; the load-once invariant is structurally
 	// enforced because the *InferenceConfig flows through Scrape and
@@ -240,6 +276,10 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		req.SummaryOptions.WorkloadCategory = string(inputs.Category)
 		req.BOMBuildOptions.WorkloadCategory = string(inputs.Category)
 	}
+	// Absorbed workloads (Design 005) are part of the inputs: a root
+	// whose descendants changed must rebuild even if its own spec and
+	// pods did not.
+	inputs.OwnedWorkloads = ownedStrings(req.Owned)
 	inputHash, err := scraper.HashBOMInputs(inputs)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("hash inputs: %w", err)
@@ -309,7 +349,9 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("get existing AIBOM: %w", existingErr)
 	}
 
-	// Build the BOM.
+	// Build the BOM. Absorbed workloads (Design 005) ride on the
+	// document so nothing silently disappears.
+	req.BOMBuildOptions.OwnedWorkloads = ownedStrings(req.Owned)
 	doc, err := r.BOMBuilder.Build(inputs, req.BOMBuildOptions)
 	if err != nil {
 		r.persistFailureStatus(ctx, req, "BuildFailed", fmt.Sprintf("BOM build failed: %v", err))

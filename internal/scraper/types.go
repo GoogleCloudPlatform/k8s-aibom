@@ -245,6 +245,12 @@ type BOMInputs struct {
 	// cap (MaxComponentsPerDocument). Zero on untruncated documents —
 	// omitempty keeps the input hash byte-identical for the clean case.
 	TruncatedComponents int `json:"truncatedComponents,omitempty"`
+	// OwnedWorkloads lists the tracked workloads this document absorbs
+	// under the ownership roll-up (Design 005), as "Kind/name", sorted.
+	// Set by the reconciler, not by scrapers; part of the input hash so
+	// a change in what a root owns rebuilds its document. omitempty
+	// keeps the hash byte-identical for roots that absorb nothing.
+	OwnedWorkloads []string `json:"ownedWorkloads,omitempty"`
 }
 
 // Deduplicate removes duplicate components and services from the inputs,

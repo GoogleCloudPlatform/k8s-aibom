@@ -68,11 +68,21 @@ rules:
 - apiGroups:
   - batch
   resources:
+  - cronjobs
   - jobs
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - grove.io
+  resources:
+  - podcliques
+  - podcliquescalinggroups
+  - podcliquesets
+  verbs:
+  - get
+  - list
 - apiGroups:
   - leaderworkerset.x-k8s.io
   resources:
@@ -84,6 +94,7 @@ rules:
 - apiGroups:
   - nvidia.com
   resources:
+  - dynamocomponentdeployments
   - dynamographdeployments
   verbs:
   - get

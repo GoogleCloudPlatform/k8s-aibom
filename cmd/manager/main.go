@@ -43,7 +43,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -228,6 +227,10 @@ func main() {
 		log.Error(err, "unable to create discovery client for served-schema check")
 		os.Exit(1)
 	}
+	// Health of the third-party kind watches (Design 004); the config
+	// reconciler reports it on the Degraded condition.
+	watchHealth := controller.NewWatchHealth()
+
 	if err := (&controller.AIBOMControllerConfigReconciler{
 		Client:        mgr.GetClient(),
 		Loader:        loader,
@@ -235,6 +238,7 @@ func main() {
 		Recorder:      mgr.GetEventRecorderFor("k8s-aibom-config"), //nolint:staticcheck
 		ControllerPod: controllerPod,
 		SchemaChecker: controller.NewOpenAPISchemaChecker(discoveryClient.OpenAPIV3()),
+		WatchHealth:   watchHealth,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up AIBOMControllerConfigReconciler")
 		os.Exit(1)
@@ -251,6 +255,16 @@ func main() {
 	// patterns, sinks, namespace selector, and inline threshold is a
 	// property of the rotating Snapshot — no field on the reconciler
 	// holds config-derived state.
+	// Kinds this process reports on (Design 005): a workload owned by
+	// any of these is rolled up into the owner's document.
+	tracked := controller.NewTrackedKinds()
+	for _, gk := range []schema.GroupKind{
+		{Group: "apps", Kind: "Deployment"}, {Group: "apps", Kind: "StatefulSet"}, {Group: "apps", Kind: "DaemonSet"},
+		{Group: "batch", Kind: "Job"}, {Group: "batch", Kind: "CronJob"},
+	} {
+		tracked.Add(gk)
+	}
+
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
@@ -261,6 +275,7 @@ func main() {
 		ConfigStore:       configStore,
 		ControllerName:    "k8s-aibom",
 		ControllerVersion: controllerVersion,
+		Tracked:           tracked,
 	}
 	// KServe needs its own scraper (declared-not-inferred semantics,
 	// different field paths). Shallow-copy the inference base and
@@ -298,48 +313,26 @@ func main() {
 		log.Error(err, "unable to set up JobReconciler")
 		os.Exit(1)
 	}
-	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "serving.kserve.io", Kind: "InferenceService"}, "v1beta1"); err == nil {
-		if err := (&controller.KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to set up KServeInferenceServiceReconciler")
-			os.Exit(1)
-		}
-	} else if meta.IsNoMatchError(err) {
-		log.Info("serving.kserve.io/v1beta1 InferenceService CRD not found; skipping KServe controller registration")
-	} else {
-		log.Error(err, "failed to query RESTMapper for InferenceService")
+	if err := (&controller.CronJobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to set up CronJobReconciler")
 		os.Exit(1)
 	}
-	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "nvidia.com", Kind: "DynamoGraphDeployment"}, "v1beta1"); err == nil {
-		if err := (&controller.DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to set up DynamoGraphDeploymentReconciler")
-			os.Exit(1)
-		}
-	} else if meta.IsNoMatchError(err) {
-		log.Info("nvidia.com/v1beta1 DynamoGraphDeployment CRD not found; skipping Dynamo controller registration")
-	} else {
-		log.Error(err, "failed to query RESTMapper for DynamoGraphDeployment")
-		os.Exit(1)
-	}
-	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "apps.nvidia.com", Kind: "NIMService"}, "v1alpha1"); err == nil {
-		if err := (&controller.NIMServiceReconciler{WorkloadReconciler: nimBase}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to set up NIMServiceReconciler")
-			os.Exit(1)
-		}
-	} else if meta.IsNoMatchError(err) {
-		log.Info("apps.nvidia.com/v1alpha1 NIMService CRD not found; skipping NIMService controller registration")
-	} else {
-		log.Error(err, "failed to query RESTMapper for NIMService")
-		os.Exit(1)
-	}
-	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "leaderworkerset.x-k8s.io", Kind: "LeaderWorkerSet"}, "v1"); err == nil {
-		if err := (&controller.LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to set up LeaderWorkerSetReconciler")
-			os.Exit(1)
-		}
-	} else if meta.IsNoMatchError(err) {
-		log.Info("leaderworkerset.x-k8s.io/v1 LeaderWorkerSet CRD not found; skipping LeaderWorkerSet controller registration")
-	} else {
-		log.Error(err, "failed to query RESTMapper for LeaderWorkerSet")
+	// Third-party kinds run under the WatchSupervisor (Design 004): each
+	// on its own cache, never on the manager's, so a CRD that is present
+	// but unservable (a Dynamo conversion webhook whose operator is down)
+	// degrades that kind only — visible on AIBOMControllerConfig's
+	// Degraded condition, an event and aibom_watch_healthy — instead of
+	// failing every controller's cache sync and exiting the process.
+	if err := controller.RegisterThirdPartyWatches(mgr, watchHealth, tracked,
+		mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, //nolint:staticcheck
+		[]controller.ThirdPartyWatch{
+			(&controller.KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
+			(&controller.DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
+			(&controller.DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
+			(&controller.NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
+			(&controller.LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
+		}, nil); err != nil {
+		log.Error(err, "unable to set up third-party watches")
 		os.Exit(1)
 	}
 

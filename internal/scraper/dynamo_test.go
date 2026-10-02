@@ -122,8 +122,8 @@ func TestDynamoScraper_HandlesKind(t *testing.T) {
 		// v1alpha1 is served with conversion but the extraction map is
 		// defined against v1beta1 only (Design 003 §4, open question 4).
 		{WorkloadKind{Group: "nvidia.com", Version: "v1alpha1", Kind: "DynamoGraphDeployment"}, false},
-		// Standalone DynamoComponentDeployment arrives with the §3 roll-up.
-		{WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"}, false},
+		// Standalone DynamoComponentDeployment is its own root (Design 005 §4).
+		{WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"}, true},
 		{WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, false},
 		{WorkloadKind{}, false},
 	}
@@ -425,5 +425,43 @@ func TestDynamoScraper_Deterministic(t *testing.T) {
 	}
 	if len(a.Provenance) != 1 || a.Provenance[0].ScraperName != "inference.dynamo" || a.Provenance[0].ScrapeMethod != "spec" {
 		t.Errorf("provenance = %+v", a.Provenance)
+	}
+}
+
+// A standalone DynamoComponentDeployment is read as a one-component
+// graph: the same extraction, with locators rooted at spec rather than
+// spec.components[i], and the component's own name/type on every fact.
+func TestDynamoScraper_StandaloneComponentDeployment(t *testing.T) {
+	u := &unstructured.Unstructured{}
+	u.SetAPIVersion("nvidia.com/v1beta1")
+	u.SetKind("DynamoComponentDeployment")
+	u.SetName("solo")
+	u.SetNamespace("ns")
+	_ = unstructured.SetNestedMap(u.Object, map[string]interface{}{
+		"backendFramework": "trtllm", "name": "Solo", "type": "decode",
+		"modelRef":    map[string]interface{}{"name": "Qwen/Qwen3-0.6B", "revision": "r1"},
+		"podTemplate": podTemplate("nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.6.0"),
+	}, "spec")
+	w := Workload{Kind: WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"}, Category: CategoryInference, Namespace: "ns", Name: "solo", Object: u}
+	got, err := newDynamoScraper().Scrape(context.Background(), w, testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Evidence.Locator != "spec.modelRef.name" || models[0].Properties["dynamo.component.name"] != "Solo" || models[0].Properties["dynamo.component.type"] != "decode" {
+		t.Errorf("models = %+v, want one at spec.modelRef.name attributed to Solo/decode", models)
+	}
+	containers := componentsOf(got.Components, ComponentContainer)
+	if len(containers) != 1 || !strings.HasPrefix(containers[0].Evidence.Locator, "spec.podTemplate.spec.containers[0]") {
+		t.Errorf("containers = %+v, want one rooted at spec.podTemplate", containers)
+	}
+	rt := findComponent(t, got.Components, func(c Component) bool { return c.Type == ComponentApplication && c.Confidence == ConfidenceDeclared })
+	if rt.Name != "tensorrt-llm" || rt.Properties["dynamo.component.Solo.type"] != "decode" {
+		t.Errorf("declared runtime = %+v", rt)
+	}
+	for _, c := range got.Components {
+		if strings.Contains(c.Evidence.Locator, "spec.components[") {
+			t.Errorf("standalone component must not claim a spec.components[] locator: %q", c.Evidence.Locator)
+		}
 	}
 }

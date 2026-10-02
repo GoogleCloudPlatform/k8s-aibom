@@ -6,6 +6,62 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A third-party CRD that is present but unservable no longer takes
+  the controller down or goes silent** (#127, Design 004). Dynamo's
+  deployed CRDs (dynamo-platform ≤ 1.4) store `v1alpha1` behind a
+  conversion webhook served by the Dynamo operator. Before: with that
+  operator down at startup, controller-runtime's shared cache never
+  synced, *every* reconciler failed its cache-sync wait and the process
+  exited (a crash-loop of all of k8s-aibom, with a log blaming an
+  unrelated kind); with the operator dying after startup, new Dynamo
+  graphs were silently never inventoried. Now: third-party kinds
+  (KServe, Dynamo, NIMService, LeaderWorkerSet) run under a supervisor
+  on their own caches; a kind that cannot list, sync or convert is
+  retried with capped backoff and reported — `Degraded=True` with
+  reason `ThirdPartyWatchUnhealthy` on `AIBOMControllerConfig` naming
+  the kind and the verbatim API error, one `WatchUnhealthy` Warning
+  event per outage and one `WatchRecovered` on recovery,
+  `aibom_watch_healthy{kind}` and `aibom_watch_errors_total{kind}`.
+  Existing AIBOMs for the kind are kept; apps/v1 kinds and readiness
+  are unaffected; recovery is automatic. Steady-state detection is a
+  `Limit: 1` list per present kind every two minutes, because
+  client-go's reflector swallows conversion errors on an established
+  watch stream (measured). Found by the AICR maintainer's review of
+  the v1.6 Dynamo scraper.
+
+### Added
+
+- **Ownership roll-up: one workload, one AIBOM** (#126, Design 005). A
+  tracked workload owned — directly or transitively via controller
+  `ownerReferences` — by another tracked kind no longer gets its own
+  AIBOM; the owner's document is the report. Covered chains:
+  `DynamoGraphDeployment` → `DynamoComponentDeployment` → `Deployment` |
+  `LeaderWorkerSet` | Grove `PodCliqueSet`/`PodClique`; `NIMService` →
+  `Deployment` | `LeaderWorkerSet`; `LeaderWorkerSet` → `StatefulSet`;
+  `CronJob` → `Job`. The owner's document lists what it absorbed as
+  `aibom.rollup.owned.<i>` (`Kind/name`, sorted) and receives the
+  descendants' pods, so **the CRD kinds now resolve pod-status digests**
+  like a Deployment does through its ReplicaSets. Ownership only, never
+  labels. An intermediate kind the controller cannot read (RBAC, CRD
+  absent) ends the walk as unresolved and the child is reported as
+  before — coverage never regresses because of a missing permission
+  (`rollup_unresolved` outcome). Workloads with no controller owner pay
+  nothing. On upgrade, child AIBOMs under the chains above are deleted
+  on their next reconcile. New reconcile outcomes: `rolled_up`,
+  `rollup_unresolved`.
+- **`CronJob` coverage.** One AIBOM per CronJob from `spec.jobTemplate`
+  (eval patterns as for Jobs); spawned Jobs roll up. RBAC adds
+  `cronjobs` get/list/watch.
+- **Standalone `DynamoComponentDeployment` roots.** A component with no
+  graph parent is reported as its own root with locators rooted at
+  `spec`; components owned by a graph are absorbed. RBAC adds
+  `dynamocomponentdeployments` get/list/watch, and read-only get/list
+  on the Grove pod-owning kinds (`podcliquesets`, `podcliques`,
+  `podcliquescalinggroups`) to complete multi-node chains; absent CRDs
+  or denied permissions degrade to today's behavior.
+
 ### Added
 
 - **`LeaderWorkerSet` scraper** (Design 003 §2; v1.6 coverage release).

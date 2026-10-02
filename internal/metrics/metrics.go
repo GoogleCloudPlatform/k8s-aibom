@@ -62,9 +62,31 @@ var (
 	WorkloadReconcileOutcomes = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aibom_workload_reconcile_outcomes_total",
-			Help: "Workload reconcile outcomes by kind: not_opted_in, unmatched (opted in, no inference signal), matched",
+			Help: "Workload reconcile outcomes by kind: not_opted_in, unmatched (opted in, no inference signal), matched, rolled_up (owned by a tracked kind; reported on the owner), rollup_unresolved (owner chain unreadable; reported as a root)",
 		},
 		[]string{"kind", "outcome"},
+	)
+
+	// WatchHealthy is 1 while a third-party kind's watch (Dynamo,
+	// NIMService, LeaderWorkerSet, KServe) is synced and error-free, 0
+	// while it is starting or degraded (Design 004). A down Dynamo
+	// operator shows here as dynamographdeployment=0 while every other
+	// series stays 1.
+	WatchHealthy = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "aibom_watch_healthy",
+			Help: "1 when the third-party kind's watch is synced and error-free, 0 while starting or degraded",
+		},
+		[]string{"kind"},
+	)
+	// WatchErrors counts list/watch/probe/start failures per third-party
+	// kind. Rises during an outage; flat while healthy.
+	WatchErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aibom_watch_errors_total",
+			Help: "Number of list/watch/probe/start failures for third-party kind watches",
+		},
+		[]string{"kind"},
 	)
 
 	ConfigReloads = prometheus.NewCounterVec(
@@ -77,5 +99,5 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes)
+	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes, WatchHealthy, WatchErrors)
 }

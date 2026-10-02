@@ -156,8 +156,10 @@ func startEnvTestWithSinks(t *testing.T, sinks []sink.Sink) *envTestEnv {
 	if err := (&DaemonSetReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager DaemonSetReconciler: %v", err)
 	}
-	if err := (&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager KServeInferenceServiceReconciler: %v", err)
+	if err := RegisterThirdPartyWatches(mgr, NewWatchHealth(), nil, nil, nil, []ThirdPartyWatch{
+		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
+	}, testWatchKnobs); err != nil {
+		t.Fatalf("RegisterThirdPartyWatches: %v", err)
 	}
 	mgrCtx, mgrCancel := context.WithCancel(context.Background())
 	mgrErrCh := make(chan error, 1)

@@ -43,6 +43,11 @@ type BuildOptions struct {
 	WorkloadCategory  string // "inference" in v1
 	ControllerName    string // emitter identifier, recorded in metadata.tools
 	ControllerVersion string
+	// OwnedWorkloads lists tracked workloads this document absorbs under
+	// the ownership roll-up (Design 005), as "Kind/name", already sorted.
+	// Emitted as aibom.rollup.owned.<i> metadata properties; empty for
+	// documents that absorb nothing (byte-identical to before).
+	OwnedWorkloads []string
 }
 
 // Builder converts a *scraper.BOMInputs (plus per-workload metadata) into
@@ -172,6 +177,12 @@ func buildMetadataProperties(inputs *scraper.BOMInputs, opts BuildOptions) *[]cd
 			Name:  "aibom.truncation.applied",
 			Value: fmt.Sprintf("components-dropped:%d", inputs.TruncatedComponents),
 		})
+	}
+	// Absorbed workloads (Design 005): one indexed property each, so a
+	// consumer can see which StatefulSets, Deployments or Jobs this
+	// document stands in for.
+	for i, o := range opts.OwnedWorkloads {
+		props = append(props, cdx.Property{Name: fmt.Sprintf("aibom.rollup.owned.%d", i), Value: o})
 	}
 	// One property block per Provenance entry. Index suffix keeps names
 	// unique under sort-by-name consumers.

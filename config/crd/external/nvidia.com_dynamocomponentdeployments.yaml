@@ -1,0 +1,70 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ⚠ TEST-ONLY CRD. ⚠ Do NOT apply to a real cluster; the Dynamo operator
+# installs the real one. Minimal DynamoComponentDeployment scoped to the
+# shared component spec k8s-aibom reads (Design 003 §4 / Design 005 §4):
+# spec.backendFramework, spec.name, spec.type, spec.modelRef, spec.podTemplate.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: dynamocomponentdeployments.nvidia.com
+  annotations:
+    api-approved.kubernetes.io: "unapproved, k8s-aibom test fixture (minimal subset)"
+spec:
+  group: nvidia.com
+  scope: Namespaced
+  names:
+    plural: dynamocomponentdeployments
+    singular: dynamocomponentdeployment
+    kind: DynamoComponentDeployment
+    listKind: DynamoComponentDeploymentList
+    shortNames:
+      - dcd
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                backendFramework:
+                  type: string
+                  enum: [sglang, vllm, trtllm]
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [frontend, worker, prefill, decode, planner, epp, lpx]
+                modelRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    revision:
+                      type: string
+                podTemplate:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

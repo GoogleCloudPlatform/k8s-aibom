@@ -52,9 +52,8 @@ const lwsTemplateLocator = "spec.leaderWorkerTemplate"
 //
 // One AIBOM per LWS, keyed to the LWS UID: the LWS is the controlling
 // template, not the StatefulSets it materializes. Those roll up to this
-// AIBOM under Design 003 §3 (separate change), which also brings
-// pod-status digest resolution; until then digests resolve only from
-// digest-pinned image references.
+// AIBOM under the ownership roll-up (Design 005), which also hands the
+// reconciler their pods, so digests resolve from pod status.
 type LeaderWorkerSetScraper struct {
 	inner    *InferenceSpecScraper
 	verifier SignatureVerifier
@@ -132,7 +131,7 @@ func (s *LeaderWorkerSetScraper) Scrape(ctx context.Context, w Workload, cfg *In
 			}
 			continue
 		}
-		if tmplAnnotations := s.scrapeTemplate(inputs, pt, lwsTemplateLocator+"."+key, role, groupProps, cfg); tmplAnnotations != nil {
+		if tmplAnnotations := s.scrapeTemplate(inputs, pt, lwsTemplateLocator+"."+key, role, groupProps, w.Pods, cfg); tmplAnnotations != nil {
 			annotationMaps = append(annotationMaps, tmplAnnotations)
 		}
 	}
@@ -166,14 +165,14 @@ func (s *LeaderWorkerSetScraper) Scrape(ctx context.Context, w Workload, cfg *In
 // lws.role and container components with the group shape, and returns
 // the template's annotations for signature lookup (nil when the
 // template did not decode; the failure is recorded, never fatal).
-func (s *LeaderWorkerSetScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator, role string, groupProps map[string]string, cfg *InferenceConfig) map[string]string {
+func (s *LeaderWorkerSetScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator, role string, groupProps map[string]string, pods []corev1.Pod, cfg *InferenceConfig) map[string]string {
 	var tmpl corev1.PodTemplateSpec
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(pt, &tmpl); err != nil {
 		inputs.Errors = append(inputs.Errors, fmt.Errorf("%s: not a PodTemplateSpec: %w; skipped", locator, err))
 		return nil
 	}
 	before := len(inputs.Components)
-	s.inner.scrapePodSpecAt(inputs, &tmpl.Spec, tmpl.Annotations, nil, cfg,
+	s.inner.scrapePodSpecAt(inputs, &tmpl.Spec, tmpl.Annotations, pods, cfg,
 		locator+".spec", locator+".metadata.annotations")
 	for k := before; k < len(inputs.Components); k++ {
 		c := &inputs.Components[k]

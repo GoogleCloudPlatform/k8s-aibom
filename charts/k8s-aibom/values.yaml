@@ -95,7 +95,7 @@ readiness:
 # When enabled, the endpoint binds on all interfaces on metrics.port, a
 # ClusterIP Service exposes it, and (optionally) a ServiceMonitor for the
 # Prometheus Operator is rendered. Series include workload reconcile
-# outcomes by kind (not_opted_in / unmatched / matched) — the signal that
+# outcomes by kind (not_opted_in / unmatched / matched / rolled_up / rollup_unresolved) — the signal that
 # separates "opted in, nothing recognized" from a broken controller —
 # plus tracked-workload gauge, sink failures, extraction errors, status
 # persist failures, and config reloads.

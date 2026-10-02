@@ -26,6 +26,64 @@ real-shape CRs; each file carries a do-not-apply warning. In a real
 cluster the controller only reads third-party CRs, and registers a
 watch for a kind only when its CRD is already present.
 
+## Watch isolation and health (Design 004)
+
+Every third-party kind below runs under the `WatchSupervisor`
+(`internal/controller/watch_supervisor.go`): its own informer cache,
+never the manager's, and an unmanaged controller the supervisor
+probes, starts, and rebuilds with capped backoff (5 s → 5 min). A kind
+whose CRD is present but unservable — the canonical case is a Dynamo
+conversion webhook whose operator is down — degrades **that kind
+only**:
+
+| Signal | Where |
+|---|---|
+| `Degraded=True`, reason `ThirdPartyWatchUnhealthy`, message naming each kind and the verbatim API error | `AIBOMControllerConfig` status (same place as the served-schema skew check) |
+| `WatchUnhealthy` (Warning) once per outage; `WatchRecovered` (Normal) once on recovery | Events on the controller Pod |
+| `aibom_watch_healthy{kind}` 1/0; `aibom_watch_errors_total{kind}` | Metrics endpoint |
+
+While a kind is unhealthy: its existing AIBOMs are kept as last known,
+new or changed workloads of that kind are not inventoried, no cleanup
+runs for it, every other kind keeps working, and readiness is
+unchanged (a down Dynamo operator must not make k8s-aibom unready).
+Recovery is automatic: a clean probe clears the condition and the
+informer picks up what it missed.
+
+Steady-state detection is a `Limit: 1` list per present kind every two
+minutes. It has to be: when an established watch stream hits a
+conversion error, client-go's reflector does not call its error
+handler — it logs at warning level and re-opens the watch from the
+same resource version, so the object is never delivered and nothing
+fails loudly. The probe takes the same conversion path and fails
+honestly. Cost with AICR's two kinds: about one request per minute on
+top of the measured sub-1-req/min steady state.
+
+Watching a third-party CRD installed *after* the controller starts
+still requires a restart; the presence check at startup decides which
+kinds the supervisor runs.
+
+## Ownership roll-up (Design 005)
+
+One workload, one AIBOM. A tracked workload owned, directly or
+transitively via controller `ownerReferences`, by another tracked kind
+(the apps/v1 and batch kinds plus every third-party kind the supervisor
+runs) is not separately reported. The owner's document records each
+absorbed workload as `aibom.rollup.owned.<i>` (`Kind/name`, sorted) and
+receives the descendants' pods, which is how the CRD kinds resolve
+pod-status digests. Attribution is ownership only: Dynamo's pod labels
+exist but are never consulted, because a tenant pod can carry a label
+and cannot forge an `ownerReference` to an object it does not control.
+
+The upward walk from a child is bounded (six hops) and reads each owner
+once as unstructured. An owner the controller cannot read — missing
+RBAC, CRD absent, deleted — ends the walk as *unresolved* and the child
+is reported as before (`rollup_unresolved` outcome); coverage never
+regresses because of a permission. Roots list their descendants from
+cache-backed typed lists plus live lists of the intermediate CRD kinds
+that are present: `DynamoComponentDeployment` and the Grove pod-owning
+kinds `PodCliqueSet`, `PodCliqueScalingGroup`, `PodClique`
+(`grove.io/v1alpha1`; read-only, never watched).
+
 ## Pinned CRDs
 
 ### KServe `serving.kserve.io/v1beta1.InferenceService`
@@ -100,10 +158,15 @@ derived from Dynamo image paths. Dynamo runtime images carry no model;
 absent `modelRef` and declared env/args the model stays `unresolved`.
 
 **Not read:** `status.*`; `spec.env` (graph-wide env — a follow-up if a
-consumer shows a model declared there); pods. Digests resolve only from
-digest-pinned image references until the Design 003 §3 ownership
-roll-up (DGD → DynamoComponentDeployment → Deployment / LWS / Grove →
-Pod) lands.
+consumer shows a model declared there). Pods are reached through the
+ownership roll-up (DGD → DynamoComponentDeployment → Deployment / LWS /
+Grove → Pod), so pod-status digests resolve as for a Deployment.
+
+**`DynamoComponentDeployment` (same group/version)** is handled by the
+same scraper: a component with no graph parent is its own root, read as
+a one-component graph with locators rooted at `spec`; a component owned
+by a graph is absorbed into the graph's document and never scraped on
+its own.
 
 **Test-only minimal CRD:** [`config/crd/external/nvidia.com_dynamographdeployments.yaml`](../config/crd/external/nvidia.com_dynamographdeployments.yaml) — serves `v1beta1` only.
 

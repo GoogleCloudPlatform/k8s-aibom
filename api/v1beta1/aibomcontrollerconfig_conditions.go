@@ -88,4 +88,13 @@ const (
 	// fields were pruned; their features are OFF until the CRDs are
 	// updated (#104).
 	ReasonSchemaPredatesController = "SchemaPredatesController"
+
+	// ReasonThirdPartyWatchUnhealthy is set on Degraded=True when one
+	// or more third-party kind watches (Dynamo, NIMService,
+	// LeaderWorkerSet, KServe) cannot list or sync — typically a
+	// conversion webhook whose operator is down. The message names
+	// each kind and the verbatim API error. Existing AIBOMs for those
+	// kinds are kept; other kinds are unaffected; readiness is not
+	// changed (Design 004).
+	ReasonThirdPartyWatchUnhealthy = "ThirdPartyWatchUnhealthy"
 )

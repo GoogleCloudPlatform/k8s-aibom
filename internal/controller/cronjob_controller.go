@@ -1,0 +1,120 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package controller
+
+import (
+	"context"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
+)
+
+// CronJobReconciler reports one AIBOM per CronJob from its jobTemplate
+// (Design 005 §3). The Jobs it spawns roll up into this document and
+// contribute their pods for digest resolution.
+type CronJobReconciler struct {
+	WorkloadReconciler
+}
+
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch
+
+func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("cronjob", req.NamespacedName))
+
+	var job batchv1.CronJob
+	if err := r.Get(ctx, req.NamespacedName, &job); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Design 005: the Jobs this CronJob spawned and their pods.
+	owned, pods := r.rootDescendants(ctx, &job)
+
+	workload := scraper.Workload{
+		Kind:      scraper.WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+		Category:  scraper.CategoryInference, // Overridden by scraper
+		Namespace: job.Namespace,
+		Name:      job.Name,
+		UID:       job.UID,
+		Object:    &job,
+		Pods:      append(pods, corev1.Pod{Spec: job.Spec.JobTemplate.Spec.Template.Spec}),
+	}
+
+	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{
+		Workload:  workload,
+		AIBOMName: AIBOMNameForWorkload("batch", "CronJob", job.Name),
+		SetOwnerReference: func(a *aibomv1beta1.AIBOM) error {
+			return controllerutil.SetControllerReference(&job, a, r.Scheme)
+		},
+		BOMBuildOptions: bom.BuildOptions{
+			WorkloadKind:      "CronJob",
+			WorkloadGroup:     "batch",
+			WorkloadAPIVer:    "v1",
+			WorkloadNamespace: job.Namespace,
+			WorkloadName:      job.Name,
+			WorkloadUID:       string(job.UID),
+			WorkloadCategory:  string(scraper.CategoryInference),
+			ControllerName:    r.ControllerName,
+			ControllerVersion: r.ControllerVersion,
+		},
+		SummaryOptions: SummaryOptions{
+			WorkloadKind:       "CronJob",
+			WorkloadAPIVersion: "batch/v1",
+			WorkloadName:       job.Name,
+			WorkloadNamespace:  job.Namespace,
+			WorkloadCategory:   string(scraper.CategoryInference),
+		},
+		Generation: job.Generation,
+		Owned:      owned,
+	})
+}
+
+func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	listFactory := func() client.ObjectList { return &batchv1.CronJobList{} }
+	extractItems := func(l client.ObjectList) []client.Object {
+		jl := l.(*batchv1.CronJobList)
+		var res []client.Object
+		for i := range jl.Items {
+			res = append(res, &jl.Items[i])
+		}
+		return res
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&batchv1.CronJob{}).
+		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(listFactory, extractItems)),
+			builder.WithPredicates(r.NamespaceWatchPredicate()),
+		).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.EnqueueRootForPod(schema.GroupKind{Group: "batch", Kind: "CronJob"})),
+			builder.WithPredicates(PodImageIDChangedPredicate()),
+		).
+		Complete(r)
+}

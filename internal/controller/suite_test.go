@@ -26,6 +26,7 @@ import (
 
 	"go.uber.org/goleak"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -121,15 +122,23 @@ func startEnvTest(t *testing.T) *envTestEnv {
 
 	configStore := config.NewStore(config.DefaultSnapshot())
 
+	tracked := NewTrackedKinds()
+	for _, gk := range []schema.GroupKind{
+		{Group: "apps", Kind: "Deployment"}, {Group: "apps", Kind: "StatefulSet"}, {Group: "apps", Kind: "DaemonSet"},
+		{Group: "batch", Kind: "Job"}, {Group: "batch", Kind: "CronJob"},
+	} {
+		tracked.Add(gk)
+	}
 	inferenceBase := WorkloadReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
-		Scraper:           scraper.NewInferenceSpecScraper(nil),
+		Scraper:           scraper.NewMultiScraper(scraper.NewInferenceSpecScraper(nil), scraper.NewVectorDBSpecScraper(), scraper.NewAgentSpecScraper(), scraper.NewTrainingSpecScraper(), scraper.NewEvalSpecScraper()),
 		BOMBuilder:        bom.NewBuilder(),
 		StatusBuilder:     NewStatusBuilder(),
 		ConfigStore:       configStore,
 		ControllerName:    "k8s-aibom",
 		ControllerVersion: "0.1.0-test",
+		Tracked:           tracked,
 	}
 	// KServe needs its own scraper; everything else shared.
 	kserveBase := inferenceBase
@@ -153,17 +162,20 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	if err := (&JobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager JobReconciler: %v", err)
 	}
-	if err := (&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager KServeInferenceServiceReconciler: %v", err)
+	if err := (&CronJobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
+		t.Fatalf("SetupWithManager CronJobReconciler: %v", err)
 	}
-	if err := (&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager DynamoGraphDeploymentReconciler: %v", err)
-	}
-	if err := (&NIMServiceReconciler{WorkloadReconciler: nimBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager NIMServiceReconciler: %v", err)
-	}
-	if err := (&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).SetupWithManager(mgr); err != nil {
-		t.Fatalf("SetupWithManager LeaderWorkerSetReconciler: %v", err)
+	// Third-party kinds through the supervisor, exactly as cmd/manager
+	// wires them (Design 004), with test-speed knobs.
+	watchHealth := NewWatchHealth()
+	if err := RegisterThirdPartyWatches(mgr, watchHealth, tracked, nil, nil, []ThirdPartyWatch{
+		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
+		(&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
+		(&DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
+		(&NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
+		(&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
+	}, testWatchKnobs); err != nil {
+		t.Fatalf("RegisterThirdPartyWatches: %v", err)
 	}
 
 	mgrCtx, mgrCancel := context.WithCancel(context.Background())
@@ -209,4 +221,13 @@ func eventually(t *testing.T, timeout time.Duration, interval time.Duration, fn 
 		time.Sleep(interval)
 	}
 	t.Fatalf("eventually timed out after %v: %v", timeout, lastErr)
+}
+
+// testWatchKnobs shortens the WatchSupervisor's production backoffs so
+// envtests observe transitions in seconds.
+func testWatchKnobs(s *WatchSupervisor) {
+	s.InitialBackoff = 500 * time.Millisecond
+	s.MaxBackoff = 2 * time.Second
+	s.CacheSyncTimeout = 10 * time.Second
+	s.ReprobeInterval = 500 * time.Millisecond
 }

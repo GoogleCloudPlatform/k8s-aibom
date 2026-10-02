@@ -23,12 +23,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
@@ -65,6 +62,12 @@ func (r *LeaderWorkerSetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Design 005: the workloads and pods this CR owns, transitively.
+	owned, pods := r.rootDescendants(ctx, u)
+	if pods == nil {
+		pods = []corev1.Pod{}
+	}
+
 	workload := scraper.Workload{
 		Kind:      scraper.WorkloadKind{Group: "leaderworkerset.x-k8s.io", Version: "v1", Kind: "LeaderWorkerSet"},
 		Category:  scraper.CategoryInference,
@@ -72,7 +75,7 @@ func (r *LeaderWorkerSetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		Name:      u.GetName(),
 		UID:       u.GetUID(),
 		Object:    u,
-		Pods:      []corev1.Pod{},
+		Pods:      pods,
 	}
 	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{
 		Workload:  workload,
@@ -99,43 +102,18 @@ func (r *LeaderWorkerSetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			WorkloadCategory:   string(scraper.CategoryInference),
 		},
 		Generation: u.GetGeneration(),
+		Owned:      owned,
 	})
 }
 
-// SetupWithManager registers this reconciler with the controller-runtime
-// manager. The watch is on *unstructured.Unstructured with the pinned
-// GVK; no scheme registration of the lws types is required.
-func (r *LeaderWorkerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(leaderWorkerSetGVK)
-	return ctrl.NewControllerManagedBy(mgr).
-		For(u).
-		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(
-			&corev1.Namespace{},
-			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadsForNamespace(
-				func() client.ObjectList {
-					list := &unstructured.UnstructuredList{}
-					list.SetGroupVersionKind(schema.GroupVersionKind{
-						Group:   "leaderworkerset.x-k8s.io",
-						Version: "v1",
-						Kind:    "LeaderWorkerSetList",
-					})
-					return list
-				},
-				func(objList client.ObjectList) []client.Object {
-					uList, ok := objList.(*unstructured.UnstructuredList)
-					if !ok {
-						return nil
-					}
-					var objs []client.Object
-					for i := range uList.Items {
-						objs = append(objs, &uList.Items[i])
-					}
-					return objs
-				},
-			)),
-			builder.WithPredicates(r.NamespaceWatchPredicate()),
-		).
-		Complete(r)
+// Watch describes this kind for the WatchSupervisor (Design 004): the
+// kind runs on its own cache, isolated from the manager's, so a CRD
+// that is present but unservable degrades only this kind.
+func (r *LeaderWorkerSetReconciler) Watch() ThirdPartyWatch {
+	return ThirdPartyWatch{
+		Name:       "LeaderWorkerSet",
+		GVK:        leaderWorkerSetGVK,
+		Reconciler: r,
+		Base:       &r.WorkloadReconciler,
+	}
 }

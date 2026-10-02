@@ -91,10 +91,18 @@ controllers) owns the lifecycle:
   down (cancel their context), and the kind re-enters the probe loop.
   The manager, and every other kind, never see it.
 - **Steady-state health.** The per-kind cache is created with a
-  `DefaultWatchErrorHandler` that records relist/watch errors in the
-  health registry (this is where the webhook-dies-after-startup case
-  becomes visible). The supervisor also re-probes a kind that is
-  reporting errors; a successful probe clears the error.
+  `DefaultWatchErrorHandler` that records list/relist errors in the
+  health registry. That alone is **not** enough for the
+  webhook-dies-after-startup case, measured during implementation:
+  when an established watch stream hits a conversion error, client-go's
+  reflector does not call the error handler — it logs at warning level
+  and re-opens the watch from the same resource version, forever, so
+  the new object is never delivered and nothing fails loudly. The
+  supervisor therefore probes every kind on a fixed interval (default
+  2 min; one `Limit: 1` list per kind, which takes the same conversion
+  path): a failing probe marks the kind unhealthy, a clean probe clears
+  it. Cost with AICR's two kinds: one extra request per minute on top
+  of the measured sub-1-req/min steady state.
 - **Teardown on probe failure after start?** No. A kind that was
   healthy and is now failing its relists keeps serving its last-known
   cache (existing AIBOMs are reconciled from a stale but real view) and

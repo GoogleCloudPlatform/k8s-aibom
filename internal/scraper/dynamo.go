@@ -36,6 +36,43 @@ import (
 // for the extraction map, and #127 for the conversion-failure gap.
 var dynamoHandledKinds = []WorkloadKind{
 	{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoGraphDeployment"},
+	// A standalone DynamoComponentDeployment (no graph parent) is its own
+	// root (Design 003 §4 / Design 005 §4): the shared component spec is
+	// read as a one-component graph with locators rooted at spec.
+	{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"},
+}
+
+// dynamoComponent is one component to extract: its map and the locator
+// root that names where it lives in the CR.
+type dynamoComponent struct {
+	m       map[string]interface{}
+	locator string
+}
+
+// dynamoComponents returns the components of a graph
+// (spec.components[i]) or the single component a standalone
+// DynamoComponentDeployment is (spec). Non-object entries are reported
+// as errors on inputs and skipped.
+func dynamoComponents(u *unstructured.Unstructured, inputs *BOMInputs) []dynamoComponent {
+	if u.GetKind() == "DynamoComponentDeployment" {
+		spec, found, _ := unstructured.NestedMap(u.Object, "spec")
+		if !found {
+			return nil
+		}
+		return []dynamoComponent{{m: spec, locator: "spec"}}
+	}
+	raw, _, _ := unstructured.NestedSlice(u.Object, "spec", "components")
+	out := make([]dynamoComponent, 0, len(raw))
+	for i, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			inputs.Errors = append(inputs.Errors,
+				fmt.Errorf("spec.components[%d]: not an object (%T); skipped", i, item))
+			continue
+		}
+		out = append(out, dynamoComponent{m: m, locator: fmt.Sprintf("spec.components[%d]", i)})
+	}
+	return out
 }
 
 // dynamoBackendRuntimes maps the API-validated spec.backendFramework
@@ -73,11 +110,10 @@ var dynamoBackendRuntimes = map[string]string{
 // stays unresolved. The pattern table still attributes the runtime
 // from the image (Inferred), which is a runtime fact, not a model one.
 //
-// Pods are not listed at the DynamoGraphDeployment level (the operator
-// materializes DynamoComponentDeployments → Deployments / LWS / Grove
-// → Pods). Digests therefore resolve only from digest-pinned image
-// references; pod-status digest resolution arrives with the Design
-// 003 §3 ownership roll-up.
+// Pods reach a graph through the ownership roll-up (Design 005): the
+// reconciler passes the pods its DynamoComponentDeployments → Deployments
+// / LWS / Grove chain owns, and the shared extraction resolves digests
+// from their status exactly as for a Deployment.
 //
 // Access uses *unstructured.Unstructured; the dynamo operator's Go
 // module is not a dependency (it pulls in gateway-api-inference-
@@ -142,7 +178,7 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 		ScrapeTimestamp: t,
 	}
 
-	components, _, _ := unstructured.NestedSlice(u.Object, "spec", "components")
+	components := dynamoComponents(u, inputs)
 
 	// 1. Declared serving runtime from the validated enum, carrying the
 	// graph topology (component name → type) as properties. Topology is
@@ -160,11 +196,8 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 			"runtime.source":          "dynamo.backendFramework",
 			"dynamo.backendFramework": backend,
 		}
-		for _, raw := range components {
-			m, ok := raw.(map[string]interface{})
-			if !ok {
-				continue
-			}
+		for _, comp := range components {
+			m := comp.m
 			name, _, _ := unstructured.NestedString(m, "name")
 			ctype, _, _ := unstructured.NestedString(m, "type")
 			if name != "" && ctype != "" {
@@ -185,13 +218,8 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 
 	// 2. Per-component extraction: declared modelRef, then the pod
 	// template(s) through the shared inference extraction.
-	for i, raw := range components {
-		m, ok := raw.(map[string]interface{})
-		if !ok {
-			inputs.Errors = append(inputs.Errors,
-				fmt.Errorf("spec.components[%d]: not an object (%T); skipped", i, raw))
-			continue
-		}
+	for _, comp := range components {
+		m, base := comp.m, comp.locator
 		compName, _, _ := unstructured.NestedString(m, "name")
 		compType, _, _ := unstructured.NestedString(m, "type")
 
@@ -212,18 +240,17 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 				Confidence: ConfidenceDeclared,
 				Evidence: Evidence{
 					Source:  SourceCRDField,
-					Locator: fmt.Sprintf("spec.components[%d].modelRef.name", i),
+					Locator: base + ".modelRef.name",
 				},
 				Properties: props,
 			})
 		}
 
 		if pt, found, _ := unstructured.NestedMap(m, "podTemplate"); found {
-			s.scrapeTemplate(inputs, pt, fmt.Sprintf("spec.components[%d].podTemplate", i),
-				compName, compType, "", cfg)
+			s.scrapeTemplate(inputs, pt, base+".podTemplate", compName, compType, "", w.Pods, cfg)
 		} else if _, present := m["podTemplate"]; present {
 			inputs.Errors = append(inputs.Errors,
-				fmt.Errorf("spec.components[%d].podTemplate: not an object; skipped", i))
+				fmt.Errorf("%s.podTemplate: not an object; skipped", base))
 		}
 
 		roles, _, _ := unstructured.NestedSlice(m, "roles")
@@ -231,16 +258,16 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 			rm, ok := rawRole.(map[string]interface{})
 			if !ok {
 				inputs.Errors = append(inputs.Errors,
-					fmt.Errorf("spec.components[%d].roles[%d]: not an object (%T); skipped", i, j, rawRole))
+					fmt.Errorf("%s.roles[%d]: not an object (%T); skipped", base, j, rawRole))
 				continue
 			}
 			roleName, _, _ := unstructured.NestedString(rm, "name")
 			if pt, found, _ := unstructured.NestedMap(rm, "podTemplate"); found {
-				s.scrapeTemplate(inputs, pt, fmt.Sprintf("spec.components[%d].roles[%d].podTemplate", i, j),
-					compName, compType, roleName, cfg)
+				s.scrapeTemplate(inputs, pt, fmt.Sprintf("%s.roles[%d].podTemplate", base, j),
+					compName, compType, roleName, w.Pods, cfg)
 			} else if _, present := rm["podTemplate"]; present {
 				inputs.Errors = append(inputs.Errors,
-					fmt.Errorf("spec.components[%d].roles[%d].podTemplate: not an object; skipped", i, j))
+					fmt.Errorf("%s.roles[%d].podTemplate: not an object; skipped", base, j))
 			}
 		}
 	}
@@ -277,14 +304,14 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 // of the graph carried each image or claim. A template that does not
 // decode as a PodTemplateSpec is recorded as an error on the inputs and
 // skipped; it never fails the scrape.
-func (s *DynamoGraphDeploymentScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator, compName, compType, roleName string, cfg *InferenceConfig) {
+func (s *DynamoGraphDeploymentScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator, compName, compType, roleName string, pods []corev1.Pod, cfg *InferenceConfig) {
 	var tmpl corev1.PodTemplateSpec
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(pt, &tmpl); err != nil {
 		inputs.Errors = append(inputs.Errors, fmt.Errorf("%s: not a PodTemplateSpec: %w; skipped", locator, err))
 		return
 	}
 	before := len(inputs.Components)
-	s.inner.scrapePodSpecAt(inputs, &tmpl.Spec, tmpl.Annotations, nil, cfg,
+	s.inner.scrapePodSpecAt(inputs, &tmpl.Spec, tmpl.Annotations, pods, cfg,
 		locator+".spec", locator+".metadata.annotations")
 	for k := before; k < len(inputs.Components); k++ {
 		if inputs.Components[k].Properties == nil {
