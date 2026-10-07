@@ -250,3 +250,10 @@ proposed "Kubernetes runtime ML-BOM profile" the project is moving toward
 ```
 
 Additional entries will be added as scraper and BOM-builder code lands.
+
+## Property names
+
+k8s-aibom's custom properties are registered as the `k8s-aibom` top-level
+namespace in the CycloneDX Property Taxonomy; the taxonomy and the
+v1.7 rename from the pre-registration dotted names live in
+[docs/cyclonedx-property-taxonomy.md](cyclonedx-property-taxonomy.md).
