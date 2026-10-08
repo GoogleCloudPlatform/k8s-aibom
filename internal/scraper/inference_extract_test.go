@@ -338,6 +338,16 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"ghcr.io/berriai-forks/litellm:1.0", ""},
 		{"docker.io/berriai/litellm:main", ""}, // ghcr only: the publisher's canonical registry
 
+		// AMD ROCm vLLM — publisher-anchored to AMD's rocm/ namespace.
+		// Tag, digest and KubeAI's path form match; other rocm/* images
+		// and name-prefix near-misses do not.
+		{"rocm/vllm:rocm7.0.0_vllm_0.11.1_20251103", "vllm"},
+		{"rocm/vllm/rocm7.0.0_vllm_0.11.1_20251103", "vllm"},
+		{"rocm/vllm@sha256:abc", "vllm"},
+		{"rocm/pytorch:latest", ""},
+		{"rocm/vllm-dev:nightly", ""},
+		{"otheruser/rocm/vllm:1", ""},
+
 		// Infinity embeddings/reranking server — publisher-anchored Docker
 		// Hub image. Tag and digest forms match; name-prefix and
 		// other-registry near-misses do not. DetectRuntime does not strip

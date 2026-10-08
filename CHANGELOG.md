@@ -63,6 +63,11 @@ All notable changes to k8s-aibom are documented here. The format follows
   on the Grove pod-owning kinds (`podcliquesets`, `podcliques`,
   `podcliquescalinggroups`) to complete multi-node chains; absent CRDs
   or denied permissions degrade to today's behavior.
+- **AMD ROCm vLLM runtime pattern** (#113). `rocm/vllm` images (tag,
+  digest, and the `rocm/vllm/<build>` path form KubeAI ships as its
+  AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
+  `rocm/` publisher namespace at the image-name boundary, so
+  `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
 
 ### Added
 

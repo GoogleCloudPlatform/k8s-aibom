@@ -31,6 +31,15 @@ runtimeImagePatterns:
     pattern: '^vllm/.*'
   - runtime: vllm
     pattern: '^ghcr\.io/[a-zA-Z0-9.\-_]+/vllm[a-zA-Z0-9.\-_]*(?:[:@]|$)'
+  # AMD ROCm builds of vLLM — rocm/ is AMD's own Docker Hub publisher
+  # namespace, so this is a publisher's-own-registry case (like TGI on
+  # GHCR), not a mirror. Matches the tag form (rocm/vllm:<tag>), the
+  # digest form, and the path form KubeAI ships as its AMD default
+  # (rocm/vllm/rocm7.0.0_vllm_0.11.1_20251103). Bounded at the
+  # image-name boundary, so rocm/vllm-dev and other rocm/* images such
+  # as rocm/pytorch do not match.
+  - runtime: vllm
+    pattern: '^rocm/vllm(?:[:@/]|$)'
   - runtime: tgi
     pattern: '^huggingface/text-generation-inference.*'
   # TGI's GHCR form was a deliberately preserved false negative pending
