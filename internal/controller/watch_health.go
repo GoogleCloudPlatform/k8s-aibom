@@ -42,6 +42,11 @@ type WatchStatus struct {
 	// Failures counts errors recorded since the last healthy
 	// transition.
 	Failures int
+	// Disabled is true while the kind is excluded by
+	// spec.discovery.workloadKinds (Design 006 §3): its informer does
+	// not exist, by configuration rather than by failure. Never
+	// Degraded.
+	Disabled bool
 }
 
 // Degraded reports whether this status should surface as a Degraded
@@ -56,7 +61,10 @@ func (s WatchStatus) Degraded() bool { return !s.Healthy && s.LastError != "" }
 type WatchTransition struct {
 	Kind    string
 	Healthy bool
-	Message string
+	// Disabled marks the transition into the configured-off state;
+	// Healthy is false and no error is involved.
+	Disabled bool
+	Message  string
 }
 
 // WatchHealth is the concurrency-safe registry of third-party watch
@@ -100,6 +108,7 @@ func (h *WatchHealth) MarkHealthy(kind string) bool {
 	s := h.get(kind)
 	transition := !s.Healthy
 	s.Healthy = true
+	s.Disabled = false
 	s.LastError = ""
 	s.Failures = 0
 	if transition {
@@ -125,6 +134,7 @@ func (h *WatchHealth) MarkUnhealthy(kind string, err error) bool {
 	s := h.get(kind)
 	transition := s.Healthy || s.LastError == ""
 	s.Healthy = false
+	s.Disabled = false
 	s.LastError = err.Error()
 	s.Failures++
 	if transition {
@@ -139,6 +149,46 @@ func (h *WatchHealth) MarkUnhealthy(kind string, err error) bool {
 			Message: fmt.Sprintf("%s watch is unhealthy: %s", kind, err.Error())})
 	}
 	return transition
+}
+
+// MarkDisabled records that the kind is excluded by configuration
+// (Design 006 §3). Clears any error so the kind leaves the Degraded
+// set. Returns true on the transition into the disabled state; the
+// supervisor sweeps the kind's AIBOMs on that transition only.
+func (h *WatchHealth) MarkDisabled(kind string) bool {
+	h.mu.Lock()
+	s := h.get(kind)
+	transition := !s.Disabled
+	s.Disabled = true
+	s.Healthy = false
+	s.LastError = ""
+	s.Failures = 0
+	if transition {
+		s.Since = h.now()
+	}
+	subs := h.subs
+	h.mu.Unlock()
+	metrics.WatchHealthy.WithLabelValues(kind).Set(0)
+	if transition {
+		h.notify(subs, WatchTransition{Kind: kind, Disabled: true,
+			Message: fmt.Sprintf("%s watch disabled by spec.discovery.workloadKinds", kind)})
+	}
+	return transition
+}
+
+// MarkStarting returns the kind to the starting state (neither
+// healthy, degraded nor disabled) before its watch is (re)built. No
+// transition is notified; the first sync or error will.
+func (h *WatchHealth) MarkStarting(kind string) {
+	h.mu.Lock()
+	s := h.get(kind)
+	s.Disabled = false
+	s.Healthy = false
+	s.LastError = ""
+	s.Failures = 0
+	s.Since = h.now()
+	h.mu.Unlock()
+	metrics.WatchHealthy.WithLabelValues(kind).Set(0)
 }
 
 // IsHealthy reports the current healthy flag for kind.

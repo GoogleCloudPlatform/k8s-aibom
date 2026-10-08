@@ -1,8 +1,23 @@
 # Design 006: Configurable workload-kind allowlist
 
-Status: Draft, 2026-10-05. Tracks #136. Targets the v1.6 train (the
-roadmap commitment), with the watch-narrowing half for apps/v1 kinds
-deferred to v1.7 for the reason in §3. Review window stated on the PR.
+Status: Accepted 2026-10-08 (review window on #138); implemented on
+main the same week. Tracks #136. Targets the v1.6 train (the roadmap
+commitment), with the watch-narrowing half for apps/v1 kinds deferred to
+v1.7 for the reason in §3.
+
+Implementation note (2026-10-08): §2's claim that "a config change
+enqueues the same way" as a namespace change did not hold — nothing
+re-enqueued workloads on a snapshot rotation; the other config fields
+apply lazily, on each workload's next event. The allowlist cannot be
+lazy (the operator's visible outcome is "the removed kind's documents
+are gone"), so the implementation adds a fan-out: on a `workloadKinds`
+change every workload of every reporting kind is listed once through
+the uncached reader and re-enqueued. Disabled supervised kinds have no
+controller left to delete their documents, so the supervisor sweeps
+them on the transition into the disabled state. Open question 1 (a
+plugin notice when the allowlist is active) is not in this change: the
+plugin does not read `AIBOMControllerConfig` today and reader RBAC may
+not permit it; tracked separately.
 
 ## Context
 

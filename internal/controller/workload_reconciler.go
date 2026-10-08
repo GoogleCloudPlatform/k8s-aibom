@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -51,6 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // WorkloadReconciler holds the kind-neutral dependencies and methods
@@ -112,6 +114,11 @@ type WorkloadReconciler struct {
 	// tracked kind is rolled up into the owner's document instead of
 	// getting its own. nil disables suppression.
 	Tracked *TrackedKinds
+
+	// Fanout re-enqueues every workload of this kind when
+	// spec.discovery.workloadKinds changes (Design 006). nil means
+	// allowlist changes apply lazily, on each workload's next event.
+	Fanout *AllowlistFanout
 }
 
 // WorkloadReconcileRequest carries everything the kind-neutral reconcile
@@ -202,15 +209,19 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	if !snap.NamespaceSelector.Matches(labels.Set(ns.Labels)) {
 		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "not_opted_in").Inc()
 		logger.V(1).Info("namespace does not match selector; skipping", "workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name)
-		aibom := &aibomv1beta1.AIBOM{}
-		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
-			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
-			}
-		} else if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("get orphaned AIBOM: %w", err)
-		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.deleteWorkloadAIBOM(ctx, req, "orphaned")
+	}
+
+	// Workload-kind allowlist (Design 006 §2): a kind not in
+	// spec.discovery.workloadKinds is treated exactly like a namespace
+	// that is not opted in. Checked after the namespace so an excluded
+	// kind in a non-opted-in namespace counts as not_opted_in, as before.
+	if gk := (schema.GroupKind{Group: req.Workload.Kind.Group, Kind: req.Workload.Kind.Kind}); !snap.WorkloadKinds.Allows(gk) {
+		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "kind_not_allowed").Inc()
+		logger.V(1).Info("workload kind is not in spec.discovery.workloadKinds; skipping",
+			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name,
+			"workload_kinds", snap.WorkloadKinds.String())
+		return ctrl.Result{}, r.deleteWorkloadAIBOM(ctx, req, "not-allowed")
 	}
 
 	// Ownership roll-up (Design 005): a tracked kind that owns this
@@ -221,15 +232,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		logger.V(1).Info("workload is owned by a tracked kind; rolled up into the owner's AIBOM",
 			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name,
 			"owner_kind", owner.Kind, "owner_name", owner.Name)
-		aibom := &aibomv1beta1.AIBOM{}
-		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
-			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("delete rolled-up AIBOM: %w", err)
-			}
-		} else if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("get rolled-up AIBOM: %w", err)
-		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.deleteWorkloadAIBOM(ctx, req, "rolled-up")
 	} else if outcome == ownerUnresolved {
 		// Coverage never regresses because of a missing permission or
 		// a kind we cannot read: report as today, but say so.
@@ -643,6 +646,35 @@ func formatAPIVersion(k scraper.WorkloadKind) string {
 		return k.Version
 	}
 	return k.Group + "/" + k.Version
+}
+
+// deleteWorkloadAIBOM removes the workload's AIBOM when the workload is
+// no longer reported (namespace not opted in, kind not allowed, rolled
+// up into an owner). Absence is success. why names the reason in the
+// returned error.
+func (r *WorkloadReconciler) deleteWorkloadAIBOM(ctx context.Context, req WorkloadReconcileRequest, why string) error {
+	aibom := &aibomv1beta1.AIBOM{}
+	err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get %s AIBOM: %w", why, err)
+	}
+	if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete %s AIBOM: %w", why, err)
+	}
+	return nil
+}
+
+// allowlistSource returns the channel source through which the
+// AllowlistFanout re-enqueues every workload of gk when
+// spec.discovery.workloadKinds changes, or nil when no fan-out is wired.
+func (r *WorkloadReconciler) allowlistSource(gk schema.GroupKind, listFactory func() client.ObjectList, extractItems func(client.ObjectList) []client.Object) source.Source {
+	if r.Fanout == nil {
+		return nil
+	}
+	return r.Fanout.Source(gk, false, listFactory, extractItems)
 }
 
 // NamespaceWatchPredicate returns a predicate that triggers when a Namespace's

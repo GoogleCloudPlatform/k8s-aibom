@@ -82,6 +82,26 @@ type DiscoveryConfig struct {
 	// docs/scraper-heuristics.md "Known false negatives" for context.
 	// +optional
 	InferenceRuntimeImagePatterns []RuntimeImagePattern `json:"inferenceRuntimeImagePatterns,omitempty"`
+
+	// WorkloadKinds restricts which workload kinds the controller
+	// inventories, as Group/Kind strings (for example apps/Deployment,
+	// nvidia.com/DynamoGraphDeployment; the core group is written
+	// core/Kind). Absent or empty means every kind the controller
+	// knows. Entries are validated against that set: an unknown entry
+	// is a configuration error (ConfigInvalid, last-known-good
+	// retained), never a silent no-op.
+	//
+	// A kind not in the list is not reported: no scrape, and any
+	// existing AIBOM for a workload of that kind is deleted. For the
+	// third-party kinds (KServe, Dynamo, NIMService, LeaderWorkerSet)
+	// the controller also stops watching a kind that is not listed;
+	// the apps/v1 and batch watches stay in place in this release and
+	// only their reporting is filtered. A kind not in the list also
+	// stops absorbing the workloads it owns, which are reported on
+	// their own again. Changes apply without a restart.
+	// +optional
+	// +listType=atomic
+	WorkloadKinds []string `json:"workloadKinds,omitempty"`
 }
 
 // RuntimeImagePattern is one runtime-detection rule.

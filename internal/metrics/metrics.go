@@ -62,7 +62,7 @@ var (
 	WorkloadReconcileOutcomes = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "aibom_workload_reconcile_outcomes_total",
-			Help: "Workload reconcile outcomes by kind: not_opted_in, unmatched (opted in, no inference signal), matched, rolled_up (owned by a tracked kind; reported on the owner), rollup_unresolved (owner chain unreadable; reported as a root)",
+			Help: "Workload reconcile outcomes by kind: not_opted_in, kind_not_allowed (excluded by spec.discovery.workloadKinds), unmatched (opted in, no inference signal), matched, rolled_up (owned by a tracked kind; reported on the owner), rollup_unresolved (owner chain unreadable; reported as a root)",
 		},
 		[]string{"kind", "outcome"},
 	)
