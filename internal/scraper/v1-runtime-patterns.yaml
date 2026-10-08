@@ -112,6 +112,14 @@ runtimeImagePatterns:
   # The namespaces are distinct, so the two patterns cannot
   # double-count one workload.
 
+  # vLLM CPU release image on the vLLM project's own public ECR alias
+  # (q9t5s3a7), KubeAI's default vLLM image for CPU nodes. Anchored to
+  # that exact alias and repository at the image-name boundary;
+  # deliberately NOT a broad public.ecr.aws/.*vllm match, so other
+  # aliases and vllm-cpu-release-repo-* names do not match.
+  - runtime: vllm
+    pattern: '^public\.ecr\.aws/q9t5s3a7/vllm-cpu-release-repo(?:[:@]|$)'
+
   # Infinity — michaelf34/infinity embeddings and reranking server on
   # Docker Hub. Anchored at the image-name boundary so tag and digest
   # forms match (including 0.0.77-cpu and 0.0.77-rocm) while

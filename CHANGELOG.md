@@ -118,6 +118,11 @@ All notable changes to k8s-aibom are documented here. The format follows
   image/digest filters, with a stderr warning. Same client and RBAC
   as `summary`; no new CRD, no controller flag.
 
+- **vLLM CPU release image runtime pattern** (#114).
+  `public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo` (the vLLM project's
+  own public ECR alias; KubeAI's CPU default) attributes as runtime
+  `vllm`. Anchored to that exact alias and repository, not a broad
+  `public.ecr.aws/.*vllm` match.
 - **Infinity embeddings server runtime pattern** (#111).
   `michaelf34/infinity` (tag and digest forms, including `0.0.77-cpu`
   and `0.0.77-rocm`) attributes as runtime `infinity`. The match is

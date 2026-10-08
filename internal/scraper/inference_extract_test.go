@@ -310,6 +310,15 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.1-efa", "tensorrt-llm"},
 		{"nvcr.io/nvidia/tritonserver:24.05-trtllm-python-py3", "triton"},
 
+		// vLLM CPU release image on the vLLM project's public ECR alias —
+		// exact alias and repository only; other aliases, other ECR
+		// vLLM images and name-prefix near-misses stay quiet.
+		{"public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.11.2", "vllm"},
+		{"public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo@sha256:abc", "vllm"},
+		{"public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo-extra:v0.11.2", ""},
+		{"public.ecr.aws/someone/vllm-cpu-release-repo:v0.11.2", ""},
+		{"public.ecr.aws/q9t5s3a7/other-repo:v0.11.2", ""},
+
 		// Conservative-detection guards: NVIDIA infrastructure images
 		// (controllers and endpoint-pickers, not model serving) and
 		// near-miss namespaces must not match. Named explicitly at the
