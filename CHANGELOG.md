@@ -128,6 +128,12 @@ All notable changes to k8s-aibom are documented here. The format follows
   and `0.0.77-rocm`) attributes as runtime `infinity`. The match is
   publisher-anchored at the image-name boundary, so
   `michaelf34/infinity-extra` and other registries stay unmatched.
+- **faster-whisper-server speech-to-text runtime pattern** (#112).
+  `fedirz/faster-whisper-server` (tag and digest forms, including
+  KubeAI's `latest-cpu` and `latest-cuda`) attributes as runtime
+  `faster-whisper`. The match is publisher-anchored at the image-name
+  boundary, so `fedirz/faster-whisper-server-extra` and other
+  registries stay unmatched.
 - **Metrics are now scrapable, opt-in** (#106). The controller's
   Prometheus endpoint was registered but bound to loopback with no
   Service — unreachable by any scraper, which made the chart's

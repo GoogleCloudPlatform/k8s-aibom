@@ -128,6 +128,14 @@ runtimeImagePatterns:
   - runtime: infinity
     pattern: '^michaelf34/infinity(?:[:@]|$)'
 
+  # faster-whisper-server — fedirz/faster-whisper-server speech-to-text
+  # server on Docker Hub (KubeAI's default FasterWhisper engine).
+  # Anchored at the image-name boundary and independent of the tag, so
+  # latest-cpu / latest-cuda and digest forms match while
+  # fedirz/faster-whisper-server-extra and other registries do not.
+  - runtime: faster-whisper
+    pattern: '^fedirz/faster-whisper-server(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and

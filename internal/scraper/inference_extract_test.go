@@ -349,6 +349,16 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"michaelf34/infinity-extra:1", ""},
 		{"otheruser/infinity:0.0.77", ""},
 		{"ghcr.io/michaelf34/infinity:0.0.77", ""},
+
+		// faster-whisper-server speech-to-text — publisher-anchored Docker
+		// Hub image. Non-version tags (latest-cpu / latest-cuda) and digest
+		// forms match; name-prefix and other-publisher near-misses do not.
+		{"fedirz/faster-whisper-server:latest-cpu", "faster-whisper"},
+		{"fedirz/faster-whisper-server:latest-cuda", "faster-whisper"},
+		{"fedirz/faster-whisper-server@sha256:abc", "faster-whisper"},
+		{"fedirz/faster-whisper-server-extra:1", ""},
+		{"otheruser/faster-whisper-server:latest-cpu", ""},
+		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
