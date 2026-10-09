@@ -68,6 +68,29 @@ All notable changes to k8s-aibom are documented here. The format follows
   AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
   `rocm/` publisher namespace at the image-name boundary, so
   `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
+- **ray-serve `rayproject/ray-ml` runtime pattern** (#151).
+  `rayproject/ray-ml` (KubeRay serve samples) attributes as runtime
+  `ray-serve`, same as `rayproject/ray`. Bounded at the image-name
+  boundary, so other `rayproject/ray-*` names stay unmatched.
+- **llama.cpp server runtime pattern** (#148).
+  `ghcr.io/ggml-org/llama.cpp` and the older `ghcr.io/ggerganov/llama.cpp`
+  (tag and digest forms, including `server-b10680`, `server-cuda-b10680`,
+  and `server-rocm-b10680`) attribute as runtime `llama.cpp`. The match is
+  publisher-anchored at the image-name boundary, so name-prefix near-misses
+  and Docker Hub lookalikes stay unmatched. Tag-independent; `server-`
+  build numbers are not treated as a runtime version.
+- **LMCache production-stack vLLM runtime pattern** (#147).
+  `lmcache/vllm-openai` (tag and digest forms; production-stack's
+  default model server) attributes as runtime `vllm`. Anchored to
+  LMCache's `lmcache/` publisher namespace at the image-name boundary,
+  so `lmcache/lmstack-router`, `lmcache/lmstack-sidecar` and other
+  orgs stay unmatched.
+- **Vertex AI Model Garden vLLM runtime pattern** (#146).
+  `us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve`
+  (tag and digest forms; GKE tutorials' Vertex vLLM image) attributes
+  as runtime `vllm`. Anchored at the image-name boundary, so sibling
+  images under the same path and the same name under another registry
+  stay unmatched.
 - **KServe HuggingFace server runtime pattern** (#152).
   `kserve/huggingfaceserver` (tag and digest forms) attributes as
   runtime `huggingfaceserver`. Publisher-anchored at the image-name

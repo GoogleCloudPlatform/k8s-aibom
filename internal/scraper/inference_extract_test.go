@@ -276,6 +276,8 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/tritonserver:24.01-py3", "triton"},
 		{"ollama/ollama:0.1.0", "ollama"},
 		{"rayproject/ray:latest", "ray-serve"},
+		{"rayproject/ray-ml:2.52.0", "ray-serve"},
+		{"rayproject/ray-llm:latest", ""},
 		{"ray-project/ray:latest", ""},
 		{"foo/bar:tag", ""},
 
@@ -369,6 +371,39 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"fedirz/faster-whisper-server-extra:1", ""},
 		{"otheruser/faster-whisper-server:latest-cpu", ""},
 		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
+
+		// llama.cpp server — publisher-anchored GHCR images under ggml-org
+		// (current) and ggerganov (older). Tag and digest forms match;
+		// name-prefix and Docker Hub lookalikes do not. DetectRuntime is
+		// tag-independent; server- build numbers are not a runtime version.
+		{"ghcr.io/ggml-org/llama.cpp:server-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp:server-cuda-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp:server-rocm-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp@sha256:abc", "llama.cpp"},
+		{"ghcr.io/ggerganov/llama.cpp:server", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp-extra:server-b10680", ""},
+		{"ggml-org/llama.cpp:server-b10680", ""},
+		{"docker.io/ggml-org/llama.cpp:server-b10680", ""},
+
+		// LMCache production-stack default model server — publisher-anchored
+		// Docker Hub image. Tag and digest forms match; production-stack
+		// infrastructure images and other-org near-misses do not.
+		{"lmcache/vllm-openai:latest", "vllm"},
+		{"lmcache/vllm-openai@sha256:abc", "vllm"},
+		{"lmcache/lmstack-router:latest", ""},
+		{"lmcache/lmstack-sidecar:latest", ""},
+		{"otheruser/vllm-openai:latest", ""},
+
+		// Vertex AI Model Garden vLLM — GKE tutorials' Vertex vLLM image.
+		// Tag (model aliases, dated RCs, model-garden release tags) and
+		// digest forms match; sibling images under the same path and the
+		// same name under another registry do not.
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:gemma4", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20250819_0916_RC01", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:model-garden.pytorch-vllm-serve-release_20250819_p0", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve@sha256:abc", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-inference:gemma4", ""},
+		{"gcr.io/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:gemma4", ""},
 
 		// kserve/huggingfaceserver — publisher-anchored Docker Hub image
 		// run as a plain Deployment. Tag and digest forms match; KServe
