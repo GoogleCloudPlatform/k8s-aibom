@@ -68,6 +68,12 @@ All notable changes to k8s-aibom are documented here. The format follows
   AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
   `rocm/` publisher namespace at the image-name boundary, so
   `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
+- **LMCache production-stack vLLM runtime pattern** (#147).
+  `lmcache/vllm-openai` (tag and digest forms; production-stack's
+  default model server) attributes as runtime `vllm`. Anchored to
+  LMCache's `lmcache/` publisher namespace at the image-name boundary,
+  so `lmcache/lmstack-router`, `lmcache/lmstack-sidecar` and other
+  orgs stay unmatched.
 
 ### Added
 
