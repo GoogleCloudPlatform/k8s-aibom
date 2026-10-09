@@ -53,8 +53,11 @@ runtimeImagePatterns:
     pattern: '^nvcr\.io/nvidia/tritonserver.*'
   - runtime: ollama
     pattern: '^ollama/ollama.*'
+  # ray-serve — Ray's own Docker Hub images. The optional -ml suffix
+  # covers KubeRay serve samples (rayproject/ray-ml); bounded at the
+  # image-name boundary so other rayproject/ray-* names stay unmatched.
   - runtime: ray-serve
-    pattern: '^(?:.*/)?rayproject/ray(?:[:@]|$)'
+    pattern: '^(?:.*/)?rayproject/ray(?:-ml)?(?:[:@]|$)'
   - runtime: llm-d
     pattern: '^(?:.*/)?llm-d/[a-zA-Z0-9.\-_]+(?:[:@]|$)'
 

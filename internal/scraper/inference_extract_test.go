@@ -276,6 +276,8 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/tritonserver:24.01-py3", "triton"},
 		{"ollama/ollama:0.1.0", "ollama"},
 		{"rayproject/ray:latest", "ray-serve"},
+		{"rayproject/ray-ml:2.52.0", "ray-serve"},
+		{"rayproject/ray-llm:latest", ""},
 		{"ray-project/ray:latest", ""},
 		{"foo/bar:tag", ""},
 
