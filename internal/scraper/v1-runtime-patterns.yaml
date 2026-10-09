@@ -53,8 +53,11 @@ runtimeImagePatterns:
     pattern: '^nvcr\.io/nvidia/tritonserver.*'
   - runtime: ollama
     pattern: '^ollama/ollama.*'
+  # ray-serve — Ray's own Docker Hub images. The optional -ml suffix
+  # covers KubeRay serve samples (rayproject/ray-ml); bounded at the
+  # image-name boundary so other rayproject/ray-* names stay unmatched.
   - runtime: ray-serve
-    pattern: '^(?:.*/)?rayproject/ray(?:[:@]|$)'
+    pattern: '^(?:.*/)?rayproject/ray(?:-ml)?(?:[:@]|$)'
   # llm-d — Kubernetes-native distributed inference. The org publishes
   # both model-server images and infrastructure (endpoint picker,
   # routing sidecar, coordinator, kv-cache-manager, autoscaler,
@@ -153,6 +156,33 @@ runtimeImagePatterns:
   # fedirz/faster-whisper-server-extra and other registries do not.
   - runtime: faster-whisper
     pattern: '^fedirz/faster-whisper-server(?:[:@]|$)'
+
+  # llama.cpp — ggml-org/llama.cpp server images on GHCR, plus the older
+  # ggerganov/llama.cpp namespace. Anchored at the image-name boundary so
+  # tag and digest forms match (including server-b10680, server-cuda, and
+  # server-rocm) while name-prefix near-misses and Docker Hub lookalikes
+  # do not. Tag-independent: server- build numbers are not a runtime
+  # version.
+  - runtime: llama.cpp
+    pattern: '^ghcr\.io/(?:ggml-org|ggerganov)/llama\.cpp(?:[:@]|$)'
+
+  # LMCache production-stack default model server — lmcache/vllm-openai
+  # on Docker Hub. Anchored at the image-name boundary so tag and digest
+  # forms match while lmcache/lmstack-router, lmcache/lmstack-sidecar
+  # (production-stack infrastructure, not model serving) and the same
+  # name under another org do not. Not a prefix and not a mirror pattern.
+  - runtime: vllm
+    pattern: '^lmcache/vllm-openai(?:[:@]|$)'
+
+  # GKE tutorials' Vertex AI Model Garden vLLM image —
+  # us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve.
+  # Anchored at the image-name boundary so tag forms (model aliases such
+  # as gemma4, dated RCs, model-garden.pytorch-vllm-serve-release_*) and
+  # digest forms match while sibling images under the same path and the
+  # same name under another registry do not. Not a prefix and not a
+  # mirror pattern.
+  - runtime: vllm
+    pattern: '^us-docker\.pkg\.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve(?:[:@]|$)'
 
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
