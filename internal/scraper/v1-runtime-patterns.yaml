@@ -145,6 +145,15 @@ runtimeImagePatterns:
   - runtime: faster-whisper
     pattern: '^fedirz/faster-whisper-server(?:[:@]|$)'
 
+  # llama.cpp — ggml-org/llama.cpp server images on GHCR, plus the older
+  # ggerganov/llama.cpp namespace. Anchored at the image-name boundary so
+  # tag and digest forms match (including server-b10680, server-cuda, and
+  # server-rocm) while name-prefix near-misses and Docker Hub lookalikes
+  # do not. Tag-independent: server- build numbers are not a runtime
+  # version.
+  - runtime: llama.cpp
+    pattern: '^ghcr\.io/(?:ggml-org|ggerganov)/llama\.cpp(?:[:@]|$)'
+
   # LMCache production-stack default model server — lmcache/vllm-openai
   # on Docker Hub. Anchored at the image-name boundary so tag and digest
   # forms match while lmcache/lmstack-router, lmcache/lmstack-sidecar
