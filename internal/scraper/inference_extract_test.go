@@ -393,6 +393,17 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"lmcache/lmstack-router:latest", ""},
 		{"lmcache/lmstack-sidecar:latest", ""},
 		{"otheruser/vllm-openai:latest", ""},
+
+		// Vertex AI Model Garden vLLM — GKE tutorials' Vertex vLLM image.
+		// Tag (model aliases, dated RCs, model-garden release tags) and
+		// digest forms match; sibling images under the same path and the
+		// same name under another registry do not.
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:gemma4", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20250819_0916_RC01", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:model-garden.pytorch-vllm-serve-release_20250819_p0", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve@sha256:abc", "vllm"},
+		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-inference:gemma4", ""},
+		{"gcr.io/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:gemma4", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
