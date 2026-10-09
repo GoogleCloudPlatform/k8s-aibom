@@ -369,6 +369,15 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"fedirz/faster-whisper-server-extra:1", ""},
 		{"otheruser/faster-whisper-server:latest-cpu", ""},
 		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
+
+		// vllm/agentic-api is llm-d's OpenAI Responses API layer in front
+		// of an InferencePool; it executes no model. Model-server images
+		// in the vllm/ namespace still fire; the API layer stays quiet.
+		{"vllm/vllm-openai@sha256:abc", "vllm"},
+		{"vllm/vllm-tpu:latest", "vllm"},
+		{"vllm/vllm-tpu@sha256:abc", "vllm"},
+		{"vllm/agentic-api:latest", ""},
+		{"vllm/agentic-api@sha256:abc", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {

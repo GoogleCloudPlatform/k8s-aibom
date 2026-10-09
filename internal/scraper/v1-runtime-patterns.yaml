@@ -27,6 +27,13 @@
 # describe.
 
 runtimeImagePatterns:
+  # vllm/agentic-api is llm-d's OpenAI Responses API layer in front of
+  # an InferencePool: it executes no model, the pool behind it does.
+  # Listed ahead of the broad vllm/ entry so DetectRuntime returns an
+  # empty runtime and stops; tag and digest forms stay quiet. Other
+  # vllm/ model-server images (vllm-openai, vllm-tpu, …) still match.
+  - runtime: ""
+    pattern: '^vllm/agentic-api(?:[:@]|$)'
   - runtime: vllm
     pattern: '^vllm/.*'
   - runtime: vllm
