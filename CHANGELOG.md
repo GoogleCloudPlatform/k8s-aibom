@@ -68,6 +68,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
   `rocm/` publisher namespace at the image-name boundary, so
   `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
+- **llama.cpp server runtime pattern** (#148).
+  `ghcr.io/ggml-org/llama.cpp` and the older `ghcr.io/ggerganov/llama.cpp`
+  (tag and digest forms, including `server-b10680`, `server-cuda-b10680`,
+  and `server-rocm-b10680`) attribute as runtime `llama.cpp`. The match is
+  publisher-anchored at the image-name boundary, so name-prefix near-misses
+  and Docker Hub lookalikes stay unmatched. Tag-independent; `server-`
+  build numbers are not treated as a runtime version.
 
 ### Added
 
