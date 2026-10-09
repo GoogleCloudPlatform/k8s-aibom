@@ -68,6 +68,10 @@ All notable changes to k8s-aibom are documented here. The format follows
   AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
   `rocm/` publisher namespace at the image-name boundary, so
   `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
+- **ray-serve `rayproject/ray-ml` runtime pattern** (#151).
+  `rayproject/ray-ml` (KubeRay serve samples) attributes as runtime
+  `ray-serve`, same as `rayproject/ray`. Bounded at the image-name
+  boundary, so other `rayproject/ray-*` names stay unmatched.
 
 ### Added
 
