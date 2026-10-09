@@ -153,6 +153,16 @@ runtimeImagePatterns:
   - runtime: vllm
     pattern: '^lmcache/vllm-openai(?:[:@]|$)'
 
+  # GKE tutorials' Vertex AI Model Garden vLLM image —
+  # us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve.
+  # Anchored at the image-name boundary so tag forms (model aliases such
+  # as gemma4, dated RCs, model-garden.pytorch-vllm-serve-release_*) and
+  # digest forms match while sibling images under the same path and the
+  # same name under another registry do not. Not a prefix and not a
+  # mirror pattern.
+  - runtime: vllm
+    pattern: '^us-docker\.pkg\.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and

@@ -74,6 +74,12 @@ All notable changes to k8s-aibom are documented here. The format follows
   LMCache's `lmcache/` publisher namespace at the image-name boundary,
   so `lmcache/lmstack-router`, `lmcache/lmstack-sidecar` and other
   orgs stay unmatched.
+- **Vertex AI Model Garden vLLM runtime pattern** (#146).
+  `us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve`
+  (tag and digest forms; GKE tutorials' Vertex vLLM image) attributes
+  as runtime `vllm`. Anchored at the image-name boundary, so sibling
+  images under the same path and the same name under another registry
+  stay unmatched.
 
 ### Added
 
