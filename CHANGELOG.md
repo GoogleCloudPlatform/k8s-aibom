@@ -68,6 +68,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   AMD GPU default) attribute as runtime `vllm`. Anchored to AMD's
   `rocm/` publisher namespace at the image-name boundary, so
   `rocm/pytorch`, `rocm/vllm-dev` and other registries stay unmatched.
+- **KServe HuggingFace server runtime pattern** (#152).
+  `kserve/huggingfaceserver` (tag and digest forms) attributes as
+  runtime `huggingfaceserver`. Publisher-anchored at the image-name
+  boundary, so KServe infrastructure images under the same org
+  (`kserve/kserve-controller`, `kserve/agent`, `kserve/router`,
+  `kserve/storage-initializer`), name-prefix near-misses, and other
+  registries stay unmatched.
 
 ### Added
 
