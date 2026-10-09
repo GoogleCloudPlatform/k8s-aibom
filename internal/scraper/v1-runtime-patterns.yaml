@@ -148,6 +148,23 @@ runtimeImagePatterns:
   - runtime: faster-whisper
     pattern: '^fedirz/faster-whisper-server(?:[:@]|$)'
 
+  # llama.cpp — ggml-org/llama.cpp server images on GHCR, plus the older
+  # ggerganov/llama.cpp namespace. Anchored at the image-name boundary so
+  # tag and digest forms match (including server-b10680, server-cuda, and
+  # server-rocm) while name-prefix near-misses and Docker Hub lookalikes
+  # do not. Tag-independent: server- build numbers are not a runtime
+  # version.
+  - runtime: llama.cpp
+    pattern: '^ghcr\.io/(?:ggml-org|ggerganov)/llama\.cpp(?:[:@]|$)'
+
+  # LMCache production-stack default model server — lmcache/vllm-openai
+  # on Docker Hub. Anchored at the image-name boundary so tag and digest
+  # forms match while lmcache/lmstack-router, lmcache/lmstack-sidecar
+  # (production-stack infrastructure, not model serving) and the same
+  # name under another org do not. Not a prefix and not a mirror pattern.
+  - runtime: vllm
+    pattern: '^lmcache/vllm-openai(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and

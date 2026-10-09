@@ -371,6 +371,28 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"fedirz/faster-whisper-server-extra:1", ""},
 		{"otheruser/faster-whisper-server:latest-cpu", ""},
 		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
+
+		// llama.cpp server — publisher-anchored GHCR images under ggml-org
+		// (current) and ggerganov (older). Tag and digest forms match;
+		// name-prefix and Docker Hub lookalikes do not. DetectRuntime is
+		// tag-independent; server- build numbers are not a runtime version.
+		{"ghcr.io/ggml-org/llama.cpp:server-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp:server-cuda-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp:server-rocm-b10680", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp@sha256:abc", "llama.cpp"},
+		{"ghcr.io/ggerganov/llama.cpp:server", "llama.cpp"},
+		{"ghcr.io/ggml-org/llama.cpp-extra:server-b10680", ""},
+		{"ggml-org/llama.cpp:server-b10680", ""},
+		{"docker.io/ggml-org/llama.cpp:server-b10680", ""},
+
+		// LMCache production-stack default model server — publisher-anchored
+		// Docker Hub image. Tag and digest forms match; production-stack
+		// infrastructure images and other-org near-misses do not.
+		{"lmcache/vllm-openai:latest", "vllm"},
+		{"lmcache/vllm-openai@sha256:abc", "vllm"},
+		{"lmcache/lmstack-router:latest", ""},
+		{"lmcache/lmstack-sidecar:latest", ""},
+		{"otheruser/vllm-openai:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
