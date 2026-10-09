@@ -372,6 +372,15 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"otheruser/faster-whisper-server:latest-cpu", ""},
 		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
 
+		// vllm/agentic-api is llm-d's OpenAI Responses API layer in front
+		// of an InferencePool; it executes no model. Model-server images
+		// in the vllm/ namespace still fire; the API layer stays quiet.
+		{"vllm/vllm-openai@sha256:abc", "vllm"},
+		{"vllm/vllm-tpu:latest", "vllm"},
+		{"vllm/vllm-tpu@sha256:abc", "vllm"},
+		{"vllm/agentic-api:latest", ""},
+		{"vllm/agentic-api@sha256:abc", ""},
+
 		// llama.cpp server — publisher-anchored GHCR images under ggml-org
 		// (current) and ggerganov (older). Tag and digest forms match;
 		// name-prefix and Docker Hub lookalikes do not. DetectRuntime is
