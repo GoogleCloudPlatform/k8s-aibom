@@ -372,6 +372,16 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"otheruser/faster-whisper-server:latest-cpu", ""},
 		{"ghcr.io/fedirz/faster-whisper-server:latest-cpu", ""},
 
+		// llm-d model-server images — accelerator and provider variants
+		// attribute as runtime llm-d; infrastructure images in the same
+		// org (endpoint picker, sidecar, simulator) stay quiet.
+		{"ghcr.io/llm-d/llm-d-cuda:v0.2.0", "llm-d"},
+		{"ghcr.io/llm-d/llm-d-gke:v0.2.0", "llm-d"},
+		{"ghcr.io/llm-d/llm-d-cuda-dev:v0.2.0", "llm-d"},
+		{"ghcr.io/llm-d/llm-d-inference-scheduler:v0.2.0", ""},
+		{"ghcr.io/llm-d/llm-d-routing-sidecar:v0.2.0", ""},
+		{"ghcr.io/llm-d/inference-sim:v0.2.0", ""},
+
 		// llama.cpp server — publisher-anchored GHCR images under ggml-org
 		// (current) and ggerganov (older). Tag and digest forms match;
 		// name-prefix and Docker Hub lookalikes do not. DetectRuntime is

@@ -58,8 +58,17 @@ runtimeImagePatterns:
   # image-name boundary so other rayproject/ray-* names stay unmatched.
   - runtime: ray-serve
     pattern: '^(?:.*/)?rayproject/ray(?:-ml)?(?:[:@]|$)'
+  # llm-d — Kubernetes-native distributed inference. The org publishes
+  # both model-server images and infrastructure (endpoint picker,
+  # routing sidecar, coordinator, kv-cache-manager, autoscaler,
+  # inference-sim, …). Only the model-server names attribute as runtime
+  # llm-d: accelerator and provider variants (llm-d-cuda, llm-d-rocm,
+  # llm-d-cpu, llm-d-xpu, llm-d-hpu, llm-d-gke, llm-d-aws,
+  # llm-d-cuda-gb200) and their -dev/-debug/-ubuntu suffixes.
+  # Infrastructure images still appear in the BOM as ordinary container
+  # components; they just carry no runtime attribution.
   - runtime: llm-d
-    pattern: '^(?:.*/)?llm-d/[a-zA-Z0-9.\-_]+(?:[:@]|$)'
+    pattern: '^(?:.*/)?llm-d/llm-d-(?:cuda-gb200|cuda|rocm|cpu|xpu|hpu|gke|aws)(?:-(?:dev|debug|ubuntu))?(?:[:@]|$)'
 
   # SGLang — LMSYS-published serving framework. Distinct namespace on
   # Docker Hub (lmsysorg/sglang); upstream tags follow semver-ish.
