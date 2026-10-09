@@ -149,6 +149,8 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	nimBase.Scraper = scraper.NewNIMServiceScraper(nil)
 	lwsBase := inferenceBase
 	lwsBase.Scraper = scraper.NewLeaderWorkerSetScraper(nil)
+	dsetBase := inferenceBase
+	dsetBase.Scraper = scraper.NewDisaggregatedSetScraper(nil)
 
 	if err := (&DeploymentReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager DeploymentReconciler: %v", err)
@@ -174,6 +176,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		(&DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 		(&NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
 		(&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
+		(&DisaggregatedSetReconciler{WorkloadReconciler: dsetBase}).Watch(),
 	}, testWatchKnobs); err != nil {
 		t.Fatalf("RegisterThirdPartyWatches: %v", err)
 	}

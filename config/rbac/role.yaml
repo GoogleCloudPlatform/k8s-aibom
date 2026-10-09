@@ -75,6 +75,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - disaggregatedset.x-k8s.io
+  resources:
+  - disaggregatedsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - grove.io
   resources:
   - podcliques

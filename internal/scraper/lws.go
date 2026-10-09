@@ -131,7 +131,7 @@ func (s *LeaderWorkerSetScraper) Scrape(ctx context.Context, w Workload, cfg *In
 			}
 			continue
 		}
-		if tmplAnnotations := s.scrapeTemplate(inputs, pt, lwsTemplateLocator+"."+key, role, groupProps, w.Pods, cfg); tmplAnnotations != nil {
+		if tmplAnnotations := s.scrapeTemplate(inputs, pt, lwsTemplateLocator+"."+key, map[string]string{"lws.role": role}, groupProps, w.Pods, cfg); tmplAnnotations != nil {
 			annotationMaps = append(annotationMaps, tmplAnnotations)
 		}
 	}
@@ -162,10 +162,13 @@ func (s *LeaderWorkerSetScraper) Scrape(ctx context.Context, w Workload, cfg *In
 
 // scrapeTemplate decodes one template, runs the shared extraction with
 // locators rooted at locator, tags every resulting component with
-// lws.role and container components with the group shape, and returns
-// the template's annotations for signature lookup (nil when the
-// template did not decode; the failure is recorded, never fatal).
-func (s *LeaderWorkerSetScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator, role string, groupProps map[string]string, pods []corev1.Pod, cfg *InferenceConfig) map[string]string {
+// componentProps (lws.role, and for a DisaggregatedSet also the role
+// name) and container components with the group shape, and returns the
+// template's annotations for signature lookup (nil when the template
+// did not decode; the failure is recorded, never fatal). Shared with
+// DisaggregatedSetScraper (Design 007 §1), which is this extraction
+// applied once per role.
+func (s *LeaderWorkerSetScraper) scrapeTemplate(inputs *BOMInputs, pt map[string]interface{}, locator string, componentProps, groupProps map[string]string, pods []corev1.Pod, cfg *InferenceConfig) map[string]string {
 	var tmpl corev1.PodTemplateSpec
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(pt, &tmpl); err != nil {
 		inputs.Errors = append(inputs.Errors, fmt.Errorf("%s: not a PodTemplateSpec: %w; skipped", locator, err))
@@ -179,7 +182,9 @@ func (s *LeaderWorkerSetScraper) scrapeTemplate(inputs *BOMInputs, pt map[string
 		if c.Properties == nil {
 			c.Properties = map[string]string{}
 		}
-		c.Properties["lws.role"] = role
+		for pk, pv := range componentProps {
+			c.Properties[pk] = pv
+		}
 		if c.Type == ComponentContainer {
 			for pk, pv := range groupProps {
 				c.Properties[pk] = pv

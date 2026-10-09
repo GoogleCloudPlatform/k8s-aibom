@@ -299,6 +299,57 @@ historical identity. If a future version moves the templates out of
 **Why no lws Go module dependency.** Two PodTemplateSpecs and two
 integers, decoded into `corev1` types already in the dependency graph.
 
+### kubernetes-sigs/lws `disaggregatedset.x-k8s.io/v1.DisaggregatedSet`
+
+**Scraper:** `internal/scraper/disaggregatedset.go`
+(`DisaggregatedSetScraper`, `Name() = "inference.disaggregatedset"`) —
+Design 007 §1. llm-d's prefill/decode primitive on NVIDIA hardware (the
+wide expert-parallelism and P/D-disaggregation guides); shipped by the
+LeaderWorkerSet project since lws 0.11.
+
+**Reconciler:** `internal/controller/disaggregatedset_controller.go`
+
+**Shape.** `spec.roles[i]` inlines a complete LeaderWorkerSet template
+(`metadata` + `spec`), so the LWS fields sit one level down from the
+role, under `spec.roles[i].spec`. The design note's table wrote them one
+level higher; the paths below are the served schema (verified against
+lws v0.11.1 types, its CRD and llm-d's wide-EP manifest).
+
+**Field paths the scraper reads:**
+
+| Path | Used as |
+|---|---|
+| `spec.roles[i].name` | `disaggregatedset.role` property on every Component the role produces (index when missing, recorded as an error) |
+| `spec.roles[i].spec.leaderWorkerTemplate.leaderTemplate` (optional) | Full PodTemplateSpec through the shared LWS extraction; locators rooted at `spec.roles[i].spec.leaderWorkerTemplate.leaderTemplate.spec`; `lws.role: leader` |
+| `spec.roles[i].spec.leaderWorkerTemplate.workerTemplate` | Same, rooted at `…workerTemplate.spec`, `lws.role: worker` |
+| `spec.roles[i].spec.leaderWorkerTemplate.size`, `spec.roles[i].spec.replicas`, `spec.slices` | `lws.size` / `lws.replicas` / `disaggregatedset.slices` on container Components (omitted when unset) |
+| `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components; signature claims (Design 002), then each role's `metadata.annotations`, then each template's |
+
+No declared-runtime row: a DisaggregatedSet declares nothing about what
+it runs, so runtime attribution is image-pattern **inferred**. One
+AIBOM per set, keyed to its UID; the LeaderWorkerSets it materializes
+(one per role), their StatefulSets and pods roll up under Design 005,
+which is how pod-status digests reach the set's document. A role that
+is not an object or a template that does not decode is recorded on the
+document's errors and skipped; the other roles still extract.
+
+**Not read:** `status.*`, `spec.placementPolicy`, `spec.roles[i].scaling`,
+`rolloutStrategy`, `networkConfig`, `subGroupPolicy`,
+`volumeClaimTemplates`; `DisaggregatedSetRoleScaler` (a scaling
+adapter, not a workload).
+
+**Test-only minimal CRD:** [`config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml`](../config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml)
+
+**Upgrade obligations.** `v1` is the only served version. A `v2`
+requires extending `disaggregatedSetHandledKinds`; keep
+`inference.disaggregatedset` as the historical identity. If a future
+version stops inlining the LWS template under `spec.roles[i].spec`, the
+locator roots must move with it.
+
+**Why no lws Go module dependency.** Same as LeaderWorkerSet: pod
+templates and integers, decoded into `corev1` types already in the
+dependency graph.
+
 ## Process for adding a new external CRD
 
 When a future phase adds a scraper for another project's CRD (llm-d,

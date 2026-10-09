@@ -1,9 +1,23 @@
 # Design 007: llm-d lens — DisaggregatedSet coverage and InferencePool membership
 
-Status: Draft, 2026-10-05. Tracks #137. Part 1 targets the v1.6 train;
-Part 2 targets v1.7 unless review shows it is as small as it looks.
-Review window stated on the PR. Review from llm-d maintainers and
-anyone running the wide-EP well-lit path is specifically invited.
+Status: Accepted 2026-10-08 (review window on #139). Part 1 implemented
+on main the following day; Part 2 targets v1.7. Tracks #137. Review
+from llm-d maintainers and anyone running the wide-EP well-lit path is
+still invited on the implementation.
+
+Implementation note (2026-10-09): the Part 1 table below places the
+LeaderWorkerSet fields directly under `spec.roles[i]`. The served
+schema (lws v0.11.1 types, its CRD, llm-d's wide-EP manifest) inlines a
+complete LeaderWorkerSet *template* per role — `metadata` plus `spec` —
+so the real paths are `spec.roles[i].spec.replicas` and
+`spec.roles[i].spec.leaderWorkerTemplate.{size,leaderTemplate,workerTemplate}`;
+`spec.slices` is as written. The implementation and
+docs/external-crd-versions.md use the served paths; the table is kept
+as the record of what was reviewed. Also noted while implementing: since
+llm-d v0.8 the well-lit paths run upstream `vllm/vllm-openai` as the
+model-server image and v0.10.0 deprecated `llm-d-cuda`/`llm-d-aws`, so
+llm-d membership increasingly cannot be read from image names — which
+is the case for Part 2.
 
 ## Context
 

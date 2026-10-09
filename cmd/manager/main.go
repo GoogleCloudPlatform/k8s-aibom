@@ -295,6 +295,10 @@ func main() {
 	// with template-rooted locators and lws.role (Design 003 §2).
 	lwsBase := inferenceBase
 	lwsBase.Scraper = scraper.NewLeaderWorkerSetScraper(sigVerifier)
+	// DisaggregatedSet (llm-d prefill/decode): the LWS extraction once
+	// per role, with role-rooted locators (Design 007 §1).
+	dsetBase := inferenceBase
+	dsetBase.Scraper = scraper.NewDisaggregatedSetScraper(sigVerifier)
 
 	if err := (&controller.DeploymentReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up DeploymentReconciler")
@@ -331,6 +335,7 @@ func main() {
 			(&controller.DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 			(&controller.NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
 			(&controller.LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
+			(&controller.DisaggregatedSetReconciler{WorkloadReconciler: dsetBase}).Watch(),
 		}, nil); err != nil {
 		log.Error(err, "unable to set up third-party watches")
 		os.Exit(1)
