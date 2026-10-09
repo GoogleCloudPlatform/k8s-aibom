@@ -91,6 +91,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   as runtime `vllm`. Anchored at the image-name boundary, so sibling
   images under the same path and the same name under another registry
   stay unmatched.
+- **KServe HuggingFace server runtime pattern** (#152).
+  `kserve/huggingfaceserver` (tag and digest forms) attributes as
+  runtime `huggingfaceserver`. Publisher-anchored at the image-name
+  boundary, so KServe infrastructure images under the same org
+  (`kserve/kserve-controller`, `kserve/agent`, `kserve/router`,
+  `kserve/storage-initializer`), name-prefix near-misses, and other
+  registries stay unmatched.
 
 ### Added
 

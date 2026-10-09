@@ -404,6 +404,20 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve@sha256:abc", "vllm"},
 		{"us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-inference:gemma4", ""},
 		{"gcr.io/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:gemma4", ""},
+
+		// kserve/huggingfaceserver — publisher-anchored Docker Hub image
+		// run as a plain Deployment. Tag and digest forms match; KServe
+		// infrastructure images under the same org, name-prefix, and
+		// other-registry near-misses do not.
+		{"kserve/huggingfaceserver:latest", "huggingfaceserver"},
+		{"kserve/huggingfaceserver@sha256:abc", "huggingfaceserver"},
+		{"kserve/kserve-controller:latest", ""},
+		{"kserve/agent:latest", ""},
+		{"kserve/router:latest", ""},
+		{"kserve/storage-initializer:latest", ""},
+		{"kserve/huggingfaceserver-extra:1", ""},
+		{"otheruser/huggingfaceserver:latest", ""},
+		{"ghcr.io/kserve/huggingfaceserver:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {

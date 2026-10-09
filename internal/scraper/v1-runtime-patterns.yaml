@@ -175,6 +175,15 @@ runtimeImagePatterns:
   - runtime: vllm
     pattern: '^us-docker\.pkg\.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve(?:[:@]|$)'
 
+  # HuggingFace server (KServe) — kserve/huggingfaceserver run as a
+  # plain Deployment. Anchored at the image-name boundary so tag and
+  # digest forms match while KServe infrastructure images under the
+  # same org (kserve/kserve-controller, kserve/agent, kserve/router,
+  # kserve/storage-initializer), name-prefix near-misses, and other
+  # registries do not. Not a prefix and not a mirror pattern.
+  - runtime: huggingfaceserver
+    pattern: '^kserve/huggingfaceserver(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and
