@@ -150,7 +150,7 @@ func startCombinedEnvTest(t *testing.T) *combinedEnv {
 	if err := (&DaemonSetReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager DaemonSetReconciler: %v", err)
 	}
-	if err := RegisterThirdPartyWatches(mgr, NewWatchHealth(), nil, nil, nil, []ThirdPartyWatch{
+	if err := RegisterThirdPartyWatches(mgr, NewWatchHealth(), nil, nil, nil, nil, nil, []ThirdPartyWatch{
 		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
 	}, testWatchKnobs); err != nil {
 		t.Fatalf("RegisterThirdPartyWatches: %v", err)

@@ -35,6 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 )
 
 // Design 005: ownership roll-up. One workload, one AIBOM. A tracked
@@ -57,9 +59,18 @@ const rollupMaxDepth = 6
 // not follow watch health, so suppression stays stable through a
 // Design 004 outage (the owner's existing AIBOM is kept as last known;
 // un-suppressing its children would create duplicates that flip back).
+//
+// Whether a tracked kind may *absorb* its children does follow the
+// spec.discovery.workloadKinds allowlist (Design 006 §4, via Owns): a
+// kind the operator switched off produces no document, so the workloads
+// it used to absorb are reported on their own again rather than
+// vanishing with it. Has (structural membership) is what the
+// descendant walk uses, so a root's document still lists and reads
+// pods from every tracked workload under it regardless of the list.
 type TrackedKinds struct {
 	mu    sync.RWMutex
 	kinds map[schema.GroupKind]struct{}
+	store *config.Store
 }
 
 // NewTrackedKinds returns an empty set.
@@ -84,6 +95,30 @@ func (t *TrackedKinds) Has(gk schema.GroupKind) bool {
 	defer t.mu.RUnlock()
 	_, ok := t.kinds[gk]
 	return ok
+}
+
+// Follow makes Owns consult store's live allowlist. Set once at
+// startup; a nil store means every tracked kind owns.
+func (t *TrackedKinds) Follow(store *config.Store) {
+	t.mu.Lock()
+	t.store = store
+	t.mu.Unlock()
+}
+
+// Owns reports whether a workload owned by gk is rolled up into gk's
+// document: gk is tracked and currently allowed by
+// spec.discovery.workloadKinds.
+func (t *TrackedKinds) Owns(gk schema.GroupKind) bool {
+	if !t.Has(gk) {
+		return false
+	}
+	t.mu.RLock()
+	store := t.store
+	t.mu.RUnlock()
+	if store == nil {
+		return true
+	}
+	return store.Load().WorkloadKinds.Allows(gk)
 }
 
 // OwnedWorkload identifies a tracked workload absorbed into an owner's
@@ -152,7 +187,7 @@ func resolveTrackedOwner(ctx context.Context, c client.Client, obj client.Object
 			// controller that owns it re-parents it.
 			return nil, ownerUnresolved, fmt.Errorf("owner %s/%s uid %s does not match reference %s", ref.Kind, ref.Name, next.GetUID(), ref.UID)
 		}
-		if tracked.Has(schema.GroupKind{Group: gv.Group, Kind: ref.Kind}) {
+		if tracked.Owns(schema.GroupKind{Group: gv.Group, Kind: ref.Kind}) {
 			return &OwnedWorkload{Kind: ref.Kind, Name: ref.Name, UID: ref.UID}, ownerTracked, nil
 		}
 		cur = next

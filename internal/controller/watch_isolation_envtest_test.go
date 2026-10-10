@@ -207,7 +207,7 @@ func newIsolationEnv(t *testing.T) *isolationEnv {
 	health := NewWatchHealth()
 	recorder := record.NewFakeRecorder(64)
 	pod := &corev1.ObjectReference{Kind: "Pod", Name: "k8s-aibom-0", Namespace: "k8s-aibom-system"}
-	if err := RegisterThirdPartyWatches(mgr, health, nil, recorder, pod, []ThirdPartyWatch{
+	if err := RegisterThirdPartyWatches(mgr, health, nil, nil, nil, recorder, pod, []ThirdPartyWatch{
 		(&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 	}, testWatchKnobs); err != nil {
 		t.Fatal(err)

@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -196,7 +197,7 @@ func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return res
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.Deployment{}).
 		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
@@ -208,6 +209,11 @@ func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("Deployment")),
 			builder.WithPredicates(PodImageIDChangedPredicate()),
-		).
-		Complete(r)
+		)
+	// Allowlist hot-reload (Design 006): re-reconcile every Deployment when
+	// spec.discovery.workloadKinds changes.
+	if src := r.allowlistSource(schema.GroupKind{Group: "apps", Kind: "Deployment"}, listFactory, extractItems); src != nil {
+		b = b.WatchesRawSource(src)
+	}
+	return b.Complete(r)
 }

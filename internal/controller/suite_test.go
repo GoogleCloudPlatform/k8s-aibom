@@ -54,6 +54,12 @@ type envTestEnv struct {
 	mgrCtx    context.Context
 	mgrCancel context.CancelFunc
 	mgrErrCh  chan error
+
+	// configStore and watchHealth are nil for the config-reconciler
+	// harness; startEnvTest sets them so allowlist tests can rotate the
+	// snapshot the way the config reconciler does.
+	configStore *config.Store
+	watchHealth *WatchHealth
 }
 
 // startEnvTest starts an envtest API server, registers schemes, applies
@@ -129,6 +135,9 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	} {
 		tracked.Add(gk)
 	}
+	tracked.Follow(configStore)
+	fanout := &AllowlistFanout{Reader: mgr.GetAPIReader()}
+	fanout.Bind(configStore)
 	inferenceBase := WorkloadReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
@@ -139,6 +148,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		ControllerName:    "k8s-aibom",
 		ControllerVersion: "0.1.0-test",
 		Tracked:           tracked,
+		Fanout:            fanout,
 	}
 	// KServe needs its own scraper; everything else shared.
 	kserveBase := inferenceBase
@@ -168,7 +178,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	// Third-party kinds through the supervisor, exactly as cmd/manager
 	// wires them (Design 004), with test-speed knobs.
 	watchHealth := NewWatchHealth()
-	if err := RegisterThirdPartyWatches(mgr, watchHealth, tracked, nil, nil, []ThirdPartyWatch{
+	if err := RegisterThirdPartyWatches(mgr, watchHealth, tracked, configStore, fanout, nil, nil, []ThirdPartyWatch{
 		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
 		(&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 		(&DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
@@ -196,13 +206,15 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	}
 
 	return &envTestEnv{
-		cfg:       cfg,
-		k8sClient: k8sClient,
-		testEnv:   te,
-		scheme:    scheme,
-		mgrCtx:    mgrCtx,
-		mgrCancel: mgrCancel,
-		mgrErrCh:  mgrErrCh,
+		cfg:         cfg,
+		k8sClient:   k8sClient,
+		testEnv:     te,
+		scheme:      scheme,
+		mgrCtx:      mgrCtx,
+		mgrCancel:   mgrCancel,
+		mgrErrCh:    mgrErrCh,
+		configStore: configStore,
+		watchHealth: watchHealth,
 	}
 }
 

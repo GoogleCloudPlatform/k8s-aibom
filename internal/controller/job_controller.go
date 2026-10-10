@@ -19,6 +19,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -119,7 +120,7 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return res
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.Job{}).
 		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
@@ -131,6 +132,11 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("Job")),
 			builder.WithPredicates(PodImageIDChangedPredicate()),
-		).
-		Complete(r)
+		)
+	// Allowlist hot-reload (Design 006): re-reconcile every Job when
+	// spec.discovery.workloadKinds changes.
+	if src := r.allowlistSource(schema.GroupKind{Group: "batch", Kind: "Job"}, listFactory, extractItems); src != nil {
+		b = b.WatchesRawSource(src)
+	}
+	return b.Complete(r)
 }

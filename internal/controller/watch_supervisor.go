@@ -25,6 +25,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
 )
 
 // Event reasons emitted by the watch supervisor on the controller Pod.
@@ -53,6 +55,10 @@ const (
 	EventReasonWatchUnhealthy = "WatchUnhealthy"
 	// EventReasonWatchRecovered fires (Normal) once when it recovers.
 	EventReasonWatchRecovered = "WatchRecovered"
+	// EventReasonWatchDisabled fires (Normal) once when a supervised
+	// kind is switched off by spec.discovery.workloadKinds (Design 006
+	// §3). Not a Warning: nothing failed.
+	EventReasonWatchDisabled = "WatchDisabled"
 )
 
 // ThirdPartyWatch describes one third-party kind run under the
@@ -87,10 +93,29 @@ type WatchSupervisor struct {
 	Mapper        meta.RESTMapper
 	SharedCache   cache.Cache   // the manager cache: AIBOM and Namespace sources
 	APIReader     client.Reader // uncached reader for probes
+	Client        client.Client // deletes a disabled kind's AIBOMs (Design 006); nil skips the sweep
 	Health        *WatchHealth
 	Recorder      record.EventRecorder
 	ControllerPod *corev1.ObjectReference // nil-tolerant: events are skipped
 	Watches       []ThirdPartyWatch
+
+	// ConfigStore supplies spec.discovery.workloadKinds (Design 006 §3):
+	// a supervised kind not in the set is not started, or is stopped
+	// when removed, and started when added back. nil runs every kind.
+	ConfigStore *config.Store
+	// Fanout, when set, gives each kind's controller the channel source
+	// through which an allowlist change re-enqueues its workloads.
+	Fanout *AllowlistFanout
+
+	// Runtime state, owned by the Start goroutine.
+	rootCtx context.Context
+	runners map[string]*watchRunner
+	wg      sync.WaitGroup
+	desired struct {
+		sync.Mutex
+		set config.WorkloadKindSet
+	}
+	kick chan struct{}
 
 	// Knobs with production defaults; tests shorten them.
 	InitialBackoff   time.Duration // default 5s
@@ -111,18 +136,140 @@ func (s *WatchSupervisor) NeedLeaderElection() bool { return true }
 func (s *WatchSupervisor) Start(ctx context.Context) error {
 	s.defaults()
 	s.Health.Subscribe(s.emitTransitionEvent)
-	var wg sync.WaitGroup
+	s.rootCtx = ctx
+	s.runners = map[string]*watchRunner{}
+	s.kick = make(chan struct{}, 1)
+	for _, w := range s.Watches {
+		s.Health.Register(w.Name)
+	}
+
+	// Desired set: the live allowlist, kept current by the store
+	// subscription. The subscriber only records and kicks; applying
+	// (which may wait for a controller to drain) happens here.
+	s.setDesired(config.AllWorkloadKinds())
+	if s.ConfigStore != nil {
+		s.ConfigStore.Subscribe(func(prev, next *config.Snapshot) {
+			if prev != nil && prev.WorkloadKinds.Equal(next.WorkloadKinds) {
+				return
+			}
+			s.setDesired(next.WorkloadKinds)
+		})
+		s.setDesired(s.ConfigStore.Load().WorkloadKinds)
+	}
+	for {
+		s.apply(s.getDesired())
+		select {
+		case <-ctx.Done():
+			s.wg.Wait()
+			return nil
+		case <-s.kick:
+		}
+	}
+}
+
+// watchRunner is one running kind: cancel stops it, done closes when
+// its goroutine has returned.
+type watchRunner struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (s *WatchSupervisor) setDesired(set config.WorkloadKindSet) {
+	s.desired.Lock()
+	s.desired.set = set
+	s.desired.Unlock()
+	select {
+	case s.kick <- struct{}{}:
+	default:
+	}
+}
+
+func (s *WatchSupervisor) getDesired() config.WorkloadKindSet {
+	s.desired.Lock()
+	defer s.desired.Unlock()
+	return s.desired.set
+}
+
+// apply reconciles the running kinds with the allowlist: starts allowed
+// kinds that are not running, stops running kinds that are no longer
+// allowed (then marks them disabled and sweeps their AIBOMs), and marks
+// excluded kinds disabled at startup. Idempotent.
+func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
+	if s.rootCtx.Err() != nil {
+		return
+	}
 	for i := range s.Watches {
 		w := s.Watches[i]
-		s.Health.Register(w.Name)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.run(ctx, w)
-		}()
+		gk := schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}
+		r, running := s.runners[w.Name]
+		switch {
+		case allowed.Allows(gk) && !running:
+			s.Health.MarkStarting(w.Name)
+			kctx, cancel := context.WithCancel(s.rootCtx)
+			r = &watchRunner{cancel: cancel, done: make(chan struct{})}
+			s.runners[w.Name] = r
+			s.wg.Add(1)
+			go func() {
+				defer s.wg.Done()
+				defer close(r.done)
+				s.run(kctx, w)
+			}()
+		case !allowed.Allows(gk) && running:
+			r.cancel()
+			<-r.done
+			delete(s.runners, w.Name)
+			s.disable(w)
+		case !allowed.Allows(gk):
+			s.disable(w)
+		}
 	}
-	wg.Wait()
-	return nil
+}
+
+// disable records the configured-off state and, on the transition into
+// it, deletes the kind's AIBOMs: with its controller stopped there is
+// no reconcile left to do it (Design 006 §2 reaches this kind through
+// the supervisor, not the reconcile path).
+func (s *WatchSupervisor) disable(w ThirdPartyWatch) {
+	if !s.Health.MarkDisabled(w.Name) {
+		return
+	}
+	log := ctrl.Log.WithName("watch-supervisor").WithValues("kind", w.Name)
+	log.Info("watch disabled by spec.discovery.workloadKinds")
+	if s.Client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(s.rootCtx, 2*time.Minute)
+	defer cancel()
+	deleted, err := s.sweepAIBOMs(ctx, w.GVK)
+	if err != nil {
+		log.Info("AIBOM sweep for disabled kind incomplete", "deleted", deleted, "err", err.Error())
+		return
+	}
+	if deleted > 0 {
+		log.Info("deleted AIBOMs of disabled kind", "deleted", deleted)
+	}
+}
+
+// sweepAIBOMs deletes every AIBOM whose workloadRef is the given
+// group/kind. The AIBOM list comes from the shared cache, which every
+// workload controller already informs on.
+func (s *WatchSupervisor) sweepAIBOMs(ctx context.Context, gvk schema.GroupVersionKind) (int, error) {
+	var list aibomv1beta1.AIBOMList
+	if err := s.Client.List(ctx, &list); err != nil {
+		return 0, fmt.Errorf("list AIBOMs: %w", err)
+	}
+	deleted := 0
+	for i := range list.Items {
+		ref := list.Items[i].Spec.WorkloadRef
+		if ref.Kind != gvk.Kind || !strings.HasPrefix(ref.APIVersion, gvk.Group+"/") {
+			continue
+		}
+		if err := s.Client.Delete(ctx, &list.Items[i]); err != nil && !apierrors.IsNotFound(err) {
+			return deleted, fmt.Errorf("delete %s/%s: %w", list.Items[i].Namespace, list.Items[i].Name, err)
+		}
+		deleted++
+	}
+	return deleted, nil
 }
 
 func (s *WatchSupervisor) defaults() {
@@ -248,6 +395,15 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 		w.Base.NamespaceWatchPredicate())); err != nil {
 		return fmt.Errorf("watch Namespace for %s: %w", w.Name, err)
 	}
+	// Allowlist hot-reload (Design 006): re-reconcile every object of
+	// this kind when spec.discovery.workloadKinds changes. The channel
+	// is stable across rebuilds; only this source object is new.
+	if s.Fanout != nil {
+		if err := c.Watch(s.Fanout.Source(schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}, true,
+			unstructuredListFactory(w.GVK), unstructuredListItems)); err != nil {
+			return fmt.Errorf("watch allowlist fan-out for %s: %w", w.Name, err)
+		}
+	}
 
 	go func() { _ = kindCache.Start(kctx) }()
 
@@ -302,11 +458,14 @@ func (s *WatchSupervisor) emitTransitionEvent(t WatchTransition) {
 	if s.Recorder == nil || s.ControllerPod == nil {
 		return
 	}
-	if t.Healthy {
+	switch {
+	case t.Disabled:
+		s.Recorder.Event(s.ControllerPod, corev1.EventTypeNormal, EventReasonWatchDisabled, t.Message)
+	case t.Healthy:
 		s.Recorder.Event(s.ControllerPod, corev1.EventTypeNormal, EventReasonWatchRecovered, t.Message)
-		return
+	default:
+		s.Recorder.Event(s.ControllerPod, corev1.EventTypeWarning, EventReasonWatchUnhealthy, t.Message)
 	}
-	s.Recorder.Event(s.ControllerPod, corev1.EventTypeWarning, EventReasonWatchUnhealthy, t.Message)
 }
 
 func listGVK(gvk schema.GroupVersionKind) schema.GroupVersionKind {
@@ -355,9 +514,11 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 
 // RegisterThirdPartyWatches wires every third-party kind whose CRD is
 // present into one WatchSupervisor and adds it to the manager. Kinds
-// whose CRD is absent are skipped with a log line, as before. Shared by
-// cmd/manager and the envtest harness so both exercise the same path.
-func RegisterThirdPartyWatches(mgr ctrl.Manager, health *WatchHealth, tracked *TrackedKinds, recorder record.EventRecorder, controllerPod *corev1.ObjectReference, candidates []ThirdPartyWatch, tune func(*WatchSupervisor)) error {
+// whose CRD is absent are skipped with a log line, as before. store and
+// fanout carry the workload-kind allowlist (Design 006); both may be
+// nil. Shared by cmd/manager and the envtest harness so both exercise
+// the same path.
+func RegisterThirdPartyWatches(mgr ctrl.Manager, health *WatchHealth, tracked *TrackedKinds, store *config.Store, fanout *AllowlistFanout, recorder record.EventRecorder, controllerPod *corev1.ObjectReference, candidates []ThirdPartyWatch, tune func(*WatchSupervisor)) error {
 	log := ctrl.Log.WithName("setup")
 	var present []ThirdPartyWatch
 	for _, w := range candidates {
@@ -383,10 +544,13 @@ func RegisterThirdPartyWatches(mgr ctrl.Manager, health *WatchHealth, tracked *T
 		Mapper:        mgr.GetRESTMapper(),
 		SharedCache:   mgr.GetCache(),
 		APIReader:     mgr.GetAPIReader(),
+		Client:        mgr.GetClient(),
 		Health:        health,
 		Recorder:      recorder,
 		ControllerPod: controllerPod,
 		Watches:       present,
+		ConfigStore:   store,
+		Fanout:        fanout,
 	}
 	if tune != nil {
 		tune(s)

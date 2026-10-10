@@ -40,9 +40,12 @@ of external review), the output sanitization guarantee, the
 - **Complete CronJob coverage** — landed with the ownership roll-up
   (Design 005): one AIBOM per CronJob, spawned Jobs absorbed.
 - **Configurable workload-kind allowlist** via the
-  `AIBOMControllerConfig` CR — with a short design note first: if the
-  allowlist narrows what the informers watch (not only what is
-  reported), it directly reduces the controller's read surface.
+  `AIBOMControllerConfig` CR — landed as `spec.discovery.workloadKinds`
+  (Design 006): a reporting filter for every kind, and for the
+  third-party kinds also the watch itself (a kind not listed has no
+  informer). Narrowing the apps/v1 and batch watches the same way is
+  the v1.7 follow-up; it means moving those controllers under the
+  Design 004 supervisor.
 - **Separate `k8s-aibom-crds` chart** (#77) — the CRD-lifecycle
   packaging requested by an AICR operator; externally contributed.
 - **Sink reliability** (landed on main post-v1.5.0, ships in v1.6):

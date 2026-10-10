@@ -175,3 +175,33 @@ func errNamespaceSelectorInvalid(reason string) LoadError {
 		),
 	}
 }
+
+// errWorkloadKindMalformed is a spec.discovery.workloadKinds entry that
+// is not of the form Group/Kind (Design 006 §1).
+func errWorkloadKindMalformed(index int, entry string, shapeErr error) LoadError {
+	return LoadError{
+		Field:   fmt.Sprintf("spec.discovery.workloadKinds[%d]", index),
+		Message: fmt.Sprintf("workloadKinds entry %q is malformed: %v.", entry, shapeErr),
+	}
+}
+
+// errWorkloadKindUnknown is an entry that parses but names a kind this
+// controller cannot inventory. Rejected rather than ignored so a typo
+// cannot quietly turn inventory off.
+func errWorkloadKindUnknown(index int, entry string) LoadError {
+	return LoadError{
+		Field: fmt.Sprintf("spec.discovery.workloadKinds[%d]", index),
+		Message: fmt.Sprintf(
+			"workloadKinds entry %q is not a kind this controller inventories. Known kinds: %s.",
+			entry, knownWorkloadKindsList(),
+		),
+	}
+}
+
+// errWorkloadKindDuplicate is an entry that repeats an earlier one.
+func errWorkloadKindDuplicate(index int, entry string, firstIndex int) LoadError {
+	return LoadError{
+		Field:   fmt.Sprintf("spec.discovery.workloadKinds[%d]", index),
+		Message: fmt.Sprintf("workloadKinds entry %q duplicates entry [%d].", entry, firstIndex),
+	}
+}
