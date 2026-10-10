@@ -29,6 +29,7 @@ limitations under the License.
 package config
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -94,10 +95,16 @@ type Snapshot struct {
 	InlineThreshold          int64
 	StaleThresholdReconciles int32
 	NamespaceSelector        labels.Selector
-	ExternalSinks            []sink.Sink
-	Source                   SnapshotSource
-	SourceGeneration         int64
-	LoadedAt                 time.Time
+	// WorkloadKinds is the parsed spec.discovery.workloadKinds (Design
+	// 006): the kinds the controller reports on. The zero value allows
+	// every known kind. Read by the workload reconcilers (reporting
+	// filter), the WatchSupervisor (which supervised kinds run) and the
+	// ownership roll-up (which kinds can absorb their children).
+	WorkloadKinds    WorkloadKindSet
+	ExternalSinks    []sink.Sink
+	Source           SnapshotSource
+	SourceGeneration int64
+	LoadedAt         time.Time
 }
 
 // Store hosts the current Snapshot pointer with atomic semantics.
@@ -111,6 +118,14 @@ type Snapshot struct {
 // hot-reload contract documented in the Phase 12 proposal.
 type Store struct {
 	current atomic.Pointer[Snapshot]
+
+	// subs are notified synchronously after every swap with the
+	// previous and new snapshot (Design 006: the WatchSupervisor and
+	// the allowlist fan-out react to workloadKinds changes). Guarded by
+	// subMu; the slice is copied out before calling so a subscriber
+	// may itself call Store.
+	subMu sync.Mutex
+	subs  []func(prev, next *Snapshot)
 
 	// configInvalid records whether the most recent load attempt found
 	// an INVALID AIBOMControllerConfig (running on last-known-good or
@@ -162,7 +177,27 @@ func (s *Store) Store(snap *Snapshot) {
 	if snap == nil {
 		return // defensive; documented in NewStore godoc
 	}
-	s.current.Store(snap)
+	prev := s.current.Swap(snap)
+	s.subMu.Lock()
+	subs := append([]func(prev, next *Snapshot){}, s.subs...)
+	s.subMu.Unlock()
+	for _, fn := range subs {
+		fn(prev, snap)
+	}
+}
+
+// Subscribe registers fn to run after every Store with the previous
+// and new snapshot. Subscribers run synchronously on the storing
+// goroutine (the config reconciler's) and must not block; anything
+// slow belongs in a goroutine the subscriber owns. Register before the
+// manager starts; there is no Unsubscribe.
+func (s *Store) Subscribe(fn func(prev, next *Snapshot)) {
+	if fn == nil {
+		return
+	}
+	s.subMu.Lock()
+	s.subs = append(s.subs, fn)
+	s.subMu.Unlock()
 }
 
 // MarkAsLastKnownGood returns a shallow copy of the given Snapshot with

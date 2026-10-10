@@ -264,6 +264,15 @@ func main() {
 	} {
 		tracked.Add(gk)
 	}
+	// A kind switched off by spec.discovery.workloadKinds stops
+	// absorbing its children (Design 006 §4).
+	tracked.Follow(configStore)
+	// Allowlist hot-reload (Design 006 §2): a workloadKinds change
+	// re-enqueues every workload of every reporting kind, through the
+	// uncached reader so no informer is created for a kind kept off the
+	// shared cache.
+	fanout := &controller.AllowlistFanout{Reader: mgr.GetAPIReader()}
+	fanout.Bind(configStore)
 
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),
@@ -276,6 +285,7 @@ func main() {
 		ControllerName:    "k8s-aibom",
 		ControllerVersion: controllerVersion,
 		Tracked:           tracked,
+		Fanout:            fanout,
 	}
 	// KServe needs its own scraper (declared-not-inferred semantics,
 	// different field paths). Shallow-copy the inference base and
@@ -327,7 +337,7 @@ func main() {
 	// degrades that kind only — visible on AIBOMControllerConfig's
 	// Degraded condition, an event and aibom_watch_healthy — instead of
 	// failing every controller's cache sync and exiting the process.
-	if err := controller.RegisterThirdPartyWatches(mgr, watchHealth, tracked,
+	if err := controller.RegisterThirdPartyWatches(mgr, watchHealth, tracked, configStore, fanout,
 		mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, //nolint:staticcheck
 		[]controller.ThirdPartyWatch{
 			(&controller.KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),

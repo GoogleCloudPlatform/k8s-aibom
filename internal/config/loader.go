@@ -110,6 +110,11 @@ func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMController
 	patterns, patternErrs := parsePatterns(cr.Spec.Discovery.InferenceRuntimeImagePatterns)
 	errs = append(errs, patternErrs...)
 
+	// Parse the workload-kind allowlist (Design 006). Every bad entry
+	// is reported; an unknown kind is an error, not a no-op.
+	workloadKinds, kindErrs := parseWorkloadKinds(cr.Spec.Discovery.WorkloadKinds)
+	errs = append(errs, kindErrs...)
+
 	// Parse verification (Design 002). nil when absent or disabled.
 	verification, verifErrs := parseVerification(cr.Spec.Verification)
 	errs = append(errs, verifErrs...)
@@ -151,6 +156,7 @@ func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMController
 		InlineThreshold:          resolveInlineThreshold(cr.Spec.BOMGeneration.InlineThresholdBytes),
 		StaleThresholdReconciles: resolveStaleThreshold(cr.Spec.BOMGeneration.StaleThresholdReconciles),
 		NamespaceSelector:        namespaceSelector,
+		WorkloadKinds:            workloadKinds,
 		ExternalSinks:            sinks,
 		Source:                   SourceConfigCR,
 		SourceGeneration:         cr.Generation,

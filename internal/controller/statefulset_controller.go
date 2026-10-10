@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -134,7 +135,7 @@ func (r *StatefulSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return res
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.StatefulSet{}).
 		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
@@ -146,6 +147,11 @@ func (r *StatefulSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueWorkloadForPod("StatefulSet")),
 			builder.WithPredicates(PodImageIDChangedPredicate()),
-		).
-		Complete(r)
+		)
+	// Allowlist hot-reload (Design 006): re-reconcile every StatefulSet when
+	// spec.discovery.workloadKinds changes.
+	if src := r.allowlistSource(schema.GroupKind{Group: "apps", Kind: "StatefulSet"}, listFactory, extractItems); src != nil {
+		b = b.WatchesRawSource(src)
+	}
+	return b.Complete(r)
 }

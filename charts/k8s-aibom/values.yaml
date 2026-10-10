@@ -47,11 +47,26 @@ rbac:
 # (aibom.k8saibom.dev/v1beta1 AIBOMControllerConfig).
 config:
   # Discovery scoping, e.g. a namespace selector applied IN ADDITION to
-  # the aibom.k8saibom.dev/enabled=true namespace label opt-in:
+  # the aibom.k8saibom.dev/enabled=true namespace label opt-in, and the
+  # workload-kind allowlist (Group/Kind; absent or empty = every known
+  # kind; an unknown entry is a config error, not a no-op):
   #   discovery:
   #     namespaceSelector:
   #       matchLabels:
   #         environment: production
+  #     workloadKinds:
+  #       - apps/Deployment
+  #       - apps/StatefulSet
+  #       - nvidia.com/DynamoGraphDeployment
+  #       - leaderworkerset.x-k8s.io/LeaderWorkerSet
+  # Known kinds: apps/Deployment, apps/StatefulSet, apps/DaemonSet,
+  # batch/Job, batch/CronJob, serving.kserve.io/InferenceService,
+  # nvidia.com/DynamoGraphDeployment, nvidia.com/DynamoComponentDeployment,
+  # apps.nvidia.com/NIMService, leaderworkerset.x-k8s.io/LeaderWorkerSet,
+  # disaggregatedset.x-k8s.io/DisaggregatedSet.
+  # Third-party kinds not listed are not watched at all; apps/v1 and
+  # batch kinds not listed are still watched but not reported (their
+  # watch narrowing is the v1.7 follow-up).
   discovery: {}
 
   # Signature verification (Design 002). Disabled by default; when

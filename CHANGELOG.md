@@ -33,6 +33,7 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+<<<<<<< HEAD
 - **`DisaggregatedSet` scraper** (#137, Design 007 Part 1; v1.6
   coverage release). llm-d's prefill/decode primitive on NVIDIA
   hardware (`disaggregatedset.x-k8s.io/v1`, from the LeaderWorkerSet
@@ -49,6 +50,28 @@ All notable changes to k8s-aibom are documented here. The format follows
   supervisor like every third-party kind; RBAC: get/list/watch
   `disaggregatedsets.disaggregatedset.x-k8s.io`. `InferencePool`
   membership (Design 007 Part 2) is v1.7.
+=======
+- **Configurable workload-kind allowlist** (#136, Design 006).
+  `spec.discovery.workloadKinds` on `AIBOMControllerConfig` lists the
+  kinds the controller inventories as `Group/Kind` strings
+  (`apps/Deployment`, `nvidia.com/DynamoGraphDeployment`, ...); absent
+  or empty means every known kind, exactly as before. An entry that is
+  not a known kind is `ConfigInvalid` with the last-known-good retained
+  and the entry named, never a silent no-op. A kind not in the list is
+  treated like a namespace that is not opted in: no scrape, its existing
+  AIBOMs deleted, outcome `kind_not_allowed`. For the third-party kinds
+  (KServe, Dynamo, NIMService, LeaderWorkerSet) the list also decides
+  whether the watch exists: a kind removed from it is stopped (`aibom_
+  watch_healthy{kind}=0`, a Normal `WatchDisabled` event, not Degraded)
+  and started again when added back. **The apps/v1 and batch watches
+  are not narrowed in this release** — those controllers run on the
+  manager's shared cache, so the list filters their reporting only;
+  moving them under the supervisor is the v1.7 follow-up. A kind that is
+  switched off also stops absorbing the workloads it owns (Design 005),
+  which are reported on their own again rather than disappearing with
+  it. Changes apply without a restart: a `workloadKinds` change
+  re-reconciles every workload of every reporting kind.
+>>>>>>> origin/main
 
 - **Ownership roll-up: one workload, one AIBOM** (#126, Design 005). A
   tracked workload owned — directly or transitively via controller

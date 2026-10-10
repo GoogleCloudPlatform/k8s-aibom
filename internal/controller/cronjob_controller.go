@@ -103,7 +103,7 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return res
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.CronJob{}).
 		Owns(&aibomv1beta1.AIBOM{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
@@ -115,6 +115,11 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.EnqueueRootForPod(schema.GroupKind{Group: "batch", Kind: "CronJob"})),
 			builder.WithPredicates(PodImageIDChangedPredicate()),
-		).
-		Complete(r)
+		)
+	// Allowlist hot-reload (Design 006): re-reconcile every CronJob when
+	// spec.discovery.workloadKinds changes.
+	if src := r.allowlistSource(schema.GroupKind{Group: "batch", Kind: "CronJob"}, listFactory, extractItems); src != nil {
+		b = b.WatchesRawSource(src)
+	}
+	return b.Complete(r)
 }

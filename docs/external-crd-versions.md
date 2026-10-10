@@ -62,6 +62,20 @@ Watching a third-party CRD installed *after* the controller starts
 still requires a restart; the presence check at startup decides which
 kinds the supervisor runs.
 
+**Switched off by configuration (Design 006).** The supervisor also
+follows `spec.discovery.workloadKinds`: a present kind that is not in
+the list is not started, and a running kind removed from the list is
+stopped — cache and controller torn down as on a watch error, but
+recorded as *disabled*, not Degraded: `aibom_watch_healthy{kind}=0`, a
+Normal `WatchDisabled` event, no `Degraded` condition. Because a
+stopped kind has no reconcile left to clean up after it, the
+supervisor deletes that kind's AIBOMs on the transition into the
+disabled state. Adding the kind back starts it through the normal
+probe path; its informer's initial list re-inventories every object.
+Absence of a CRD and exclusion by configuration are the only two ways
+a present kind has no informer; both apply without a restart only for
+the configured case.
+
 ## Ownership roll-up (Design 005)
 
 One workload, one AIBOM. A tracked workload owned, directly or
