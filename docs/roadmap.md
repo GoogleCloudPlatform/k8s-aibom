@@ -37,6 +37,10 @@ of external review), the output sanitization guarantee, the
   follows the AICR-review ranking: the `DynamoGraphDeployment`,
   `NIMService` and `LeaderWorkerSet` scrapers are on main, and the §3
   ownership roll-up (Design 005) with them.
+- **llm-d lens, Part 1** (Design 007) — `DisaggregatedSet` (lws ≥ 0.11,
+  llm-d's wide-EP and P/D guides) as a reported kind, one document per
+  set with per-role evidence, its LeaderWorkerSets rolled up. Part 2,
+  `InferencePool` membership as a routing fact, is v1.7.
 - **Complete CronJob coverage** — landed with the ownership roll-up
   (Design 005): one AIBOM per CronJob, spawned Jobs absorbed.
 - **Configurable workload-kind allowlist** via the

@@ -43,6 +43,7 @@ var KnownWorkloadKinds = []schema.GroupKind{
 	{Group: "nvidia.com", Kind: "DynamoComponentDeployment"},
 	{Group: "apps.nvidia.com", Kind: "NIMService"},
 	{Group: "leaderworkerset.x-k8s.io", Kind: "LeaderWorkerSet"},
+	{Group: "disaggregatedset.x-k8s.io", Kind: "DisaggregatedSet"},
 }
 
 // coreGroupSpelling is how the core API group is written in a

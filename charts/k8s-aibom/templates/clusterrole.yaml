@@ -54,6 +54,10 @@ rules:
 - apiGroups: ["leaderworkerset.x-k8s.io"]
   resources: ["leaderworkersets"]
   verbs: ["get", "list", "watch"]
+# kubernetes-sigs/lws DisaggregatedSet, llm-d's prefill/decode primitive (Design 007 §1). Same absent-CRD behavior.
+- apiGroups: ["disaggregatedset.x-k8s.io"]
+  resources: ["disaggregatedsets"]
+  verbs: ["get", "list", "watch"]
 # AIBOMs are controller-owned: full lifecycle including stale-report cleanup.
 - apiGroups: ["aibom.k8saibom.dev"]
   resources: ["aiboms"]

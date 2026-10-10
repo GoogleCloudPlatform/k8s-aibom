@@ -33,6 +33,24 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+<<<<<<< HEAD
+- **`DisaggregatedSet` scraper** (#137, Design 007 Part 1; v1.6
+  coverage release). llm-d's prefill/decode primitive on NVIDIA
+  hardware (`disaggregatedset.x-k8s.io/v1`, from the LeaderWorkerSet
+  project, lws ≥ 0.11; the wide expert-parallelism and P/D guides) is a
+  reported kind: one AIBOM per set, keyed to its UID. Each
+  `spec.roles[i]` inlines a LeaderWorkerSet template, so the extraction
+  is the LWS extraction once per role with locators rooted at
+  `spec.roles[i].spec.leaderWorkerTemplate.<leader|worker>Template`;
+  every component carries `disaggregatedset.role` and `lws.role`,
+  containers also `lws.size`, `lws.replicas` and
+  `disaggregatedset.slices`. The LeaderWorkerSets a set materializes,
+  their StatefulSets and pods roll up into the set's document (Design
+  005), which is how pod-status digests reach it. Runs under the watch
+  supervisor like every third-party kind; RBAC: get/list/watch
+  `disaggregatedsets.disaggregatedset.x-k8s.io`. `InferencePool`
+  membership (Design 007 Part 2) is v1.7.
+=======
 - **Configurable workload-kind allowlist** (#136, Design 006).
   `spec.discovery.workloadKinds` on `AIBOMControllerConfig` lists the
   kinds the controller inventories as `Group/Kind` strings
@@ -53,6 +71,7 @@ All notable changes to k8s-aibom are documented here. The format follows
   which are reported on their own again rather than disappearing with
   it. Changes apply without a restart: a `workloadKinds` change
   re-reconciles every workload of every reporting kind.
+>>>>>>> origin/main
 
 - **Ownership roll-up: one workload, one AIBOM** (#126, Design 005). A
   tracked workload owned — directly or transitively via controller

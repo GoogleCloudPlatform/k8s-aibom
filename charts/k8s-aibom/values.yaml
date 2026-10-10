@@ -62,7 +62,8 @@ config:
   # Known kinds: apps/Deployment, apps/StatefulSet, apps/DaemonSet,
   # batch/Job, batch/CronJob, serving.kserve.io/InferenceService,
   # nvidia.com/DynamoGraphDeployment, nvidia.com/DynamoComponentDeployment,
-  # apps.nvidia.com/NIMService, leaderworkerset.x-k8s.io/LeaderWorkerSet.
+  # apps.nvidia.com/NIMService, leaderworkerset.x-k8s.io/LeaderWorkerSet,
+  # disaggregatedset.x-k8s.io/DisaggregatedSet.
   # Third-party kinds not listed are not watched at all; apps/v1 and
   # batch kinds not listed are still watched but not reported (their
   # watch narrowing is the v1.7 follow-up).
