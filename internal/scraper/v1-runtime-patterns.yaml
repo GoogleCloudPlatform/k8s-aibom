@@ -229,6 +229,17 @@ runtimeImagePatterns:
   - runtime: openvino-model-server
     pattern: '^openvino/model_server(?:[:@]|$)'
 
+  # Aphrodite Engine — alpindale/aphrodite-openai on Docker Hub, the
+  # OpenAI-compatible server image the project's
+  # build_and_upload_docker.sh publishes under the maintainer's own
+  # namespace. Anchored at the image-name boundary so release, commit
+  # hash and digest forms match (v0.9.0, v0.6.4.post1, 5f1d2611) while
+  # the build image (alpindale/aphrodite-build), the stale
+  # aphrodite-engine / aphrodite-dev images and other registries do
+  # not. Not a prefix and not a mirror pattern.
+  - runtime: aphrodite
+    pattern: '^alpindale/aphrodite-openai(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and

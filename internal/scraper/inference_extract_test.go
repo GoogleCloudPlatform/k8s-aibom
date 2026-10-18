@@ -526,6 +526,22 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"openvino/cvat_server:latest", ""},
 		{"docker.io/openvino/model_server:latest", ""},
 		{"ghcr.io/openvino/model_server:latest", ""},
+
+		// Aphrodite Engine OpenAI server — publisher-anchored Docker Hub
+		// image. Release, commit-hash and digest forms match; sibling
+		// alpindale/aphrodite-* images, name-prefix, other-user and
+		// other-registry near-misses do not.
+		{"alpindale/aphrodite-openai:v0.9.0", "aphrodite"},
+		{"alpindale/aphrodite-openai:v0.6.4.post1", "aphrodite"},
+		{"alpindale/aphrodite-openai:5f1d2611", "aphrodite"},
+		{"alpindale/aphrodite-openai:latest", "aphrodite"},
+		{"alpindale/aphrodite-openai@sha256:abc", "aphrodite"},
+		{"alpindale/aphrodite-build:latest", ""},
+		{"alpindale/aphrodite-engine:latest", ""},
+		{"alpindale/aphrodite-dev:latest", ""},
+		{"alpindale/aphrodite-openai-extra:1", ""},
+		{"otheruser/aphrodite-openai:latest", ""},
+		{"ghcr.io/alpindale/aphrodite-openai:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
