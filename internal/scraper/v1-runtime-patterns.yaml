@@ -229,6 +229,18 @@ runtimeImagePatterns:
   - runtime: openvino-model-server
     pattern: '^openvino/model_server(?:[:@]|$)'
 
+  # Xinference — xprobe/xinference on Docker Hub, the official image of
+  # Xorbits Inference (OpenAI-compatible LLM, embedding, rerank, image
+  # and audio serving). The project's Helm chart runs it for both the
+  # supervisor and worker Deployments. Anchored at the image-name
+  # boundary so tag and digest forms match (v4.0.1, v4.0.1-cpu,
+  # latest-aarch64, nightly-main) while xprobe/xinference-pypiserver,
+  # other xprobe/* images and other registries do not. The project's
+  # Aliyun mirror is left to the registry-prefix note below. Not a
+  # prefix and not a mirror pattern.
+  - runtime: xinference
+    pattern: '^xprobe/xinference(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and
