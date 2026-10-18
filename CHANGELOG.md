@@ -4,16 +4,6 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
-## [Unreleased]
-
-### Added
-
-- **Xinference runtime pattern** (#182). `xprobe/xinference` (GPU,
-  CPU, aarch64, nightly and digest forms) attributes as runtime
-  `xinference`. Publisher-anchored at the image-name boundary, so
-  `xprobe/xinference-pypiserver`, other `xprobe/*` images and other
-  registries stay unmatched.
-
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
