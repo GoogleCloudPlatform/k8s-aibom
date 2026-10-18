@@ -250,6 +250,41 @@ Third-party CRD outages degrade one kind instead of the controller.
   private-account ECR copies, or the same path on another registry.
   No existing entry changes.
 
+- **TensorRT-LLM release image runtime pattern** (#176).
+  `nvcr.io/nvidia/tensorrt-llm/release` (GA, rc, dev and digest forms)
+  attributes as runtime `tensorrt-llm`, the name the Dynamo
+  `tensorrtllm-runtime` entry already uses. Anchored at the image-name
+  boundary, so the `tensorrt-llm/devel` build image, name-prefix
+  lookalikes and other registries stay unmatched. No existing entry
+  changes.
+
+- **Speaches speech server runtime pattern** (#177).
+  `ghcr.io/speaches-ai/speaches` (CPU, CUDA, sha- and digest forms)
+  attributes as runtime `speaches`. Speaches is the renamed
+  continuation of `fedirz/faster-whisper-server`, whose entry is
+  unchanged. Publisher-anchored at the image-name boundary, so
+  `speaches-extra`, other GHCR orgs and other registries stay
+  unmatched.
+
+- **LocalAI runtime pattern** (#178). `localai/localai` and
+  `quay.io/go-skynet/local-ai` (CPU, GPU, AIO, master and digest forms)
+  attribute as runtime `localai`. LocalAI publishes every build to both
+  repositories, so both are the publisher's own. Anchored at the
+  image-name boundary, so name-prefix lookalikes, other users'
+  repositories and other registries stay unmatched.
+
+- **Xinference runtime pattern** (#182). `xprobe/xinference` (GPU,
+  CPU, aarch64, nightly and digest forms) attributes as runtime
+  `xinference`. Publisher-anchored at the image-name boundary, so
+  `xprobe/xinference-pypiserver`, other `xprobe/*` images and other
+  registries stay unmatched.
+
+- **Aphrodite Engine runtime pattern** (#183).
+  `alpindale/aphrodite-openai` (release, commit-hash and digest forms)
+  attributes as runtime `aphrodite`. Publisher-anchored at the
+  image-name boundary, so the build image, the older
+  `alpindale/aphrodite-*` images and other registries stay unmatched.
+
 - **llm-d model-server runtime pattern** (#149). `llm-d-cuda`,
   `llm-d-rocm`, `llm-d-cpu`, `llm-d-xpu`, `llm-d-xpu-sglang`,
   `llm-d-hpu`, `llm-d-gke`, `llm-d-aws` and `llm-d-cuda-gb200` (tag and
