@@ -4,6 +4,23 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
+## [Unreleased]
+
+### Added
+
+- **`NamespaceObserved` event on opted-in namespaces** (#106). After
+  its first pass over an opted-in namespace the controller emits one
+  Normal event on that namespace, stored in it so `kubectl get events
+  -n <ns>` shows it, with how many workloads were considered, how many
+  matched an AI workload signal and how many matched none. A quiet
+  namespace no longer looks the same as a controller that never ran.
+  The event waits until no new workload has been considered for 10s
+  (at most 60s from the first). Rolled-up workloads and kinds excluded
+  by `spec.discovery.workloadKinds` are not counted. The count is kept
+  in memory: a restart announces each namespace again, and so does
+  opting a namespace out and back in. No new RBAC (events
+  create/patch is already granted); emitted documents are unchanged.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

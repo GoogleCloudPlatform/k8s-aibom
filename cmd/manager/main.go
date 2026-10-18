@@ -286,6 +286,9 @@ func main() {
 		ControllerVersion: controllerVersion,
 		Tracked:           tracked,
 		Fanout:            fanout,
+		// One observer for every kind: the NamespaceObserved event
+		// counts a namespace's workloads across kinds (#106).
+		Observer: controller.NewNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom")), //nolint:staticcheck
 	}
 	// KServe needs its own scraper (declared-not-inferred semantics,
 	// different field paths). Shallow-copy the inference base and

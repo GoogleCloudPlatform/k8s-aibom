@@ -149,6 +149,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		ControllerVersion: "0.1.0-test",
 		Tracked:           tracked,
 		Fanout:            fanout,
+		Observer:          newNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom"), testNamespaceObservationSettle, 5*testNamespaceObservationSettle), //nolint:staticcheck
 	}
 	// KServe needs its own scraper; everything else shared.
 	kserveBase := inferenceBase
