@@ -4,6 +4,21 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
+## [Unreleased]
+
+### Added
+
+- **Effective runtime patterns in `AIBOMControllerConfig.status`**
+  (#106). `status.effectiveInferenceRuntimeImagePatterns` lists the
+  runtime-detection patterns the controller is matching images
+  against, in match order: the compiled-in defaults when
+  `spec.discovery.inferenceRuntimeImagePatterns` is empty, the spec
+  list once it has loaded, and the last-known-good list while the spec
+  is invalid. An operator whose workload produced no AIBOM can now
+  check its image against the list without reading the controller
+  binary. Added to both `v1alpha1` and `v1beta1`; status only, so
+  emitted documents are unchanged.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

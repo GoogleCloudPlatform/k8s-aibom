@@ -598,8 +598,25 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 		return nil
 	}
 
+	cr.Status.EffectiveInferenceRuntimeImagePatterns = effectiveRuntimeImagePatterns(stored)
 	cr.Status.ObservedGeneration = cr.Generation
 	return r.Client.Status().Update(ctx, &cr)
+}
+
+// effectiveRuntimeImagePatterns returns the runtime-detection patterns
+// of the snapshot the workload reconcilers are using, in match order,
+// for status (#106). With no spec override this is the compiled-in
+// list; while the spec is invalid it is the last-known-good or default
+// list actually in effect, not the rejected spec.
+func effectiveRuntimeImagePatterns(stored *config.Snapshot) []aibomv1beta1.RuntimeImagePattern {
+	if stored == nil || stored.Patterns == nil || len(stored.Patterns.RuntimeImagePatterns) == 0 {
+		return nil
+	}
+	out := make([]aibomv1beta1.RuntimeImagePattern, 0, len(stored.Patterns.RuntimeImagePatterns))
+	for _, p := range stored.Patterns.RuntimeImagePatterns {
+		out = append(out, aibomv1beta1.RuntimeImagePattern{Runtime: p.Runtime, Pattern: p.Pattern})
+	}
+	return out
 }
 
 // configName returns the configured name, defaulting to
