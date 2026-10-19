@@ -599,6 +599,21 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"quay.io/go-skynet/local-ai-extra:latest", ""},
 		{"quay.io/go-skynet/other:latest", ""},
 		{"quay.io/someone/local-ai:latest", ""},
+
+		// Xinference — publisher-anchored Docker Hub image. GPU, CPU,
+		// aarch64, nightly and digest forms match; the sibling
+		// pypiserver repository, other xprobe/* images, name-prefix,
+		// other-user and other-registry near-misses do not.
+		{"xprobe/xinference:v4.0.1", "xinference"},
+		{"xprobe/xinference:v4.0.1-cpu", "xinference"},
+		{"xprobe/xinference:latest-aarch64", "xinference"},
+		{"xprobe/xinference:nightly-main", "xinference"},
+		{"xprobe/xinference@sha256:abc", "xinference"},
+		{"xprobe/xinference-pypiserver:latest", ""},
+		{"xprobe/xagent-backend:latest", ""},
+		{"xprobe/xinference-extra:1", ""},
+		{"otheruser/xinference:v4.0.1", ""},
+		{"ghcr.io/xprobe/xinference:v4.0.1", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
