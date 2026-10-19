@@ -31,9 +31,40 @@ import (
 )
 
 // testNamespaceObservationSettle is the settle period startEnvTest
-// wires: short enough that envtests see the event quickly, long enough
-// that a slow first reconcile on a loaded CI runner cannot outrun it.
-const testNamespaceObservationSettle = 2 * time.Second
+// wires. Envtests do not wait on it: they read the observer's counts and
+// fire the announcement themselves (announceNow), so it only has to be
+// long enough that the timer never fires first on a slow CI runner.
+const testNamespaceObservationSettle = 30 * time.Second
+
+// pendingCount reports how many workloads the observer has counted for
+// namespace since its first pass began (0 once announced or unknown).
+func (o *NamespaceObserver) pendingCount(namespace string) int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if obs := o.namespaces[namespace]; obs != nil {
+		return len(obs.workloads)
+	}
+	return 0
+}
+
+// announceNow fires namespace's pending announcement immediately, as the
+// settle timer would, so a test can assert the event without depending on
+// reconcile timing.
+func (o *NamespaceObserver) announceNow(namespace string) {
+	o.mu.Lock()
+	obs := o.namespaces[namespace]
+	var uid types.UID
+	if obs != nil {
+		uid = obs.uid
+		if obs.timer != nil {
+			obs.timer.Stop()
+		}
+	}
+	o.mu.Unlock()
+	if obs != nil {
+		o.announce(namespace, uid)
+	}
+}
 
 func testNamespace(name, uid string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(uid)}}
@@ -215,6 +246,18 @@ func TestIntegration_NamespaceObservedEvent(t *testing.T) {
 	plain := dep("nginx", "nginx:1.27")
 	plain.Namespace = "observed-plain"
 	mustCreate(t, env.k8sClient, ctx, plain)
+
+	// The event's timing is the settle timer's business, not this test's:
+	// wait until the observer has counted both workloads, then fire the
+	// announcement. Whether the second reconcile lands 50ms or 5s after the
+	// first no longer matters.
+	eventually(t, 30*time.Second, 100*time.Millisecond, func() error {
+		if n := env.observer.pendingCount("observed-optin"); n < 2 {
+			return fmt.Errorf("observer counted %d workload(s) in observed-optin, want 2", n)
+		}
+		return nil
+	})
+	env.observer.announceNow("observed-optin")
 
 	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
 		var list corev1.EventList
