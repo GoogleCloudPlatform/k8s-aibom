@@ -579,6 +579,26 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"ghcr.io/someone/speaches:0.9.0-cpu", ""},
 		{"speaches-ai/speaches:0.9.0-cpu", ""},
 		{"quay.io/speaches-ai/speaches:0.9.0-cpu", ""},
+
+		// LocalAI — publisher-anchored Docker Hub and Quay images. CPU,
+		// GPU, AIO, master and digest forms match on both; name-prefix,
+		// other-user, other-registry and sibling-repository near-misses
+		// do not.
+		{"localai/localai:latest", "localai"},
+		{"localai/localai:latest-gpu-nvidia-cuda-12", "localai"},
+		{"localai/localai:latest-gpu-vulkan", "localai"},
+		{"localai/localai:latest-aio-cpu", "localai"},
+		{"localai/localai:master-1792279864-e7cc993", "localai"},
+		{"localai/localai@" + testFullDigest, "localai"},
+		{"quay.io/go-skynet/local-ai:latest", "localai"},
+		{"quay.io/go-skynet/local-ai:latest-gpu-nvidia-cuda-12", "localai"},
+		{"quay.io/go-skynet/local-ai@" + testFullDigest, "localai"},
+		{"localai/localai-extra:latest", ""},
+		{"someone/localai:latest", ""},
+		{"ghcr.io/localai/localai:latest", ""},
+		{"quay.io/go-skynet/local-ai-extra:latest", ""},
+		{"quay.io/go-skynet/other:latest", ""},
+		{"quay.io/someone/local-ai:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
