@@ -119,6 +119,11 @@ type WorkloadReconciler struct {
 	// spec.discovery.workloadKinds changes (Design 006). nil means
 	// allowlist changes apply lazily, on each workload's next event.
 	Fanout *AllowlistFanout
+
+	// Observer counts considered and matched workloads per opted-in
+	// namespace and emits the NamespaceObserved event (#106). Shared
+	// by every kind's reconciler. nil disables the event.
+	Observer *NamespaceObserver
 }
 
 // WorkloadReconcileRequest carries everything the kind-neutral reconcile
@@ -208,6 +213,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 	if !snap.NamespaceSelector.Matches(labels.Set(ns.Labels)) {
 		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "not_opted_in").Inc()
+		r.Observer.Forget(ns.Name)
 		logger.V(1).Info("namespace does not match selector; skipping", "workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name)
 		return ctrl.Result{}, r.deleteWorkloadAIBOM(ctx, req, "orphaned")
 	}
@@ -257,6 +263,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		// namespace full of unrecognized workloads is visibly "seen and
 		// declined" rather than indistinguishable from a dead controller.
 		metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "unmatched").Inc()
+		r.Observer.Considered(&ns, observedWorkloadKey(req.Workload), false)
 		logger.V(1).Info("workload has no inference signal; skipping AIBOM creation", "workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name)
 		aibom := &aibomv1beta1.AIBOM{}
 		if err := r.Get(ctx, types.NamespacedName{Name: req.AIBOMName, Namespace: req.Workload.Namespace}, aibom); err == nil {
@@ -270,6 +277,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 
 	metrics.WorkloadReconcileOutcomes.WithLabelValues(req.Workload.Kind.Kind, "matched").Inc()
+	r.Observer.Considered(&ns, observedWorkloadKey(req.Workload), true)
 
 	// Compute the input hash and consult any existing AIBOM CR to see
 	// whether this reconcile would produce content-identical output.
