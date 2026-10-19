@@ -8,6 +8,17 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Effective runtime patterns in `AIBOMControllerConfig.status`**
+  (#106). `status.effectiveInferenceRuntimeImagePatterns` lists the
+  runtime-detection patterns the controller is matching images
+  against, in match order: the compiled-in defaults when
+  `spec.discovery.inferenceRuntimeImagePatterns` is empty, the spec
+  list once it has loaded, and the last-known-good list while the spec
+  is invalid. An operator whose workload produced no AIBOM can now
+  check its image against the list without reading the controller
+  binary. Added to both `v1alpha1` and `v1beta1`; status only, so
+  emitted documents are unchanged.
+
 - **`NamespaceObserved` event on opted-in namespaces** (#106). After
   its first pass over an opted-in namespace the controller emits one
   Normal event on that namespace, stored in it so `kubectl get events
