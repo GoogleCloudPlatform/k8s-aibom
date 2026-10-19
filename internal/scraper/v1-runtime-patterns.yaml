@@ -252,6 +252,52 @@ runtimeImagePatterns:
   - runtime: tensorrt-llm
     pattern: '^nvcr\.io/nvidia/tensorrt-llm/release(?:[:@]|$)'
 
+  # Speaches — ghcr.io/speaches-ai/speaches, the OpenAI-compatible
+  # speech-to-text and text-to-speech server that continues
+  # fedirz/faster-whisper-server under the speaches-ai org. Anchored at
+  # the image-name boundary and independent of the tag, so CPU, CUDA,
+  # sha- and digest forms match while speaches-extra, other GHCR orgs
+  # and the same name on other registries do not. Not a prefix and not
+  # a mirror pattern.
+  - runtime: speaches
+    pattern: '^ghcr\.io/speaches-ai/speaches(?:[:@]|$)'
+
+  # LocalAI — OpenAI-compatible local inference server. The project
+  # publishes every build to both localai/localai on Docker Hub and its
+  # original quay.io/go-skynet/local-ai repository, so both are the
+  # publisher's own and neither is a mirror pattern. Anchored at the
+  # image-name boundary and independent of the tag, so CPU, GPU
+  # (latest-gpu-nvidia-cuda-12, latest-gpu-vulkan), AIO, master-/sha-
+  # and digest forms match while localai/localai-extra, other users'
+  # localai images and other quay.io/go-skynet repositories do not.
+  - runtime: localai
+    pattern: '^localai/localai(?:[:@]|$)'
+  - runtime: localai
+    pattern: '^quay\.io/go-skynet/local-ai(?:[:@]|$)'
+
+  # Xinference — xprobe/xinference on Docker Hub, the official image of
+  # Xorbits Inference (OpenAI-compatible LLM, embedding, rerank, image
+  # and audio serving). The project's Helm chart runs it for both the
+  # supervisor and worker Deployments. Anchored at the image-name
+  # boundary so tag and digest forms match (v4.0.1, v4.0.1-cpu,
+  # latest-aarch64, nightly-main) while xprobe/xinference-pypiserver,
+  # other xprobe/* images and other registries do not. The project's
+  # Aliyun mirror is left to the registry-prefix note below. Not a
+  # prefix and not a mirror pattern.
+  - runtime: xinference
+    pattern: '^xprobe/xinference(?:[:@]|$)'
+
+  # Aphrodite Engine — alpindale/aphrodite-openai on Docker Hub, the
+  # OpenAI-compatible server image the project's
+  # build_and_upload_docker.sh publishes under the maintainer's own
+  # namespace. Anchored at the image-name boundary so release, commit
+  # hash and digest forms match (v0.9.0, v0.6.4.post1, 5f1d2611) while
+  # the build image (alpindale/aphrodite-build), the stale
+  # aphrodite-engine / aphrodite-dev images and other registries do
+  # not. Not a prefix and not a mirror pattern.
+  - runtime: aphrodite
+    pattern: '^alpindale/aphrodite-openai(?:[:@]|$)'
+
   # TensorFlow Serving — tensorflow/serving on Docker Hub, the image the
   # project's Docker guide pulls and the one KServe's built-in
   # kserve-tensorflow-serving runtime points at. The serving tags
