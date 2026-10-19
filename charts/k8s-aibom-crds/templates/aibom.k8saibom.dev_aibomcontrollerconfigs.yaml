@@ -600,6 +600,39 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectiveInferenceRuntimeImagePatterns:
+                description: |-
+                  EffectiveInferenceRuntimeImagePatterns lists the runtime-detection
+                  patterns the controller is matching container images against, in
+                  match order: the compiled-in defaults when
+                  spec.discovery.inferenceRuntimeImagePatterns is empty, the spec
+                  list once it has loaded, or the last-known-good list while the
+                  spec is invalid (see the Degraded condition). An operator whose
+                  workload produced no AIBOM can compare its image here without
+                  reading the controller binary.
+                items:
+                  description: RuntimeImagePattern is one runtime-detection rule.
+                  properties:
+                    pattern:
+                      description: |-
+                        Pattern is a Go regexp matched against the full image
+                        reference (registry/path:tag).
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    runtime:
+                      description: |-
+                        Runtime is the identifier emitted as the detected runtime
+                        name (e.g., "vllm", "triton", "sglang").
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - pattern
+                  - runtime
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               lastLoadedAt:
                 description: |-
                   LastLoadedAt is the time the controller last successfully
@@ -1211,6 +1244,39 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectiveInferenceRuntimeImagePatterns:
+                description: |-
+                  EffectiveInferenceRuntimeImagePatterns lists the runtime-detection
+                  patterns the controller is matching container images against, in
+                  match order: the compiled-in defaults when
+                  spec.discovery.inferenceRuntimeImagePatterns is empty, the spec
+                  list once it has loaded, or the last-known-good list while the
+                  spec is invalid (see the Degraded condition). An operator whose
+                  workload produced no AIBOM can compare its image here without
+                  reading the controller binary.
+                items:
+                  description: RuntimeImagePattern is one runtime-detection rule.
+                  properties:
+                    pattern:
+                      description: |-
+                        Pattern is a Go regexp matched against the full image
+                        reference (registry/path:tag).
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    runtime:
+                      description: |-
+                        Runtime is the identifier emitted as the detected runtime
+                        name (e.g., "vllm", "triton", "sglang").
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - pattern
+                  - runtime
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               lastLoadedAt:
                 description: |-
                   LastLoadedAt is the time the controller last successfully
