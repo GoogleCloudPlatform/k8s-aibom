@@ -4,6 +4,19 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
+## [Unreleased]
+
+### Added
+
+- **AWS Deep Learning Containers vLLM runtime pattern** (#163).
+  `public.ecr.aws/deep-learning-containers/vllm` (EC2 and SageMaker
+  tags, bare, and digest forms) attributes as runtime `vllm`. Anchored
+  to AWS's own public ECR namespace at the image-name boundary, so the
+  entry does not match sibling repositories (`pytorch-inference`,
+  `vllm-arm64`, `huggingface-vllm`), other public ECR aliases,
+  private-account ECR copies, or the same path on another registry.
+  No existing entry changes.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
