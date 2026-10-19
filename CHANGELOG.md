@@ -8,6 +8,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **AWS Deep Learning Containers vLLM runtime pattern** (#163).
+  `public.ecr.aws/deep-learning-containers/vllm` (EC2 and SageMaker
+  tags, bare, and digest forms) attributes as runtime `vllm`. Anchored
+  to AWS's own public ECR namespace at the image-name boundary, so the
+  entry does not match sibling repositories (`pytorch-inference`,
+  `vllm-arm64`, `huggingface-vllm`), other public ECR aliases,
+  private-account ECR copies, or the same path on another registry.
+  No existing entry changes.
 - **Effective runtime patterns in `AIBOMControllerConfig.status`**
   (#106). `status.effectiveInferenceRuntimeImagePatterns` lists the
   runtime-detection patterns the controller is matching images

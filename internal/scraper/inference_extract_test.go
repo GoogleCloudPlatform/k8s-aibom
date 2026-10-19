@@ -372,6 +372,30 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"public.ecr.aws/someone/vllm-cpu-release-repo:v0.11.2", ""},
 		{"public.ecr.aws/q9t5s3a7/other-repo:v0.11.2", ""},
 
+		// AWS Deep Learning Containers vLLM — AWS's own public ECR
+		// namespace. EC2, SageMaker, versioned-server, bare, digest and
+		// tag-plus-digest forms match. Sibling repositories, a name-prefix
+		// lookalike, the same path on a registry no other entry covers, a
+		// mirror-prefixed path, a private-account ECR copy and near-miss
+		// public ECR namespaces stay quiet.
+		{"public.ecr.aws/deep-learning-containers/vllm:0.31.0-gpu-py312-cu130-ubuntu24.04-ec2", "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm:0.31.0-gpu-py312-cu130-ubuntu24.04-sagemaker", "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm:server-cuda-v2.6", "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm:server-sagemaker-cuda-v2.6", "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm", "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm@" + testFullDigest, "vllm"},
+		{"public.ecr.aws/deep-learning-containers/vllm:0.31.0-gpu-py312-cu130-ubuntu24.04-ec2@" + testFullDigest, "vllm"},
+		{"public.ecr.aws/deep-learning-containers/pytorch-inference:2.6.0-gpu-py312-cu124-ubuntu22.04-ec2", ""},
+		{"public.ecr.aws/deep-learning-containers/vllm-arm64:server-cpu-v1.0", ""},
+		{"public.ecr.aws/deep-learning-containers/vllm-extra:0.31.0", ""},
+		{"public.ecr.aws/deep-learning-containers/huggingface-vllm:0.30.0-transformers5.15.0-gpu-py312-cu130-ubuntu24.04", ""},
+		{"quay.io/deep-learning-containers/vllm:0.31.0-gpu-py312-cu130-ubuntu24.04-ec2", ""},
+		{"mirror.example.com/public.ecr.aws/deep-learning-containers/vllm:0.31.0", ""},
+		{"763104351884.dkr.ecr.us-west-2.amazonaws.com/vllm:0.31.0-gpu-py312-cu130-ubuntu24.04-ec2", ""},
+		{"public.ecr.aws/someone/vllm:0.31.0", ""},
+		{"public.ecr.aws/deep-learning-container/vllm:0.31.0", ""},
+		{"public.ecr.aws/aws-deep-learning-containers/vllm:0.31.0", ""},
+
 		// Conservative-detection guards: NVIDIA infrastructure images
 		// (controllers and endpoint-pickers, not model serving) and
 		// near-miss namespaces must not match. Named explicitly at the
@@ -526,6 +550,20 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"openvino/cvat_server:latest", ""},
 		{"docker.io/openvino/model_server:latest", ""},
 		{"ghcr.io/openvino/model_server:latest", ""},
+
+		// TensorRT-LLM standalone release image on NGC. GA, rc, dev and
+		// digest forms match; the devel build image, a name-prefix
+		// lookalike and the same path on another registry stay quiet.
+		{"nvcr.io/nvidia/tensorrt-llm/release:1.0.0", "tensorrt-llm"},
+		{"nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc9", "tensorrt-llm"},
+		{"nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc1.dev202610180007", "tensorrt-llm"},
+		{"nvcr.io/nvidia/tensorrt-llm/release@" + testFullDigest, "tensorrt-llm"},
+		{"nvcr.io/nvidia/tensorrt-llm/release:1.0.0@" + testFullDigest, "tensorrt-llm"},
+		{"nvcr.io/nvidia/tensorrt-llm/devel:1.0.0", ""},
+		{"nvcr.io/nvidia/tensorrt-llm/release-extra:1.0.0", ""},
+		{"nvcr.io/nvidia/tensorrt-llm:1.0.0", ""},
+		{"ghcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
+		{"mirror.example.com/nvcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
