@@ -31,8 +31,9 @@ import (
 )
 
 // testNamespaceObservationSettle is the settle period startEnvTest
-// wires, short enough that envtests see the event quickly.
-const testNamespaceObservationSettle = 500 * time.Millisecond
+// wires: short enough that envtests see the event quickly, long enough
+// that a slow first reconcile on a loaded CI runner cannot outrun it.
+const testNamespaceObservationSettle = 2 * time.Second
 
 func testNamespace(name, uid string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(uid)}}
@@ -194,9 +195,20 @@ func TestIntegration_NamespaceObservedEvent(t *testing.T) {
 			},
 		}
 	}
-	mustCreateOptedInNamespace(t, env.k8sClient, ctx, "observed-optin")
+	// Create both workloads before opting the namespace in, so the opt-in
+	// enqueues them together and the first pass counts both, however
+	// slowly the first reconcile runs.
+	optin := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "observed-optin"}}
+	mustCreate(t, env.k8sClient, ctx, optin)
 	mustCreate(t, env.k8sClient, ctx, dep("nginx", "nginx:1.27"))
 	mustCreate(t, env.k8sClient, ctx, dep("vllm", "vllm/vllm-openai:v0.6.3", "--model", "facebook/opt-125m"))
+	// Let the manager's cache see both Deployments before the opt-in
+	// lists them.
+	time.Sleep(500 * time.Millisecond)
+	optin.Labels = map[string]string{OptInLabel: "true"}
+	if err := env.k8sClient.Update(ctx, optin); err != nil {
+		t.Fatalf("opt in namespace: %v", err)
+	}
 
 	// A namespace that is not opted in gets nothing.
 	mustCreate(t, env.k8sClient, ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "observed-plain"}})
