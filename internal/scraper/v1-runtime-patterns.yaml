@@ -252,6 +252,21 @@ runtimeImagePatterns:
   - runtime: tensorrt-llm
     pattern: '^nvcr\.io/nvidia/tensorrt-llm/release(?:[:@]|$)'
 
+  # TorchServe — pytorch/torchserve on Docker Hub, the image the
+  # project's Docker guide runs and its Kubernetes Helm chart deploys
+  # as a plain Deployment (pytorch/torchserve:latest-gpu). The project
+  # was archived in 2025 but the images stay deployed. The serving tags
+  # (0.12.0-cpu, 0.12.0-gpu, latest, latest-gpu, the early
+  # cudaX.Y-cudnnN-runtime tags), the bare name and digest forms match.
+  # The -cpp-dev tags in the same repository are build environments for
+  # the C++ backend with no serving entrypoint, so the tag is spelled
+  # out instead of left open: a -cpp-dev tag, the sibling
+  # pytorch/torchserve-kfs and pytorch/torchserve-nightly repositories,
+  # other pytorch/* images and other registries stay unmatched. Not a
+  # prefix and not a mirror pattern.
+  - runtime: torchserve
+    pattern: '^pytorch/torchserve(?::(?:latest|[0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:-(?:cpu|gpu|cuda[0-9]+\.[0-9]+-cudnn[0-9]+-runtime))?)?(?:@|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and

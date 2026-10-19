@@ -564,6 +564,28 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/tensorrt-llm:1.0.0", ""},
 		{"ghcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
 		{"mirror.example.com/nvcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
+
+		// TorchServe — publisher-anchored Docker Hub image. CPU, GPU,
+		// latest, the early CUDA runtime tags, the bare name and digest
+		// forms match; the -cpp-dev build images in the same repository,
+		// the -kfs and -nightly sibling repositories, other pytorch/*
+		// images, another Docker Hub user and other registries do not.
+		{"pytorch/torchserve", "torchserve"},
+		{"pytorch/torchserve:0.12.0-cpu", "torchserve"},
+		{"pytorch/torchserve:0.12.0-gpu", "torchserve"},
+		{"pytorch/torchserve:latest", "torchserve"},
+		{"pytorch/torchserve:latest-gpu", "torchserve"},
+		{"pytorch/torchserve:0.1-cpu", "torchserve"},
+		{"pytorch/torchserve:0.2.0-cuda10.1-cudnn7-runtime", "torchserve"},
+		{"pytorch/torchserve@" + testFullDigest, "torchserve"},
+		{"pytorch/torchserve:0.12.0-gpu@" + testFullDigest, "torchserve"},
+		{"pytorch/torchserve:0.12.0-cpp-dev-cpu", ""},
+		{"pytorch/torchserve:latest-cpp-dev-gpu", ""},
+		{"pytorch/torchserve-kfs:0.9.0", ""},
+		{"pytorch/torchserve-nightly:latest-gpu", ""},
+		{"pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime", ""},
+		{"otheruser/torchserve:0.12.0-cpu", ""},
+		{"ghcr.io/pytorch/torchserve:0.12.0-cpu", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
