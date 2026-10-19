@@ -252,6 +252,19 @@ runtimeImagePatterns:
   - runtime: tensorrt-llm
     pattern: '^nvcr\.io/nvidia/tensorrt-llm/release(?:[:@]|$)'
 
+  # TensorFlow Serving — tensorflow/serving on Docker Hub, the image the
+  # project's Docker guide pulls and the one KServe's built-in
+  # kserve-tensorflow-serving runtime points at. The serving tags
+  # (2.21.0, 2.19.0-rc0, latest, nightly, each with an optional -gpu
+  # suffix), the bare name and digest forms match. The -devel tags in
+  # the same repository are build environments (bazel toolchain, CMD
+  # /bin/bash), the same split as tensorrt-llm/devel above, so the tag
+  # is spelled out instead of left open: a -devel tag, other
+  # tensorflow/* images and other registries stay unmatched. Not a
+  # prefix and not a mirror pattern.
+  - runtime: tensorflow-serving
+    pattern: '^tensorflow/serving(?::(?:latest|nightly|[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?)(?:-gpu)?)?(?:@|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and
