@@ -296,6 +296,7 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		// Phase 11 additions
 		{"lmsysorg/sglang:v0.3.0", "sglang"},
 		{"lmsysorg/sglang-cpu:v0.3.0", "sglang"},
+
 		// Enumerated SGLang server variants retain tag, digest and bare
 		// image references; routers and unlisted suffixes stay quiet.
 		{"lmsysorg/sglang", "sglang"},
@@ -564,6 +565,71 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"nvcr.io/nvidia/tensorrt-llm:1.0.0", ""},
 		{"ghcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
 		{"mirror.example.com/nvcr.io/nvidia/tensorrt-llm/release:1.0.0", ""},
+
+		// Speaches — publisher-anchored GHCR image (successor of
+		// fedirz/faster-whisper-server). CPU, CUDA, sha- and digest forms
+		// match; name-prefix, other-org and other-registry near-misses
+		// do not.
+		{"ghcr.io/speaches-ai/speaches:0.9.0-rc.3-cpu", "speaches"},
+		{"ghcr.io/speaches-ai/speaches:0.9.0-rc.3-cuda", "speaches"},
+		{"ghcr.io/speaches-ai/speaches:0.9.0-rc.3-cuda-12.6.3", "speaches"},
+		{"ghcr.io/speaches-ai/speaches:sha-24f209c-cpu", "speaches"},
+		{"ghcr.io/speaches-ai/speaches@" + testFullDigest, "speaches"},
+		{"ghcr.io/speaches-ai/speaches-extra:0.9.0", ""},
+		{"ghcr.io/someone/speaches:0.9.0-cpu", ""},
+		{"speaches-ai/speaches:0.9.0-cpu", ""},
+		{"quay.io/speaches-ai/speaches:0.9.0-cpu", ""},
+
+		// LocalAI — publisher-anchored Docker Hub and Quay images. CPU,
+		// GPU, AIO, master and digest forms match on both; name-prefix,
+		// other-user, other-registry and sibling-repository near-misses
+		// do not.
+		{"localai/localai:latest", "localai"},
+		{"localai/localai:latest-gpu-nvidia-cuda-12", "localai"},
+		{"localai/localai:latest-gpu-vulkan", "localai"},
+		{"localai/localai:latest-aio-cpu", "localai"},
+		{"localai/localai:master-1792279864-e7cc993", "localai"},
+		{"localai/localai@" + testFullDigest, "localai"},
+		{"quay.io/go-skynet/local-ai:latest", "localai"},
+		{"quay.io/go-skynet/local-ai:latest-gpu-nvidia-cuda-12", "localai"},
+		{"quay.io/go-skynet/local-ai@" + testFullDigest, "localai"},
+		{"localai/localai-extra:latest", ""},
+		{"someone/localai:latest", ""},
+		{"ghcr.io/localai/localai:latest", ""},
+		{"quay.io/go-skynet/local-ai-extra:latest", ""},
+		{"quay.io/go-skynet/other:latest", ""},
+		{"quay.io/someone/local-ai:latest", ""},
+
+		// Xinference — publisher-anchored Docker Hub image. GPU, CPU,
+		// aarch64, nightly and digest forms match; the sibling
+		// pypiserver repository, other xprobe/* images, name-prefix,
+		// other-user and other-registry near-misses do not.
+		{"xprobe/xinference:v4.0.1", "xinference"},
+		{"xprobe/xinference:v4.0.1-cpu", "xinference"},
+		{"xprobe/xinference:latest-aarch64", "xinference"},
+		{"xprobe/xinference:nightly-main", "xinference"},
+		{"xprobe/xinference@sha256:abc", "xinference"},
+		{"xprobe/xinference-pypiserver:latest", ""},
+		{"xprobe/xagent-backend:latest", ""},
+		{"xprobe/xinference-extra:1", ""},
+		{"otheruser/xinference:v4.0.1", ""},
+		{"ghcr.io/xprobe/xinference:v4.0.1", ""},
+
+		// Aphrodite Engine OpenAI server — publisher-anchored Docker Hub
+		// image. Release, commit-hash and digest forms match; sibling
+		// alpindale/aphrodite-* images, name-prefix, other-user and
+		// other-registry near-misses do not.
+		{"alpindale/aphrodite-openai:v0.9.0", "aphrodite"},
+		{"alpindale/aphrodite-openai:v0.6.4.post1", "aphrodite"},
+		{"alpindale/aphrodite-openai:5f1d2611", "aphrodite"},
+		{"alpindale/aphrodite-openai:latest", "aphrodite"},
+		{"alpindale/aphrodite-openai@sha256:abc", "aphrodite"},
+		{"alpindale/aphrodite-build:latest", ""},
+		{"alpindale/aphrodite-engine:latest", ""},
+		{"alpindale/aphrodite-dev:latest", ""},
+		{"alpindale/aphrodite-openai-extra:1", ""},
+		{"otheruser/aphrodite-openai:latest", ""},
+		{"ghcr.io/alpindale/aphrodite-openai:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
