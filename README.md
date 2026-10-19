@@ -173,6 +173,12 @@ The controller is installed cluster-wide but inactive until you opt in at least 
 kubectl label namespace my-ai-namespace aibom.k8saibom.dev/enabled=true
 ```
 
+Within about a minute the controller records a `NamespaceObserved` event in the namespace, with how many workloads it considered and how many matched an AI workload signal. Workloads that match none get no `AIBOM`; that is conservative detection, not a fault:
+
+```bash
+kubectl get events -n my-ai-namespace --field-selector reason=NamespaceObserved
+```
+
 ### See the BOMs
 
 ```bash
@@ -191,6 +197,12 @@ If the BOM is inline, it is stored as base64-encoded data. You can decode and vi
 
 ```bash
 kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
+```
+
+No `AIBOM` for a workload usually means none of its container images matched a runtime-detection pattern (detection is conservative by design). The patterns in effect, in match order, are listed on the controller config:
+
+```bash
+kubectl get aibomcontrollerconfig default -o jsonpath='{range .status.effectiveInferenceRuntimeImagePatterns[*]}{.runtime}{"\t"}{.pattern}{"\n"}{end}'
 ```
 
 ### Upgrades

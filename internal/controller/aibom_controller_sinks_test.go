@@ -364,12 +364,23 @@ func TestIntegration_ExternalSinks_FailureIsolation_OneFailsOthersSucceed(t *tes
 
 	// CRITICAL: succeeding sink was invoked despite the failing sink's
 	// error. This is the property regression would silently break.
-	if succeeding.emitCount() != 1 {
-		t.Errorf("succeeding sink emitCount = %d, want 1 — one sink's failure must not block another's emission",
+	//
+	// Exactly-once is NOT the contract here. While any sink is failing
+	// the input hash is not persisted (#91), so every reconcile that
+	// lands before the archive heals re-emits to every configured sink:
+	// the failing one gets its retry, the succeeding one gets a
+	// duplicate (timestamped archive paths make that safe). Whether a
+	// second reconcile lands inside this test's window is timing, so
+	// assert the isolation property and the fan-out invariant instead:
+	// the succeeding sink was reached at least once, and both sinks saw
+	// the same number of cycles.
+	if succeeding.emitCount() < 1 {
+		t.Errorf("succeeding sink emitCount = %d, want >= 1 — one sink's failure must not block another's emission",
 			succeeding.emitCount())
 	}
-	if failing.emitCount() != 1 {
-		t.Errorf("failing sink emitCount = %d, want 1", failing.emitCount())
+	if failing.emitCount() != succeeding.emitCount() {
+		t.Errorf("sink emit counts diverged: failing = %d, succeeding = %d — each retry cycle must fan out to every configured sink",
+			failing.emitCount(), succeeding.emitCount())
 	}
 
 	// SinkFailed condition mentions ONLY the failing sink, not the

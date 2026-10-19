@@ -8,6 +8,30 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Effective runtime patterns in `AIBOMControllerConfig.status`**
+  (#106). `status.effectiveInferenceRuntimeImagePatterns` lists the
+  runtime-detection patterns the controller is matching images
+  against, in match order: the compiled-in defaults when
+  `spec.discovery.inferenceRuntimeImagePatterns` is empty, the spec
+  list once it has loaded, and the last-known-good list while the spec
+  is invalid. An operator whose workload produced no AIBOM can now
+  check its image against the list without reading the controller
+  binary. Added to both `v1alpha1` and `v1beta1`; status only, so
+  emitted documents are unchanged.
+
+- **`NamespaceObserved` event on opted-in namespaces** (#106). After
+  its first pass over an opted-in namespace the controller emits one
+  Normal event on that namespace, stored in it so `kubectl get events
+  -n <ns>` shows it, with how many workloads were considered, how many
+  matched an AI workload signal and how many matched none. A quiet
+  namespace no longer looks the same as a controller that never ran.
+  The event waits until no new workload has been considered for 10s
+  (at most 60s from the first). Rolled-up workloads and kinds excluded
+  by `spec.discovery.workloadKinds` are not counted. The count is kept
+  in memory: a restart announces each namespace again, and so does
+  opting a namespace out and back in. No new RBAC (events
+  create/patch is already granted); emitted documents are unchanged.
+
 - **TensorFlow Serving runtime pattern** (#189). `tensorflow/serving`
   (GA, rc, latest, nightly and `-gpu` tags, bare and digest forms)
   attributes as runtime `tensorflow-serving`. Publisher-anchored at the
