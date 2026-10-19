@@ -252,6 +252,16 @@ runtimeImagePatterns:
   - runtime: tensorrt-llm
     pattern: '^nvcr\.io/nvidia/tensorrt-llm/release(?:[:@]|$)'
 
+  # Speaches — ghcr.io/speaches-ai/speaches, the OpenAI-compatible
+  # speech-to-text and text-to-speech server that continues
+  # fedirz/faster-whisper-server under the speaches-ai org. Anchored at
+  # the image-name boundary and independent of the tag, so CPU, CUDA,
+  # sha- and digest forms match while speaches-extra, other GHCR orgs
+  # and the same name on other registries do not. Not a prefix and not
+  # a mirror pattern.
+  - runtime: speaches
+    pattern: '^ghcr\.io/speaches-ai/speaches(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and
