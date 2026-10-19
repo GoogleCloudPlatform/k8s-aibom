@@ -39,6 +39,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   build images in the same repository, other `tensorflow/*` images and
   other registries stay unmatched.
 
+- **TorchServe runtime pattern** (#191). `pytorch/torchserve` (CPU,
+  GPU, latest and early CUDA runtime tags, bare and digest forms)
+  attributes as runtime `torchserve`. Publisher-anchored at the
+  image-name boundary with the serving tags spelled out, so the
+  `-cpp-dev` build images in the same repository, the
+  `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
+  other `pytorch/*` images and other registries stay unmatched.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
