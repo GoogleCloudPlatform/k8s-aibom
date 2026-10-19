@@ -199,6 +199,12 @@ If the BOM is inline, it is stored as base64-encoded data. You can decode and vi
 kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
 ```
 
+No `AIBOM` for a workload usually means none of its container images matched a runtime-detection pattern (detection is conservative by design). The patterns in effect, in match order, are listed on the controller config:
+
+```bash
+kubectl get aibomcontrollerconfig default -o jsonpath='{range .status.effectiveInferenceRuntimeImagePatterns[*]}{.runtime}{"\t"}{.pattern}{"\n"}{end}'
+```
+
 ### Upgrades
 
 `helm upgrade` of the main chart handles everything **except the CRDs**: Helm installs `crds/`-directory CRDs on first install but never upgrades them (standard Helm behavior — automatic CRD changes could destroy user data). Two ways to keep the CRDs current:

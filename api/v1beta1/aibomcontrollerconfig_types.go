@@ -327,6 +327,18 @@ type AIBOMControllerConfigStatus struct {
 	// only when the condition's status value transitions).
 	// +optional
 	LastLoadedAt *metav1.Time `json:"lastLoadedAt,omitempty"`
+
+	// EffectiveInferenceRuntimeImagePatterns lists the runtime-detection
+	// patterns the controller is matching container images against, in
+	// match order: the compiled-in defaults when
+	// spec.discovery.inferenceRuntimeImagePatterns is empty, the spec
+	// list once it has loaded, or the last-known-good list while the
+	// spec is invalid (see the Degraded condition). An operator whose
+	// workload produced no AIBOM can compare its image here without
+	// reading the controller binary.
+	// +optional
+	// +listType=atomic
+	EffectiveInferenceRuntimeImagePatterns []RuntimeImagePattern `json:"effectiveInferenceRuntimeImagePatterns,omitempty"`
 }
 
 // +kubebuilder:object:root=true
