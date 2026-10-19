@@ -60,6 +60,10 @@ type envTestEnv struct {
 	// snapshot the way the config reconciler does.
 	configStore *config.Store
 	watchHealth *WatchHealth
+	// observer is the NamespaceObserver wired into every workload
+	// reconciler, so tests can read its counts and fire its announcement
+	// without depending on the settle timer.
+	observer *NamespaceObserver
 }
 
 // startEnvTest starts an envtest API server, registers schemes, applies
@@ -138,6 +142,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	tracked.Follow(configStore)
 	fanout := &AllowlistFanout{Reader: mgr.GetAPIReader()}
 	fanout.Bind(configStore)
+	observer := newNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom"), testNamespaceObservationSettle, 5*testNamespaceObservationSettle) //nolint:staticcheck
 	inferenceBase := WorkloadReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
@@ -149,7 +154,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		ControllerVersion: "0.1.0-test",
 		Tracked:           tracked,
 		Fanout:            fanout,
-		Observer:          newNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom"), testNamespaceObservationSettle, 5*testNamespaceObservationSettle), //nolint:staticcheck
+		Observer:          observer,
 	}
 	// KServe needs its own scraper; everything else shared.
 	kserveBase := inferenceBase
@@ -219,6 +224,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		mgrErrCh:    mgrErrCh,
 		configStore: configStore,
 		watchHealth: watchHealth,
+		observer:    observer,
 	}
 }
 
