@@ -32,6 +32,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   opting a namespace out and back in. No new RBAC (events
   create/patch is already granted); emitted documents are unchanged.
 
+- **TensorFlow Serving runtime pattern** (#189). `tensorflow/serving`
+  (GA, rc, latest, nightly and `-gpu` tags, bare and digest forms)
+  attributes as runtime `tensorflow-serving`. Publisher-anchored at the
+  image-name boundary with the serving tags spelled out, so the `-devel`
+  build images in the same repository, other `tensorflow/*` images and
+  other registries stay unmatched.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

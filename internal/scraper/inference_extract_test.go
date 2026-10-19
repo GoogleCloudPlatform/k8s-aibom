@@ -630,6 +630,31 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"alpindale/aphrodite-openai-extra:1", ""},
 		{"otheruser/aphrodite-openai:latest", ""},
 		{"ghcr.io/alpindale/aphrodite-openai:latest", ""},
+
+		// TensorFlow Serving — publisher-anchored Docker Hub image. GA,
+		// rc, latest, nightly and their -gpu variants, the bare name and
+		// digest forms match; the -devel build images in the same
+		// repository, a name-prefix lookalike, other tensorflow/*
+		// images, another Docker Hub user and other registries do not.
+		{"tensorflow/serving", "tensorflow-serving"},
+		{"tensorflow/serving:2.21.0", "tensorflow-serving"},
+		{"tensorflow/serving:2.21.0-gpu", "tensorflow-serving"},
+		{"tensorflow/serving:2.19.0-rc0", "tensorflow-serving"},
+		{"tensorflow/serving:2.19.0-rc0-gpu", "tensorflow-serving"},
+		{"tensorflow/serving:latest", "tensorflow-serving"},
+		{"tensorflow/serving:latest-gpu", "tensorflow-serving"},
+		{"tensorflow/serving:nightly-gpu", "tensorflow-serving"},
+		{"tensorflow/serving@" + testFullDigest, "tensorflow-serving"},
+		{"tensorflow/serving:2.21.0-gpu@" + testFullDigest, "tensorflow-serving"},
+		{"tensorflow/serving:2.21.0-devel", ""},
+		{"tensorflow/serving:2.21.0-devel-gpu", ""},
+		{"tensorflow/serving:latest-devel", ""},
+		{"tensorflow/serving:nightly-devel-gpu", ""},
+		{"tensorflow/serving-extra:2.21.0", ""},
+		{"tensorflow/tensorflow:2.21.0-gpu", ""},
+		{"otheruser/serving:2.21.0", ""},
+		{"gcr.io/tensorflow-serving/resnet:latest", ""},
+		{"ghcr.io/tensorflow/serving:2.21.0", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
