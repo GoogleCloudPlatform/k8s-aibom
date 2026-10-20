@@ -47,6 +47,22 @@ All notable changes to k8s-aibom are documented here. The format follows
   `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
   other `pytorch/*` images and other registries stay unmatched.
 
+- **KServe predictive server runtime patterns** (#196).
+  `kserve/sklearnserver`, `kserve/xgbserver`, `kserve/lgbserver`,
+  `kserve/paddleserver` and `kserve/pmmlserver` run as a plain
+  Deployment attribute as runtimes `sklearn`, `xgboost`, `lightgbm`,
+  `paddle` and `pmml`, the names their ClusterServingRuntimes declare,
+  matching what the KServe scraper reports for an InferenceService.
+  Publisher-anchored at the image-name boundary; the multi-framework
+  `kserve/predictiveserver`, other `kserve/*` images and other
+  registries stay unmatched.
+
+- **Whisper ASR Webservice runtime pattern** (#197).
+  `onerahmet/openai-whisper-asr-webservice` (release, `-gpu`, latest
+  and debug tags, bare and digest forms) attributes as runtime
+  `whisper-asr-webservice`. Publisher-anchored at the image-name
+  boundary, so other users' whisper images and other registries stay
+  unmatched.
 ### Fixed
 
 - **`kubectl aibom find` no longer fails when one AIBOM has no
@@ -493,6 +509,7 @@ Third-party CRD outages degrade one kind instead of the controller.
   belt-and-braces image-name match on the candidate's container
   status. Pods with no controller owner never contribute. Found by
   internal review; regression-tested end to end.
+
 - **Webhook sinks reject credentials over cleartext at config load.**
   An `http://` endpoint combined with any `auth` configuration is now
   a load-time validation error (all-or-nothing fallback, named
@@ -734,6 +751,7 @@ digest-pinned install.yaml release asset.
   hook-created CR carries no Helm ownership metadata; before upgrading an
   existing release, delete it (`kubectl delete aibomcontrollerconfig
   default`) or annotate it for Helm adoption.
+
 - **Secret access is now opt-in.** The namespace-scoped Role granting
   Secret reads (used only for sink credentials) is rendered only when
   `rbac.sinkSecretAccess=true`. With no sinks configured (the default), the
