@@ -352,6 +352,19 @@ runtimeImagePatterns:
   - runtime: pmml
     pattern: '^kserve/pmmlserver(?:[:@]|$)'
 
+  # Whisper ASR Webservice — onerahmet/openai-whisper-asr-webservice on
+  # Docker Hub, the image the project (ahmetoner/whisper-asr-webservice)
+  # publishes from its Dockerfile and Dockerfile.gpu and its README and
+  # docs/run.md run: a speech-to-text server for OpenAI Whisper,
+  # faster-whisper and WhisperX models. Anchored at the image-name
+  # boundary and independent of the tag, so release, -gpu, latest,
+  # debug (the same Dockerfiles built from the debug branch) and digest
+  # forms match while other users' whisper images, name-prefix
+  # near-misses and other registries do not. Not a prefix and not a
+  # mirror pattern.
+  - runtime: whisper-asr-webservice
+    pattern: '^onerahmet/openai-whisper-asr-webservice(?:[:@]|$)'
+
   # NOT added in Phase 11: registry-prefix matching for mirrored
   # images (Artifact Registry, ECR, private mirrors). The asymmetry
   # between false negatives (honest BOM with unresolved runtime) and
