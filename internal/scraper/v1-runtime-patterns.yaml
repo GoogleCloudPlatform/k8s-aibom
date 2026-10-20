@@ -326,6 +326,32 @@ runtimeImagePatterns:
   - runtime: torchserve
     pattern: '^pytorch/torchserve(?::(?:latest|[0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:-(?:cpu|gpu|cuda[0-9]+\.[0-9]+-cudnn[0-9]+-runtime))?)?(?:@|$)'
 
+  # KServe's single-framework predictive servers — kserve/sklearnserver,
+  # kserve/xgbserver, kserve/lgbserver, kserve/paddleserver and
+  # kserve/pmmlserver on Docker Hub, the images behind KServe's default
+  # kserve-sklearnserver, -xgbserver, -lgbserver, -paddleserver and
+  # -pmmlserver ClusterServingRuntimes, run as a plain Deployment. As
+  # with kserve/huggingfaceserver above, each runtime id is the name the
+  # ClusterServingRuntime lists in supportedModelFormats (sklearn,
+  # xgboost, lightgbm, paddle, pmml), the same name an InferenceService
+  # declares in modelFormat.name, so one id covers both ways of
+  # deploying the server. Anchored at the image-name boundary so release,
+  # rc, latest and digest forms match while kserve/predictiveserver
+  # (one image for sklearn, xgboost and lightgbm, chosen by --framework,
+  # so the image alone does not name a runtime), KServe infrastructure
+  # images, name-prefix near-misses and other registries do not. Not a
+  # prefix and not a mirror pattern.
+  - runtime: sklearn
+    pattern: '^kserve/sklearnserver(?:[:@]|$)'
+  - runtime: xgboost
+    pattern: '^kserve/xgbserver(?:[:@]|$)'
+  - runtime: lightgbm
+    pattern: '^kserve/lgbserver(?:[:@]|$)'
+  - runtime: paddle
+    pattern: '^kserve/paddleserver(?:[:@]|$)'
+  - runtime: pmml
+    pattern: '^kserve/pmmlserver(?:[:@]|$)'
+
   # Whisper ASR Webservice — onerahmet/openai-whisper-asr-webservice on
   # Docker Hub, the image the project (ahmetoner/whisper-asr-webservice)
   # publishes from its Dockerfile and Dockerfile.gpu and its README and
