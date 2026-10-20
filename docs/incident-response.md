@@ -34,8 +34,9 @@ kubectl aibom find --runtime litellm -A
 
 Every tracked workload attributed to that runtime, in one command — no
 ssh, no spreadsheet census. `find` also filters by `--model`,
-`--image`, `--digest` (bare hex or `sha256:`-prefixed, prefix matches)
-and `--signed`, and the filters AND together. Zero matches prints
+`--image`, `--digest` (1 to 64 hex characters, bare or
+`sha256:`-prefixed; a shorter value is a prefix match, and anything
+else is an error) and `--signed`, and the filters AND together. Zero matches prints
 `0 matches` and exits 0, so an incident script can tell "none found"
 from "the plugin broke". (`kubectl aibom summary -A` remains the
 unfiltered view.)

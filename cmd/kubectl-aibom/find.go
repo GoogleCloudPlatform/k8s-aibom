@@ -123,15 +123,32 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 	return facts, "", nil
 }
 
-// normalizeDigest strips an optional sha256: prefix and lower-cases.
+// normalizeDigest strips an optional sha256: prefix (any case) and
+// lower-cases.
 func normalizeDigest(d string) string {
-	d = strings.TrimSpace(d)
-	d = strings.TrimPrefix(strings.TrimPrefix(d, "sha256:"), "SHA256:")
-	return strings.ToLower(d)
+	d = strings.ToLower(strings.TrimSpace(d))
+	return strings.TrimPrefix(d, "sha256:")
+}
+
+// checkDigestFilter rejects a --digest value that cannot name a sha256
+// digest or a prefix of one: empty once normalized (a bare "sha256:"
+// would otherwise prefix-match every digest), not hex, or longer than
+// 64 characters (which could never match). Run it before listing, so a
+// typo is an error rather than a wrong answer.
+func checkDigestFilter(d string) error {
+	w := normalizeDigest(d)
+	if w == "" || len(w) > 64 || strings.Trim(w, "0123456789abcdef") != "" {
+		return fmt.Errorf("--digest must be a sha256 digest or a prefix of one: 1 to 64 hex characters, bare or sha256:-prefixed (got %q)", d)
+	}
+	return nil
 }
 
 func digestMatches(want string, have []string) bool {
 	w := normalizeDigest(want)
+	if w == "" {
+		// Never a wildcard: checkDigestFilter rejects this up front.
+		return false
+	}
 	for _, h := range have {
 		if len(w) == 64 {
 			if h == w {

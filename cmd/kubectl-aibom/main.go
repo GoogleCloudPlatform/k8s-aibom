@@ -158,6 +158,11 @@ Flags:
 		if f.signed != "" && f.signed != "unsigned" && f.signed != "claimed" && f.signed != "verified" {
 			return fmt.Errorf("--signed must be one of unsigned, claimed, verified")
 		}
+		if f.digest != "" {
+			if err := checkDigestFilter(f.digest); err != nil {
+				return err
+			}
+		}
 		var items []unstructured.Unstructured
 		if *allNS {
 			l, err := dyn.Resource(aibomGVR).List(ctx, metav1.ListOptions{})
