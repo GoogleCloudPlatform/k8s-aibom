@@ -47,6 +47,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
   other `pytorch/*` images and other registries stay unmatched.
 
+- **KServe predictive server runtime patterns** (#196).
+  `kserve/sklearnserver`, `kserve/xgbserver`, `kserve/lgbserver`,
+  `kserve/paddleserver` and `kserve/pmmlserver` run as a plain
+  Deployment attribute as runtimes `sklearn`, `xgboost`, `lightgbm`,
+  `paddle` and `pmml`, the names their ClusterServingRuntimes declare,
+  matching what the KServe scraper reports for an InferenceService.
+  Publisher-anchored at the image-name boundary; the multi-framework
+  `kserve/predictiveserver`, other `kserve/*` images and other
+  registries stay unmatched.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
