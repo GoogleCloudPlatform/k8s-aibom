@@ -677,6 +677,32 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime", ""},
 		{"otheruser/torchserve:0.12.0-cpu", ""},
 		{"ghcr.io/pytorch/torchserve:0.12.0-cpu", ""},
+
+		// KServe single-framework predictive servers — publisher-anchored
+		// Docker Hub images run as a plain Deployment, attributed under the
+		// modelFormat name their ClusterServingRuntime declares. Release,
+		// rc, latest and digest forms match; the multi-framework
+		// predictiveserver, infrastructure images, name-prefix and
+		// other-registry near-misses do not.
+		{"kserve/sklearnserver", "sklearn"},
+		{"kserve/sklearnserver:v0.21.0", "sklearn"},
+		{"kserve/sklearnserver:v0.21.0-rc1", "sklearn"},
+		{"kserve/sklearnserver:latest", "sklearn"},
+		{"kserve/sklearnserver@" + testFullDigest, "sklearn"},
+		{"kserve/xgbserver:v0.21.0", "xgboost"},
+		{"kserve/xgbserver@" + testFullDigest, "xgboost"},
+		{"kserve/lgbserver:v0.21.0", "lightgbm"},
+		{"kserve/lgbserver@" + testFullDigest, "lightgbm"},
+		{"kserve/paddleserver:v0.21.0", "paddle"},
+		{"kserve/paddleserver@" + testFullDigest, "paddle"},
+		{"kserve/pmmlserver:v0.21.0", "pmml"},
+		{"kserve/pmmlserver@" + testFullDigest, "pmml"},
+		{"kserve/predictiveserver:v0.21.0", ""},
+		{"kserve/modelmesh-runtime-adapter:v0.12.0", ""},
+		{"kserve/sklearnserver-extra:1", ""},
+		{"otheruser/sklearnserver:latest", ""},
+		{"ghcr.io/kserve/sklearnserver:v0.21.0", ""},
+		{"ghcr.io/kserve/xgbserver:v0.21.0", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
