@@ -37,10 +37,10 @@ import (
 //   - Exit 0 whenever the command ran, including zero matches, which
 //     print "0 matches" on stdout. An incident script must be able to
 //     tell "none found" from "plugin broke".
-//   - A row whose inline document is unavailable (external sink or
-//     truncated) is SHOWN, not excluded, when an image or digest filter
-//     is active — with IMAGES reading external/truncated and a one-line
-//     stderr warning. Silently dropping it would turn "cannot evaluate"
+//   - A row whose inline document is unavailable (external sink,
+//     truncated, or not written yet) is SHOWN, not excluded, when an
+//     image or digest filter is active — with IMAGES reading
+//     external/truncated/no-document and a one-line stderr warning. Silently dropping it would turn "cannot evaluate"
 //     into "not present", which is the one lie this command must not
 //     tell. Zero matches is never proof of absence: namespaces that are
 //     not opted in, unattributed images, and unresolved digests are all
@@ -65,7 +65,9 @@ type containerFacts struct {
 
 // inlineContainers decodes the inline document and collects container
 // facts. unavailable is "" when the document was read, otherwise
-// "external" or "truncated" (the reason the document is not inline).
+// "external", "truncated" or "no-document" (the reason the document is
+// not inline). An AIBOM whose status has no document yet is one row the
+// command cannot evaluate, not a reason for the whole command to fail.
 func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unavailable string, err error) {
 	// A document flagged truncated is unavailable for filtering even if
 	// partial bytes are inline: a truncated BOM can never support the
@@ -75,6 +77,9 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 	}
 	doc, err := inlineBOM(u)
 	if err != nil {
+		if errors.Is(err, errNoDocument) {
+			return containerFacts{}, "no-document", nil
+		}
 		var et errTruncated
 		if errors.As(err, &et) {
 			if strings.Contains(et.reason, "external") {
@@ -294,7 +299,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 		return err
 	}
 	if len(unavailableRows) > 0 && f.needsDocument() {
-		fmt.Fprintf(errw, "warning: %d row(s) have no inline document (external sink or truncated), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
+		fmt.Fprintf(errw, "warning: %d row(s) have no inline document (external sink, truncated, or not written yet), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
 			len(unavailableRows), strings.Join(unavailableRows, ", "))
 	}
 	return nil
