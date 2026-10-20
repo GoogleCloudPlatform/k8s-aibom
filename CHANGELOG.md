@@ -47,6 +47,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
   other `pytorch/*` images and other registries stay unmatched.
 
+- **Whisper ASR Webservice runtime pattern** (#197).
+  `onerahmet/openai-whisper-asr-webservice` (release, `-gpu`, latest
+  and debug tags, bare and digest forms) attributes as runtime
+  `whisper-asr-webservice`. Publisher-anchored at the image-name
+  boundary, so other users' whisper images and other registries stay
+  unmatched.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

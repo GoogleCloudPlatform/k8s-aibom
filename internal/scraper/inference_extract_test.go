@@ -677,6 +677,22 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime", ""},
 		{"otheruser/torchserve:0.12.0-cpu", ""},
 		{"ghcr.io/pytorch/torchserve:0.12.0-cpu", ""},
+
+		// Whisper ASR Webservice — publisher-anchored Docker Hub image.
+		// Release, -gpu, latest, debug, the bare name and digest forms
+		// match; name-prefix, other users' whisper images and
+		// other-registry near-misses do not.
+		{"onerahmet/openai-whisper-asr-webservice", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice:v1.10.0", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice:v1.10.0-gpu", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice:latest-gpu", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice:debug-gpu", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice:v1.0.3-beta", "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice@" + testFullDigest, "whisper-asr-webservice"},
+		{"onerahmet/openai-whisper-asr-webservice-extra:1", ""},
+		{"onerahmet/whisper:latest", ""},
+		{"otheruser/openai-whisper-asr-webservice:latest", ""},
+		{"ghcr.io/ahmetoner/whisper-asr-webservice:latest", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.image, func(t *testing.T) {
