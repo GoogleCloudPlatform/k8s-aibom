@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -46,6 +47,12 @@ func (e errTruncated) Error() string {
 	return "BOM is not stored inline: " + e.reason
 }
 
+// errNoDocument is returned by inlineBOM when status carries no BOM
+// document at all and does not say why (not truncated, no external
+// sink): the controller has not written the AIBOM's status yet, or the
+// last build failed before it could.
+var errNoDocument = errors.New("no BOM document in status (is the AIBOM Ready?)")
+
 // inlineBOM extracts and decodes status.bomDocument.inline.data.
 func inlineBOM(u *unstructured.Unstructured) ([]byte, error) {
 	data, found, err := unstructured.NestedString(u.Object, "status", "bomDocument", "inline", "data")
@@ -61,7 +68,7 @@ func inlineBOM(u *unstructured.Unstructured) ([]byte, error) {
 		if ext, found, _ := unstructured.NestedMap(u.Object, "status", "bomDocument", "external"); found && len(ext) > 0 {
 			return nil, errTruncated{reason: "document is in an external sink (status.bomDocument.external)"}
 		}
-		return nil, fmt.Errorf("no BOM document in status (is the AIBOM Ready?)")
+		return nil, errNoDocument
 	}
 	raw, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
