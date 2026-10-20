@@ -47,6 +47,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
   other `pytorch/*` images and other registries stay unmatched.
 
+### Fixed
+
+- **`kubectl aibom find --digest` rejects values that cannot name a
+  digest** (#202). `--digest sha256:` (or whitespace) normalized to an
+  empty prefix and matched every workload with a resolved digest, so
+  "where is this digest running?" answered "everywhere". A value longer
+  than 64 characters, non-hex text, a full image reference or another
+  algorithm silently printed `0 matches`. `--digest` now takes 1 to 64
+  hex characters, bare or `sha256:`-prefixed (the prefix in any case),
+  and anything else is an error before the AIBOMs are listed.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
