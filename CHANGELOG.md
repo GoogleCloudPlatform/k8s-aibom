@@ -47,6 +47,20 @@ All notable changes to k8s-aibom are documented here. The format follows
   `pytorch/torchserve-kfs` and `pytorch/torchserve-nightly` repositories,
   other `pytorch/*` images and other registries stay unmatched.
 
+### Fixed
+
+- **`kubectl aibom find` no longer fails when one AIBOM has no
+  document yet** (#200). The controller creates an AIBOM before it writes the
+  status, and a failed status write leaves the status empty until the
+  next reconcile. `find` read every row's inline document, so one such
+  AIBOM made the whole command exit with `no BOM document in status
+  (is the AIBOM Ready?)` whenever it ran with no filter, `--image` or
+  `--digest`. That row is now treated like an external or truncated
+  one: listed with IMAGES `no-document`, shown (not excluded) with the
+  stderr warning when an image or digest filter cannot be evaluated
+  for it, and excluded as before by `--runtime`, `--model` and
+  `--signed`. `view` and `verify` keep the same error.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

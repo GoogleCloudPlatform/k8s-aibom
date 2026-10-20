@@ -148,3 +148,51 @@ func TestFind_NoFilterListsEverythingWithImages(t *testing.T) {
 		}
 	}
 }
+
+// fixtureNoDocument is an AIBOM whose status has not been written yet:
+// the controller creates the object before its status update lands, and
+// a failed status write leaves it that way until the next reconcile.
+func fixtureNoDocument() *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "fresh", "namespace": "prod-jobs"},
+	}}
+}
+
+func TestFind_RowWithoutDocumentDoesNotFailTheRun(t *testing.T) {
+	items := append(findItems(t), *fixtureNoDocument())
+
+	// No filter: every row is listed, the document-less one with
+	// IMAGES=no-document, and the other rows are unaffected.
+	out, errOut := runFindCapture(t, items, findFilter{})
+	for _, want := range []string{"fresh", "no-document", "vllm/vllm-openai:v0.6.3", "ghcr.io/berriai/litellm:main-v1.81.0"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+	if errOut != "" {
+		t.Fatalf("no warning expected without an image/digest filter: %q", errOut)
+	}
+
+	// An image filter cannot be evaluated for the row: shown, not
+	// excluded, with the warning — the same contract as truncated.
+	out, errOut = runFindCapture(t, items, findFilter{image: "berriai/litellm"})
+	if !strings.Contains(out, "gateway") || !strings.Contains(out, "fresh") || strings.Contains(out, "vllm-qwen") {
+		t.Fatalf("image filter wrong with a document-less row:\n%s", out)
+	}
+	if !strings.Contains(errOut, "prod-jobs/fresh") || !strings.Contains(errOut, "shown, not excluded") {
+		t.Fatalf("expected a warning naming the unevaluated row, got %q", errOut)
+	}
+
+	// A summary filter excludes it (it has no summary yet) without error.
+	out, _ = runFindCapture(t, items, findFilter{runtime: "vllm"})
+	if !strings.Contains(out, "vllm-qwen") || strings.Contains(out, "fresh") {
+		t.Fatalf("runtime filter wrong with a document-less row:\n%s", out)
+	}
+}
+
+func TestRunView_NoDocumentKeepsItsMessage(t *testing.T) {
+	err := runView(fixtureNoDocument(), false, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "is the AIBOM Ready?") {
+		t.Fatalf("want the not-Ready error, got %v", err)
+	}
+}
