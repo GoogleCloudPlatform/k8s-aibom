@@ -76,6 +76,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   stderr warning when an image or digest filter cannot be evaluated
   for it, and excluded as before by `--runtime`, `--model` and
   `--signed`. `view` and `verify` keep the same error.
+
+- **`kubectl aibom help` and argument errors no longer need a
+  kubeconfig** (#204). `run` loaded the kubeconfig before it looked at
+  the subcommand, so with no usable kubeconfig `kubectl aibom help`, a
+  mistyped subcommand, a bad `--signed` or `--digest` value and a
+  missing `view`/`verify` name all failed with `resolving namespace:
+  invalid configuration`. These are now settled first. `-h` and
+  `--help` after a subcommand print the usage and exit 0 instead of
+  failing with `flag: help requested`. A valid command loads the
+  kubeconfig as before.
 ### Fixed
 
 - **`kubectl aibom find --digest` rejects values that cannot name a
@@ -86,6 +96,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   algorithm silently printed `0 matches`. `--digest` now takes 1 to 64
   hex characters, bare or `sha256:`-prefixed (the prefix in any case),
   and anything else is an error before the AIBOMs are listed.
+
+- **Evaluation CronJob evidence names the CronJob's pod spec path**
+  (#206). `eval.spec` built every evidence locator as
+  `spec.template.spec.containers[N].image`, which is the Job path; on
+  a CronJob the pod spec is at `spec.jobTemplate.spec.template.spec`,
+  so an lm-eval, ragas or trulens CronJob's AIBOM pointed at a field
+  the object does not have. CronJob locators now name the real path.
+  Job documents are unchanged; evaluation CronJob documents change in
+  that locator only.
 
 - **The remaining operator-facing CRD-apply remedies carry
   `--force-conflicts`** (#119 follow-up).
