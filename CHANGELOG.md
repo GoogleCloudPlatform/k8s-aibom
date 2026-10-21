@@ -64,6 +64,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+### Fixed
+
+- **Training CronJobs get an AIBOM** (#220). The Jobs a CronJob spawns
+  roll up into the CronJob's document (Design 005), but `training.spec`
+  did not handle CronJobs, so the CronJob's inputs stayed unresolved and
+  a scheduled training run (for example `pytorch/pytorch`, or a job
+  with `WANDB_API_KEY`) had no AIBOM at all, while the same template as
+  a Job was reported as `training`. `training.spec` now reads a
+  CronJob's job template, with evidence locators on
+  `spec.jobTemplate.spec.template.spec`. Job documents are unchanged.
+
 ## [1.6.1] - 2026-10-21
 
 Patch release: four defects found in v1.6.0 by community review in the
