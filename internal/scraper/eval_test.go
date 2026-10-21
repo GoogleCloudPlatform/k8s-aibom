@@ -165,3 +165,55 @@ func TestEvalSpecScraper_Scrape(t *testing.T) {
 		})
 	}
 }
+
+// A CronJob's pod spec lives at spec.jobTemplate.spec.template.spec, so
+// its evidence locator must name that path, not the Job's
+// spec.template.spec (which does not exist on a CronJob).
+func TestEvalSpecScraper_LocatorNamesThePathInTheKind(t *testing.T) {
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "setup", Image: "busybox:1.36"},
+				{Name: "evaluator", Image: "eleutherai/lm-eval:v0.4.0"},
+			},
+		},
+	}
+	cases := []struct {
+		name string
+		w    Workload
+		want string
+	}{
+		{
+			name: "Job",
+			w: Workload{
+				Kind:   WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+				Object: &batchv1.Job{Spec: batchv1.JobSpec{Template: podTemplate}},
+			},
+			want: "spec.template.spec.containers[1].image",
+		},
+		{
+			name: "CronJob",
+			w: Workload{
+				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+				Object: &batchv1.CronJob{Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: podTemplate}},
+				}},
+			},
+			want: "spec.jobTemplate.spec.template.spec.containers[1].image",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NewEvalSpecScraper().Scrape(context.Background(), tc.w, nil)
+			if err != nil {
+				t.Fatalf("Scrape failed: %v", err)
+			}
+			if got.Category != CategoryEval || len(got.Components) != 1 {
+				t.Fatalf("got category %q with %d components, want %q with 1", got.Category, len(got.Components), CategoryEval)
+			}
+			if loc := got.Components[0].Evidence.Locator; loc != tc.want {
+				t.Errorf("Evidence.Locator = %q, want %q", loc, tc.want)
+			}
+		})
+	}
+}
