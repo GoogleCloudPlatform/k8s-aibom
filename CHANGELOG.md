@@ -7,9 +7,10 @@ All notable changes to k8s-aibom are documented here. The format follows
 ## [1.6.1] - 2026-10-21
 
 Patch release: four defects found in v1.6.0 by community review in the
-week after the tag, three in `kubectl aibom` and one in emitted evidence.
-No new patterns and no new capability; the CRDs and the document shape
-are those of 1.6.0.
+week after the tag, three in `kubectl aibom` and one in emitted evidence,
+plus a rebuild on Go 1.26.10 and corrected CRD-apply remedies. No new
+patterns and no new capability; the CRDs, RBAC and the document shape are
+those of 1.6.0.
 
 ### Fixed
 
@@ -43,7 +44,6 @@ are those of 1.6.0.
   `--help` after a subcommand print the usage and exit 0 instead of
   failing with `flag: help requested`. A valid command loads the
   kubeconfig as before.
-### Fixed
 
 - **Evaluation CronJob evidence names the CronJob's pod spec path**
   (#206). `eval.spec` built every evidence locator as
