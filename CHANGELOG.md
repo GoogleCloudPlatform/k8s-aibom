@@ -58,6 +58,18 @@ are those of 1.6.0.
   go1.26.9). The Go directive moves in the root, `verifier` and
   `terraform/test` modules; no code change.
 
+### Changed
+
+- **The remaining operator-facing CRD-apply remedies carry
+  `--force-conflicts` and the `k8s-aibom-crds` field manager** (#209,
+  follow-up to #119). The `SchemaPredatesController` condition and event,
+  the chart preflight, the migration guide and the README's manual
+  upgrade step now print the same command, and CRDs managed by the
+  `k8s-aibom-crds` chart are sent to a chart upgrade instead of a forced
+  apply. The README's manual step applies the chart's CRDs rather than
+  the release `install.yaml`, which also carries the Deployment, RBAC and
+  `AIBOMControllerConfig/default`.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

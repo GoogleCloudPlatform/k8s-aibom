@@ -164,9 +164,11 @@ func schemaSkewMessage(missing []string) string {
 	return fmt.Sprintf(
 		"The served AIBOMControllerConfig CRD schema predates this controller: spec field(s) [%s] are not declared, "+
 			"so any stored values for them were pruned by the API server and the corresponding features are OFF. "+
-			"Apply the CRDs matching this controller's version "+
-			"(helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <chart-version> | kubectl apply --server-side -f -), "+
-			"re-apply your configuration, and restart the controller.",
+			"If the k8s-aibom-crds chart manages these CRDs, upgrade it to this controller's version; "+
+			"otherwise apply the matching CRDs directly "+
+			"(helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <chart-version> | "+
+			"kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -), "+
+			"then re-apply your configuration and restart the controller.",
 		strings.Join(missing, ", "),
 	)
 }
