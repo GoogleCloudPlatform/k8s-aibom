@@ -87,6 +87,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   hex characters, bare or `sha256:`-prefixed (the prefix in any case),
   and anything else is an error before the AIBOMs are listed.
 
+- **The vector-database scraper no longer reports Milvus tool images as
+  Milvus** (#210). The `milvus`, `qdrant` and `chroma` patterns ended
+  in `.*`, so every image in the vendor's namespace that starts with
+  the database name matched: a Deployment running
+  `milvusdb/milvus-operator`, `milvusdb/milvus-backup`,
+  `milvusdb/milvus-cdc` or `milvusdb/milvus-config-tool` got category
+  `vector-database` and a `milvus` component. The three patterns now
+  end at the image-name boundary, as `weaviate` and `pgvector` already
+  did; `milvusdb/milvus-dev` (the server's development build) still
+  matches.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
