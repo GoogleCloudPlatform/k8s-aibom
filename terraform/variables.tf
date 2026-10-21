@@ -49,7 +49,7 @@ variable "namespace" {
 variable "chart_version" {
   description = "Version of the published k8s-aibom Helm chart to install (oci://ghcr.io/googlecloudplatform/charts/k8s-aibom). The published chart pins the controller image by digest and ships provenance and SBOM attestations."
   type        = string
-  default     = "1.6.0"
+  default     = "1.6.1"
 }
 
 variable "build_from_source" {

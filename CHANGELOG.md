@@ -63,6 +63,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   `whisper-asr-webservice`. Publisher-anchored at the image-name
   boundary, so other users' whisper images and other registries stay
   unmatched.
+
+## [1.6.1] - 2026-10-21
+
+Patch release: four defects found in v1.6.0 by community review in the
+week after the tag, three in `kubectl aibom` and one in emitted evidence,
+plus a rebuild on Go 1.26.10 and corrected CRD-apply remedies. No new
+patterns and no new capability; the CRDs, RBAC and the document shape are
+those of 1.6.0.
+
 ### Fixed
 
 - **`kubectl aibom find` no longer fails when one AIBOM has no
@@ -77,6 +86,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   for it, and excluded as before by `--runtime`, `--model` and
   `--signed`. `view` and `verify` keep the same error.
 
+- **`kubectl aibom find --digest` rejects values that cannot name a
+  digest** (#202). `--digest sha256:` (or whitespace) normalized to an
+  empty prefix and matched every workload with a resolved digest, so
+  "where is this digest running?" answered "everywhere". A value longer
+  than 64 characters, non-hex text, a full image reference or another
+  algorithm silently printed `0 matches`. `--digest` now takes 1 to 64
+  hex characters, bare or `sha256:`-prefixed (the prefix in any case),
+  and anything else is an error before the AIBOMs are listed.
+
 - **`kubectl aibom help` and argument errors no longer need a
   kubeconfig** (#204). `run` loaded the kubeconfig before it looked at
   the subcommand, so with no usable kubeconfig `kubectl aibom help`, a
@@ -87,15 +105,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   failing with `flag: help requested`. A valid command loads the
   kubeconfig as before.
 
-- **`kubectl aibom find --digest` rejects values that cannot name a
-  digest** (#202). `--digest sha256:` (or whitespace) normalized to an
-  empty prefix and matched every workload with a resolved digest, so
-  "where is this digest running?" answered "everywhere". A value longer
-  than 64 characters, non-hex text, a full image reference or another
-  algorithm silently printed `0 matches`. `--digest` now takes 1 to 64
-  hex characters, bare or `sha256:`-prefixed (the prefix in any case),
-  and anything else is an error before the AIBOMs are listed.
-
 - **Evaluation CronJob evidence names the CronJob's pod spec path**
   (#206). `eval.spec` built every evidence locator as
   `spec.template.spec.containers[N].image`, which is the Job path; on
@@ -105,21 +114,21 @@ All notable changes to k8s-aibom are documented here. The format follows
   Job documents are unchanged; evaluation CronJob documents change in
   that locator only.
 
+- **Built with Go 1.26.10** (GO-2026-6809, `crypto/x509`, found in
+  go1.26.9). The Go directive moves in the root, `verifier` and
+  `terraform/test` modules; no code change.
+
+### Changed
+
 - **The remaining operator-facing CRD-apply remedies carry
-  `--force-conflicts`** (#119 follow-up).
-  Against CRDs that Helm installed, a server-side apply under another
-  field manager conflicts with Helm on the atomic `spec.versions` list,
-  on both Helm majors. The chart's preflight message (#119) already
-  printed the flag; the `SchemaPredatesController` condition and
-  Warning Event, `docs/migration-v1beta1.md`, and the README's manual
-  upgrade step did not, so following any of them against Helm-installed
-  CRDs failed with `conflict with "helm": .spec.versions`. The README
-  step also applied the release `install.yaml`, which carries the
-  Deployment, RBAC and `AIBOMControllerConfig/default` as well as the
-  CRDs; it now applies the chart's CRDs only. Both the condition
-  message and the preflight now send CRDs that the `k8s-aibom-crds`
-  chart manages to a chart upgrade, and offer the forced apply only
-  otherwise, so it cannot take `spec.versions` away from that release.
+  `--force-conflicts` and the `k8s-aibom-crds` field manager** (#209,
+  follow-up to #119). The `SchemaPredatesController` condition and event,
+  the chart preflight, the migration guide and the README's manual
+  upgrade step now print the same command, and CRDs managed by the
+  `k8s-aibom-crds` chart are sent to a chart upgrade instead of a forced
+  apply. The README's manual step applies the chart's CRDs rather than
+  the release `install.yaml`, which also carries the Deployment, RBAC and
+  `AIBOMControllerConfig/default`.
 
 ## [1.6.0] - 2026-10-19
 
