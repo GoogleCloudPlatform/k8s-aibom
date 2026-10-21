@@ -196,3 +196,43 @@ func TestRunView_NoDocumentKeepsItsMessage(t *testing.T) {
 		t.Fatalf("want the not-Ready error, got %v", err)
 	}
 }
+
+func TestFind_EmptyDigestIsNotAWildcard(t *testing.T) {
+	// "sha256:" and whitespace normalize to "", which prefix-matched
+	// every digest and listed every workload as running the image.
+	for _, d := range []string{"sha256:", "SHA256:", "  "} {
+		out, _ := runFindCapture(t, findItems(t), findFilter{digest: d})
+		if strings.Contains(out, "vllm-qwen") || strings.Contains(out, "gateway") {
+			t.Fatalf("digest %q matched rows it does not name:\n%s", d, out)
+		}
+	}
+}
+
+func TestFind_DigestPrefixIsCaseInsensitive(t *testing.T) {
+	for _, d := range []string{"SHA256:" + testDigest, "Sha256:" + strings.ToUpper(testDigest[:12])} {
+		out, _ := runFindCapture(t, findItems(t), findFilter{digest: d})
+		if !strings.Contains(out, "vllm-qwen") || strings.Contains(out, "gateway") {
+			t.Fatalf("digest %q wrong:\n%s", d, out)
+		}
+	}
+}
+
+func TestCheckDigestFilter(t *testing.T) {
+	for _, d := range []string{testDigest, "sha256:" + testDigest, testDigest[:12], "SHA256:ABCDEF", " 0123 "} {
+		if err := checkDigestFilter(d); err != nil {
+			t.Errorf("checkDigestFilter(%q) = %v, want nil", d, err)
+		}
+	}
+	for _, d := range []string{
+		"sha256:",
+		"   ",
+		"sha256:" + testDigest + "0", // 65 hex characters
+		"vllm/vllm-openai@sha256:" + testDigest,
+		"sha512:" + testDigest,
+		"0123-4567",
+	} {
+		if err := checkDigestFilter(d); err == nil {
+			t.Errorf("checkDigestFilter(%q) = nil, want an error", d)
+		}
+	}
+}
