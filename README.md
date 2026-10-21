@@ -216,13 +216,14 @@ kubectl get aibomcontrollerconfig default -o jsonpath='{range .status.effectiveI
   helm upgrade k8s-aibom      oci://ghcr.io/googlecloudplatform/charts/k8s-aibom      --version <new> -n k8s-aibom-system
   ```
 
-- **Manually:** apply the release's CRDs before upgrading:
+- **Manually** (CRDs not managed by the `k8s-aibom-crds` chart): apply the release's CRDs before upgrading:
 
   ```bash
-  kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/<version>/install.yaml --server-side --field-manager=k8s-aibom-crds
+  helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <new> \
+    | kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -
   ```
 
-  (or apply the `crds/` directory from the matching chart).
+  `--force-conflicts` is needed because whatever installed the CRDs (Helm, or `kubectl apply` of `install.yaml`) owns their atomic `spec.versions` list. On a Helm install, apply the chart's CRDs rather than the release `install.yaml`: that file also carries the Deployment, RBAC and `AIBOMControllerConfig/default` under the same names a Helm install uses, so applying it would apply those over the release too.
 
 Within 1.x, CRD changes are additive only. **One exception to "degrades gracefully": upgrading to the `v1beta1` graduation release requires the CRD apply** — the graduated controller's informers need the CRDs to serve `v1beta1`, and readiness stays failing (loudly, by design) until they do. Full procedure and the storage-migration details: [docs/migration-v1beta1.md](docs/migration-v1beta1.md).
 
