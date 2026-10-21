@@ -344,7 +344,7 @@ and a raw kubelet CPU-counter delta over a stated 10-minute window):
   minute** — watch reconnects only, zero writes, zero reconciles,
   1.07 mCPU average. Upgrade 23 s, rollback 17–19 s, all AIBOMs and
   hashes preserved across a full version round trip; see
-  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md)
+  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md); v1.6.1 ADR-019 legs with the NVIDIA Dynamo pairing (one AIBOM per DynamoGraphDeployment, operator outage, 1.5.1→1.6.1 upgrade and rollback, cost): [docs/evidence/v1.6.1-gke-adr019-dynamo.md](docs/evidence/v1.6.1-gke-adr019-dynamo.md)
 - 256 KB inline threshold; BOMs exceeding it are offloaded to an
   external sink and referenced by URL in the CR status (boundary
   observed live in NVIDIA/aicr#2310)
