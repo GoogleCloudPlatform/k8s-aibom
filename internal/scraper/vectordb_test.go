@@ -132,6 +132,21 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 			wantCategory:   "",
 			wantComponents: nil,
 		},
+		vectorDBMatchCase("Milvus Official - Match", "milvusdb/milvus:v2.4.15", "milvus"),
+		vectorDBMatchCase("Milvus by digest - Match", "milvusdb/milvus@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "milvus"),
+		vectorDBMatchCase("Milvus dev build - Match", "milvusdb/milvus-dev:master-20251020-1a2b3c4d-amd64", "milvus"),
+		vectorDBMatchCase("Qdrant Official - Match", "qdrant/qdrant:v1.12.4", "qdrant"),
+		vectorDBMatchCase("Chroma Official - Match", "chromadb/chroma:0.6.3", "chroma"),
+		// Sibling images in the vendors' namespaces that are not the
+		// database itself: the Milvus operator, its backup, CDC and
+		// config tools and the Attu predecessor GUI, and an
+		// unrelated repository under the qdrant namespace.
+		{name: "Milvus operator - No Match", image: "milvusdb/milvus-operator:v1.1.3"},
+		{name: "Milvus backup tool - No Match", image: "milvusdb/milvus-backup:v0.5.0"},
+		{name: "Milvus config tool - No Match", image: "milvusdb/milvus-config-tool:v0.1.2"},
+		{name: "Milvus CDC - No Match", image: "milvusdb/milvus-cdc:v2.0.0"},
+		{name: "Milvus insight GUI - No Match", image: "milvusdb/milvus-insight:v0.1.0"},
+		{name: "Qdrant-prefixed other repo - No Match", image: "qdrant/qdrant-baseten-docker:latest"},
 	}
 
 	for _, tc := range cases {
@@ -182,5 +197,34 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// vectorDBMatchCase is a TestVectorDBSpecScraper_Scrape row for an
+// image that is the named vector database, in container 0.
+func vectorDBMatchCase(name, image, db string) struct {
+	name           string
+	image          string
+	wantCategory   WorkloadCategory
+	wantComponents []Component
+} {
+	return struct {
+		name           string
+		image          string
+		wantCategory   WorkloadCategory
+		wantComponents []Component
+	}{
+		name:         name,
+		image:        image,
+		wantCategory: CategoryVectorDB,
+		wantComponents: []Component{{
+			Type:       ComponentApplication,
+			Name:       db,
+			Confidence: ConfidenceInferred,
+			Evidence: Evidence{
+				Source:  SourceImagePattern,
+				Locator: "spec.template.spec.containers[0].image",
+			},
+		}},
 	}
 }
