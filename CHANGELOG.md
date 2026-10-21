@@ -502,6 +502,7 @@ Third-party CRD outages degrade one kind instead of the controller.
   belt-and-braces image-name match on the candidate's container
   status. Pods with no controller owner never contribute. Found by
   internal review; regression-tested end to end.
+
 - **Webhook sinks reject credentials over cleartext at config load.**
   An `http://` endpoint combined with any `auth` configuration is now
   a load-time validation error (all-or-nothing fallback, named
@@ -743,6 +744,7 @@ digest-pinned install.yaml release asset.
   hook-created CR carries no Helm ownership metadata; before upgrading an
   existing release, delete it (`kubectl delete aibomcontrollerconfig
   default`) or annotate it for Helm adoption.
+
 - **Secret access is now opt-in.** The namespace-scoped Role granting
   Secret reads (used only for sink credentials) is rendered only when
   `rbac.sinkSecretAccess=true`. With no sinks configured (the default), the
