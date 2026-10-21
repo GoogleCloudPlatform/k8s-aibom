@@ -88,7 +88,11 @@ func TestServedSpecFields_ErrorsAreNotSkew(t *testing.T) {
 
 func TestSchemaSkewMessage_NamesFieldsAndRemedy(t *testing.T) {
 	msg := schemaSkewMessage([]string{"verification"})
-	for _, want := range []string{"verification", "pruned", "OFF", "helm show crds", "restart"} {
+	for _, want := range []string{
+		"verification", "pruned", "OFF", "restart",
+		"If the k8s-aibom-crds chart manages these CRDs, upgrade it",
+		"kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -",
+	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message missing %q: %s", want, msg)
 		}

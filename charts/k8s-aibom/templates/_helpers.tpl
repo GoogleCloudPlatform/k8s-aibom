@@ -104,7 +104,7 @@ reading CRDs.
 {{- $crd := lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "aibomcontrollerconfigs.aibom.k8saibom.dev" }}
 {{- range (dig "spec" "versions" list $crd) }}
 {{- if and (eq .name "v1beta1") (not (hasKey (dig "schema" "openAPIV3Schema" "properties" "spec" "properties" dict .) "verification")) }}
-{{- fail (printf "config.verification is set, but the installed AIBOMControllerConfig CRD does not declare spec.verification (Helm does not upgrade CRDs). Applying this release would roll the controller and then fail on the config (Helm 4) or silently drop verification (Helm 3). Upgrade the k8s-aibom-crds chart to %s first, or apply this chart's CRDs, then retry:\n  helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version %s | kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -" $.Chart.Version $.Chart.Version) }}
+{{- fail (printf "config.verification is set, but the installed AIBOMControllerConfig CRD does not declare spec.verification (Helm does not upgrade CRDs). Applying this release would roll the controller and then fail on the config (Helm 4) or silently drop verification (Helm 3). If the k8s-aibom-crds chart manages these CRDs, upgrade it to %s first; otherwise apply this chart's CRDs, then retry:\n  helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version %s | kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -" $.Chart.Version $.Chart.Version) }}
 {{- end }}
 {{- end }}
 {{- end }}

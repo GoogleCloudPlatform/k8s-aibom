@@ -86,7 +86,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   `--help` after a subcommand print the usage and exit 0 instead of
   failing with `flag: help requested`. A valid command loads the
   kubeconfig as before.
-### Fixed
 
 - **`kubectl aibom find --digest` rejects values that cannot name a
   digest** (#202). `--digest sha256:` (or whitespace) normalized to an
@@ -105,6 +104,33 @@ All notable changes to k8s-aibom are documented here. The format follows
   the object does not have. CronJob locators now name the real path.
   Job documents are unchanged; evaluation CronJob documents change in
   that locator only.
+
+- **The remaining operator-facing CRD-apply remedies carry
+  `--force-conflicts`** (#119 follow-up).
+  Against CRDs that Helm installed, a server-side apply under another
+  field manager conflicts with Helm on the atomic `spec.versions` list,
+  on both Helm majors. The chart's preflight message (#119) already
+  printed the flag; the `SchemaPredatesController` condition and
+  Warning Event, `docs/migration-v1beta1.md`, and the README's manual
+  upgrade step did not, so following any of them against Helm-installed
+  CRDs failed with `conflict with "helm": .spec.versions`. The README
+  step also applied the release `install.yaml`, which carries the
+  Deployment, RBAC and `AIBOMControllerConfig/default` as well as the
+  CRDs; it now applies the chart's CRDs only. Both the condition
+  message and the preflight now send CRDs that the `k8s-aibom-crds`
+  chart manages to a chart upgrade, and offer the forced apply only
+  otherwise, so it cannot take `spec.versions` away from that release.
+
+- **The vector-database scraper no longer reports Milvus tool images as
+  Milvus** (#210). The `milvus`, `qdrant` and `chroma` patterns ended
+  in `.*`, so every image in the vendor's namespace that starts with
+  the database name matched: a Deployment running
+  `milvusdb/milvus-operator`, `milvusdb/milvus-backup`,
+  `milvusdb/milvus-cdc` or `milvusdb/milvus-config-tool` got category
+  `vector-database` and a `milvus` component. The three patterns now
+  end at the image-name boundary, as `weaviate` and `pgvector` already
+  did; `milvusdb/milvus-dev` (the server's development build) still
+  matches.
 
 - **External sinks receive the scraped workload category** (#212).
   Every reconciler seeds its workload as `inference`, and the
