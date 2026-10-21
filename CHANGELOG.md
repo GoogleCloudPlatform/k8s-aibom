@@ -87,6 +87,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   hex characters, bare or `sha256:`-prefixed (the prefix in any case),
   and anything else is an error before the AIBOMs are listed.
 
+- **External sinks receive the scraped workload category** (#212).
+  Every reconciler seeds its workload as `inference`, and the
+  scraper's category (`agent`, `vector-database`, `training`,
+  `evaluation`) was copied into the document and the status but not
+  into the sink metadata. A GCS path template's `{category}` token and
+  the webhook `X-Aibom-Workload-Category` header therefore said
+  `inference` for every workload. They now carry the same category as
+  the document's `aibom.workload.category`.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed

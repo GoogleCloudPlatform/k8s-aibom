@@ -286,6 +286,10 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	if string(inputs.Category) != "" {
 		req.SummaryOptions.WorkloadCategory = string(inputs.Category)
 		req.BOMBuildOptions.WorkloadCategory = string(inputs.Category)
+		// External sinks read the category from the workload (the GCS
+		// {category} path token, the webhook category header), so it
+		// must carry the same value as the document and the status.
+		req.Workload.Category = inputs.Category
 	}
 	// Absorbed workloads (Design 005) are part of the inputs: a root
 	// whose descendants changed must rebuild even if its own spec and
