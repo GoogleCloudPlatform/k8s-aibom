@@ -97,6 +97,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   hex characters, bare or `sha256:`-prefixed (the prefix in any case),
   and anything else is an error before the AIBOMs are listed.
 
+- **Evaluation CronJob evidence names the CronJob's pod spec path**
+  (#206). `eval.spec` built every evidence locator as
+  `spec.template.spec.containers[N].image`, which is the Job path; on
+  a CronJob the pod spec is at `spec.jobTemplate.spec.template.spec`,
+  so an lm-eval, ragas or trulens CronJob's AIBOM pointed at a field
+  the object does not have. CronJob locators now name the real path.
+  Job documents are unchanged; evaluation CronJob documents change in
+  that locator only.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
