@@ -29,6 +29,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -90,6 +91,17 @@ Flags:
 		return fmt.Errorf("a subcommand is required")
 	}
 	sub := args[0]
+	// Settle the subcommand before anything touches the kubeconfig, so
+	// help and a mistyped subcommand work without a reachable cluster.
+	switch sub {
+	case "help", "-h", "--help":
+		fs.Usage()
+		return nil
+	case "summary", "find", "view", "verify":
+	default:
+		fs.Usage()
+		return fmt.Errorf("unknown subcommand %q", sub)
+	}
 	// Separate the single positional argument (the AIBOM name, for
 	// view/verify) from flags before parsing, so both
 	// `view -n ns NAME` and `view NAME -n ns` work — the stdlib flag
@@ -111,7 +123,30 @@ Flags:
 		}
 	}
 	if err := fs.Parse(flagArgs); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// -h or --help after the subcommand: fs.Parse has already
+			// printed the usage.
+			return nil
+		}
 		return err
+	}
+
+	// Argument errors are reported before the kubeconfig is loaded too.
+	f := findFilter{runtime: *fRuntime, model: *fModel, image: *fImage, digest: *fDigest, signed: *fSigned}
+	switch sub {
+	case "find":
+		if f.signed != "" && f.signed != "unsigned" && f.signed != "claimed" && f.signed != "verified" {
+			return fmt.Errorf("--signed must be one of unsigned, claimed, verified")
+		}
+		if f.digest != "" {
+			if err := checkDigestFilter(f.digest); err != nil {
+				return err
+			}
+		}
+	case "view", "verify":
+		if len(positional) != 1 {
+			return fmt.Errorf("%s requires exactly one AIBOM name (try: kubectl aibom summary)", sub)
+		}
 	}
 
 	loading := clientcmd.NewDefaultClientConfigLoadingRules()
@@ -154,15 +189,6 @@ Flags:
 		return runSummary(l.Items, os.Stdout)
 
 	case "find":
-		f := findFilter{runtime: *fRuntime, model: *fModel, image: *fImage, digest: *fDigest, signed: *fSigned}
-		if f.signed != "" && f.signed != "unsigned" && f.signed != "claimed" && f.signed != "verified" {
-			return fmt.Errorf("--signed must be one of unsigned, claimed, verified")
-		}
-		if f.digest != "" {
-			if err := checkDigestFilter(f.digest); err != nil {
-				return err
-			}
-		}
 		var items []unstructured.Unstructured
 		if *allNS {
 			l, err := dyn.Resource(aibomGVR).List(ctx, metav1.ListOptions{})
@@ -180,9 +206,6 @@ Flags:
 		return runFind(items, f, os.Stdout, os.Stderr)
 
 	case "view", "verify":
-		if len(positional) != 1 {
-			return fmt.Errorf("%s requires exactly one AIBOM name (try: kubectl aibom summary)", sub)
-		}
 		u, err := dyn.Resource(aibomGVR).Namespace(ns).Get(ctx, positional[0], metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -198,12 +221,6 @@ Flags:
 			os.Exit(2)
 		}
 		return nil
-
-	case "help", "-h", "--help":
-		fs.Usage()
-		return nil
-	default:
-		fs.Usage()
-		return fmt.Errorf("unknown subcommand %q", sub)
 	}
+	return nil
 }
