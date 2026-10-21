@@ -106,7 +106,7 @@ Releases publish a signed multi-arch image (linux/amd64, linux/arm64) with build
 
 ```bash
 helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
-  --version 1.6.0 \
+  --version 1.6.1 \
   --namespace k8s-aibom-system \
   --create-namespace
 ```
@@ -117,9 +117,9 @@ The chart carries the CRDs in its `crds/` directory, which Helm installs once an
 
 ```bash
 helm install k8s-aibom-crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom-crds \
-  --version 1.6.0 --namespace k8s-aibom-system --create-namespace
+  --version 1.6.1 --namespace k8s-aibom-system --create-namespace
 helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
-  --version 1.6.0 --namespace k8s-aibom-system
+  --version 1.6.1 --namespace k8s-aibom-system
 ```
 
 Both charts ship at the same version from the same release and are attested the same way. The main chart's `crds/` directory stays, so a single-chart install keeps working; Helm skips CRDs that already exist.
@@ -127,7 +127,7 @@ Both charts ship at the same version from the same release and are attested the 
 ### Install with kubectl
 
 ```bash
-kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.6.0/install.yaml
+kubectl apply -f https://github.com/GoogleCloudPlatform/k8s-aibom/releases/download/v1.6.1/install.yaml
 ```
 
 Always install from a release asset; the `install.yaml` at the repo root is a development artifact.
