@@ -54,6 +54,10 @@ are those of 1.6.0.
   Job documents are unchanged; evaluation CronJob documents change in
   that locator only.
 
+- **Built with Go 1.26.10** (GO-2026-6809, `crypto/x509`, found in
+  go1.26.9). The Go directive moves in the root, `verifier` and
+  `terraform/test` modules; no code change.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
