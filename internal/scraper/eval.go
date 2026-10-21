@@ -59,18 +59,23 @@ func (s *EvalSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inference
 	}
 
 	var template *corev1.PodTemplateSpec
+	// specLocator is the path of the pod spec in the workload object, so
+	// every evidence locator names a field that exists in that kind.
+	var specLocator string
 
 	switch obj := w.Object.(type) {
 	case *batchv1.Job:
 		template = &obj.Spec.Template
+		specLocator = "spec.template.spec"
 	case *batchv1.CronJob:
 		template = &obj.Spec.JobTemplate.Spec.Template
+		specLocator = "spec.jobTemplate.spec.template.spec"
 	default:
 		return nil, fmt.Errorf("eval.spec: unsupported object type %T for kind %s/%s/%s",
 			w.Object, w.Kind.Group, w.Kind.Version, w.Kind.Kind)
 	}
 
-	isEval := s.scrapePodTemplate(inputs, template)
+	isEval := s.scrapePodTemplate(inputs, template, specLocator)
 
 	if isEval {
 		inputs.Confidence = ConfidenceInferred
@@ -85,7 +90,7 @@ func (s *EvalSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inference
 	return inputs, nil
 }
 
-func (s *EvalSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) bool {
+func (s *EvalSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, specLocator string) bool {
 	isEval := false
 	for i, c := range template.Spec.Containers {
 		// Check for evaluation images
@@ -98,7 +103,7 @@ func (s *EvalSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: fmt.Sprintf("spec.template.spec.containers[%d].image", i),
+						Locator: fmt.Sprintf("%s.containers[%d].image", specLocator, i),
 					},
 					Properties: map[string]string{
 						"runtime.name":    p.Name,
