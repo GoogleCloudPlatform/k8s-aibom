@@ -86,7 +86,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   `--help` after a subcommand print the usage and exit 0 instead of
   failing with `flag: help requested`. A valid command loads the
   kubeconfig as before.
-### Fixed
 
 - **`kubectl aibom find --digest` rejects values that cannot name a
   digest** (#202). `--digest sha256:` (or whitespace) normalized to an
