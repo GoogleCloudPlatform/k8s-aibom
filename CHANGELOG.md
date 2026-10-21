@@ -4,6 +4,56 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
+## [1.6.1] - 2026-10-21
+
+Patch release: four defects found in v1.6.0 by community review in the
+week after the tag, three in `kubectl aibom` and one in emitted evidence.
+No new patterns and no new capability; the CRDs and the document shape
+are those of 1.6.0.
+
+### Fixed
+
+- **`kubectl aibom find` no longer fails when one AIBOM has no
+  document yet** (#200). The controller creates an AIBOM before it writes the
+  status, and a failed status write leaves the status empty until the
+  next reconcile. `find` read every row's inline document, so one such
+  AIBOM made the whole command exit with `no BOM document in status
+  (is the AIBOM Ready?)` whenever it ran with no filter, `--image` or
+  `--digest`. That row is now treated like an external or truncated
+  one: listed with IMAGES `no-document`, shown (not excluded) with the
+  stderr warning when an image or digest filter cannot be evaluated
+  for it, and excluded as before by `--runtime`, `--model` and
+  `--signed`. `view` and `verify` keep the same error.
+
+- **`kubectl aibom find --digest` rejects values that cannot name a
+  digest** (#202). `--digest sha256:` (or whitespace) normalized to an
+  empty prefix and matched every workload with a resolved digest, so
+  "where is this digest running?" answered "everywhere". A value longer
+  than 64 characters, non-hex text, a full image reference or another
+  algorithm silently printed `0 matches`. `--digest` now takes 1 to 64
+  hex characters, bare or `sha256:`-prefixed (the prefix in any case),
+  and anything else is an error before the AIBOMs are listed.
+
+- **`kubectl aibom help` and argument errors no longer need a
+  kubeconfig** (#204). `run` loaded the kubeconfig before it looked at
+  the subcommand, so with no usable kubeconfig `kubectl aibom help`, a
+  mistyped subcommand, a bad `--signed` or `--digest` value and a
+  missing `view`/`verify` name all failed with `resolving namespace:
+  invalid configuration`. These are now settled first. `-h` and
+  `--help` after a subcommand print the usage and exit 0 instead of
+  failing with `flag: help requested`. A valid command loads the
+  kubeconfig as before.
+### Fixed
+
+- **Evaluation CronJob evidence names the CronJob's pod spec path**
+  (#206). `eval.spec` built every evidence locator as
+  `spec.template.spec.containers[N].image`, which is the Job path; on
+  a CronJob the pod spec is at `spec.jobTemplate.spec.template.spec`,
+  so an lm-eval, ragas or trulens CronJob's AIBOM pointed at a field
+  the object does not have. CronJob locators now name the real path.
+  Job documents are unchanged; evaluation CronJob documents change in
+  that locator only.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
