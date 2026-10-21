@@ -17,11 +17,14 @@ is a one-time step described in
 
 ```bash
 helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <new> \
-  | kubectl apply --server-side --field-manager=k8s-aibom-crds -f -
+  | kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -
 ```
 
 Server-side apply is required — the CRDs exceed the client-side
-annotation size limit.
+annotation size limit. `--force-conflicts` is required because
+whatever installed the CRDs (Helm, or `kubectl apply` of
+`install.yaml`) owns the atomic `spec.versions` list, so applying
+under another field manager conflicts on any schema change.
 
 **If you skip this step, the rollout stalls loudly — and safely:** the
 graduated controller's informers request `v1beta1`, which the old CRD
