@@ -87,6 +87,22 @@ All notable changes to k8s-aibom are documented here. The format follows
   hex characters, bare or `sha256:`-prefixed (the prefix in any case),
   and anything else is an error before the AIBOMs are listed.
 
+- **The remaining operator-facing CRD-apply remedies carry
+  `--force-conflicts`** (#119 follow-up).
+  Against CRDs that Helm installed, a server-side apply under another
+  field manager conflicts with Helm on the atomic `spec.versions` list,
+  on both Helm majors. The chart's preflight message (#119) already
+  printed the flag; the `SchemaPredatesController` condition and
+  Warning Event, `docs/migration-v1beta1.md`, and the README's manual
+  upgrade step did not, so following any of them against Helm-installed
+  CRDs failed with `conflict with "helm": .spec.versions`. The README
+  step also applied the release `install.yaml`, which carries the
+  Deployment, RBAC and `AIBOMControllerConfig/default` as well as the
+  CRDs; it now applies the chart's CRDs only. Both the condition
+  message and the preflight now send CRDs that the `k8s-aibom-crds`
+  chart manages to a chart upgrade, and offer the forced apply only
+  otherwise, so it cannot take `spec.versions` away from that release.
+
 ## [1.6.0] - 2026-10-19
 
 The coverage release. One AIBOM per AI workload across the operator-managed
