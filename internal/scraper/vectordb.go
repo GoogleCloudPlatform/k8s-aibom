@@ -34,11 +34,18 @@ type VectorDBPattern struct {
 }
 
 // DefaultVectorDBPatterns provides the built-in patterns for popular vector DBs.
+//
+// Each pattern ends at the repository name boundary (a tag, a digest or
+// the end of the reference), so other images in the vendor's namespace
+// are not taken for the database: milvusdb/milvus-operator,
+// milvusdb/milvus-backup and milvusdb/milvus-config-tool run next to
+// Milvus but are not Milvus. milvusdb/milvus-dev is the server's
+// development build and is matched.
 var DefaultVectorDBPatterns = []VectorDBPattern{
-	{Name: "milvus", Pattern: regexp.MustCompile(`^milvusdb/milvus.*`)},
-	{Name: "qdrant", Pattern: regexp.MustCompile(`^qdrant/qdrant.*`)},
+	{Name: "milvus", Pattern: regexp.MustCompile(`^milvusdb/milvus(?:-dev)?(?:[:@]|$)`)},
+	{Name: "qdrant", Pattern: regexp.MustCompile(`^qdrant/qdrant(?:[:@]|$)`)},
 	{Name: "weaviate", Pattern: regexp.MustCompile(`^(?:.*/)?weaviate(?:[:@]|$)`)},
-	{Name: "chroma", Pattern: regexp.MustCompile(`^chromadb/chroma.*`)},
+	{Name: "chroma", Pattern: regexp.MustCompile(`^chromadb/chroma(?:[:@]|$)`)},
 	{Name: "pgvector", Pattern: regexp.MustCompile(`^(?:.*/)?pgvector(?:[:@]|$)`)},
 }
 
