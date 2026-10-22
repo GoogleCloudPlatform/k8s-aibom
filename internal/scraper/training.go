@@ -54,7 +54,7 @@ func (s *TrainingSpecScraper) Name() string {
 	return "training.spec"
 }
 func (s *TrainingSpecScraper) HandlesKind(k WorkloadKind) bool {
-	return k.Group == "batch" && k.Kind == "Job" || k.Group == "kubeflow.org" && k.Kind == "PyTorchJob" || k.Group == "ray.io" && k.Kind == "RayJob"
+	return k.Group == "batch" && (k.Kind == "Job" || k.Kind == "CronJob") || k.Group == "kubeflow.org" && k.Kind == "PyTorchJob" || k.Group == "ray.io" && k.Kind == "RayJob"
 }
 func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
 	t := time.Now().UTC()
@@ -65,10 +65,20 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 	}
 
 	var template *corev1.PodTemplateSpec
+	// specLocator is the path of the pod spec in the workload object, so
+	// every evidence locator names a field that exists in that kind.
+	var specLocator string
 
 	switch obj := w.Object.(type) {
 	case *batchv1.Job:
 		template = &obj.Spec.Template
+		specLocator = "spec.template.spec"
+	case *batchv1.CronJob:
+		// A CronJob's Jobs roll up into the CronJob's document (Design
+		// 005), so its job template is the only place a scheduled
+		// training run is reported.
+		template = &obj.Spec.JobTemplate.Spec.Template
+		specLocator = "spec.jobTemplate.spec.template.spec"
 	default:
 		// For unstructured CRDs, fallback to scraping running Pods and de-duplicating
 		s.scrapePods(inputs, w.Pods)
@@ -76,11 +86,11 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 		return inputs, nil
 	}
 
-	s.scrapePodTemplate(inputs, template)
+	s.scrapePodTemplate(inputs, template, specLocator)
 	return inputs, nil
 }
 
-func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec) {
+func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, specLocator string) {
 	isTraining := false
 	for i, c := range template.Spec.Containers {
 		// Check for training images
@@ -93,7 +103,7 @@ func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *cor
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceImagePattern,
-						Locator: fmt.Sprintf("spec.template.spec.containers[%d].image", i),
+						Locator: fmt.Sprintf("%s.containers[%d].image", specLocator, i),
 					},
 					Properties: map[string]string{
 						"runtime.name":    p.Name,
@@ -113,14 +123,14 @@ func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *cor
 					Confidence: ConfidenceInferred,
 					Evidence: Evidence{
 						Source:  SourceEnvVarNamePresent,
-						Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s]", i, env.Name),
+						Locator: fmt.Sprintf("%s.containers[%d].env[%s]", specLocator, i, env.Name),
 					},
 				}
 				inputs.Components = append(inputs.Components, comp)
 			}
 		}
 		// Map Volume Mounts as training datasets (simplified logic)
-		inputs.Components = append(inputs.Components, datasetMountComponents(c, i, "spec.template.spec")...)
+		inputs.Components = append(inputs.Components, datasetMountComponents(c, i, specLocator)...)
 	}
 
 	if isTraining {
