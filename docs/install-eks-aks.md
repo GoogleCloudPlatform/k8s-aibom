@@ -13,7 +13,7 @@ cloud-neutrality claim is continuously exercised.
 
 ```bash
 helm install k8s-aibom oci://ghcr.io/googlecloudplatform/charts/k8s-aibom \
-  --version 1.6.1 \
+  --version 1.6.2 \
   --namespace k8s-aibom-system --create-namespace
 
 kubectl label namespace <your-ai-namespace> aibom.k8saibom.dev/enabled=true
