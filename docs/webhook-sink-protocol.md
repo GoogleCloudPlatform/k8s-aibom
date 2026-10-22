@@ -33,7 +33,7 @@ handling" below for the controller's interpretation.
 | `X-Aibom-Workload-Kind` | always | Kubernetes kind of the workload (e.g., `Deployment`, `StatefulSet`, `InferenceService`). |
 | `X-Aibom-Workload-Namespace` | always | Workload's Kubernetes namespace. |
 | `X-Aibom-Workload-Name` | always | Workload's Kubernetes `metadata.name`. |
-| `X-Aibom-Workload-Category` | always (v1) | High-level AI lifecycle category (`inference` in v1; future values: `training`, `agent`, etc.). |
+| `X-Aibom-Workload-Category` | always (v1) | High-level AI lifecycle category, the same value as the document's `aibom.workload.category` (`inference`, `agent`, `vector-database`, `training`, `evaluation`). |
 | `X-Aibom-Controller-Version` | always | Version of the k8s-aibom controller that produced this BOM. |
 | `Authorization` | when configured | Bearer token from the controller's configured `BearerTokenFile`. Sent only when the controller is configured with bearer-token auth. |
 
