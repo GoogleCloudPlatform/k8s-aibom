@@ -324,15 +324,38 @@ func (s *WatchSupervisor) run(ctx context.Context, w ThirdPartyWatch) {
 	}
 }
 
-// probe is a one-item list through the uncached reader: the cheapest
-// request that exercises the same path the informer's initial list
-// will take (including any conversion webhook).
+// probe asks the API server for the kind through the uncached reader:
+// a one-item list, then a GET of that item by name.
+//
+// The list alone is not enough. The API server keeps a watch cache per
+// served version, and while a conversion webhook is down it keeps
+// serving LIST and WATCH for the kind from that cache; only reads that
+// go to storage (a single-object GET) and writes reach the webhook and
+// fail (#216, measured on GKE 1.35 with Dynamo 1.4.2: a 7-minute
+// operator outage never failed a Limit=1 list, while every GET did).
+// The GET therefore exercises the conversion path the list no longer
+// does. A kind with no objects falls back to the list, which is the
+// most the API server will tell us; NotFound between the list and the
+// GET is not an outage.
 func (s *WatchSupervisor) probe(ctx context.Context, w ThirdPartyWatch) error {
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(listGVK(w.GVK))
-	return s.APIReader.List(pctx, list, client.Limit(1))
+	if err := s.APIReader.List(pctx, list, client.Limit(1)); err != nil {
+		return err
+	}
+	if len(list.Items) == 0 {
+		return nil
+	}
+	item := list.Items[0]
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(w.GVK)
+	err := s.APIReader.Get(pctx, client.ObjectKey{Namespace: item.GetNamespace(), Name: item.GetName()}, obj)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 // runOnce builds a fresh cache and controller for the kind and runs them
@@ -438,9 +461,11 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 			// warning level and re-opens the watch from the same resource
 			// version, forever, so the object is never delivered and
 			// nothing fails loudly (measured; this is the silent-zero case
-			// of #127). A one-item list through the uncached reader takes
-			// the same conversion path and fails honestly. A clean probe
-			// also clears a degraded kind once the operator is back.
+			// of #127). The probe reads one object by name through the
+			// uncached reader, which takes the conversion path and fails
+			// honestly even when the API server still serves lists from
+			// its per-version cache (#216). A clean probe also clears a
+			// degraded kind once the operator is back.
 			if perr := s.probe(ctx, w); perr != nil {
 				if s.Health.MarkUnhealthy(w.Name, perr) {
 					log.Info("watch degraded", "err", perr.Error())
