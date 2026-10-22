@@ -130,23 +130,7 @@ func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *cor
 			}
 		}
 		// Map Volume Mounts as training datasets (simplified logic)
-		for _, vm := range c.VolumeMounts {
-			if vm.Name == "dataset" || vm.Name == "training-data" || vm.MountPath == "/data" {
-				comp := Component{
-					Type:       ComponentData,
-					Name:       vm.Name,
-					Confidence: ConfidenceInferred,
-					Evidence: Evidence{
-						Source:  SourceVolumeSource,
-						Locator: fmt.Sprintf("%s.containers[%d].volumeMounts[%s]", specLocator, i, vm.Name),
-					},
-					Properties: map[string]string{
-						"dataset.path": vm.MountPath,
-					},
-				}
-				inputs.Components = append(inputs.Components, comp)
-			}
-		}
+		inputs.Components = append(inputs.Components, datasetMountComponents(c, i, specLocator)...)
 	}
 
 	if isTraining {
@@ -232,4 +216,31 @@ func (s *TrainingSpecScraper) scrapePods(inputs *BOMInputs, pods []corev1.Pod) {
 			ScrapeTimestamp: inputs.ScrapeTimestamp,
 		}}
 	}
+}
+
+// datasetMountComponents returns a data component for each of c's volume
+// mounts that looks like a dataset: a mount named "dataset" or
+// "training-data", or one mounted at /data. specLocator is the path of
+// the pod spec in the workload object. Training and evaluation jobs both
+// read their datasets this way (docs/scraper-heuristics.md, "Training
+// Dataset Heuristics").
+func datasetMountComponents(c corev1.Container, idx int, specLocator string) []Component {
+	var out []Component
+	for _, vm := range c.VolumeMounts {
+		if vm.Name == "dataset" || vm.Name == "training-data" || vm.MountPath == "/data" {
+			out = append(out, Component{
+				Type:       ComponentData,
+				Name:       vm.Name,
+				Confidence: ConfidenceInferred,
+				Evidence: Evidence{
+					Source:  SourceVolumeSource,
+					Locator: fmt.Sprintf("%s.containers[%d].volumeMounts[%s]", specLocator, idx, vm.Name),
+				},
+				Properties: map[string]string{
+					"dataset.path": vm.MountPath,
+				},
+			})
+		}
+	}
+	return out
 }

@@ -66,6 +66,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Evaluation jobs list their dataset mounts** (#218). Only
+  `training.spec` turned volume mounts named `dataset` or
+  `training-data`, or mounted at `/data`, into `data` components, and
+  it keeps its result only for training jobs, so an lm-eval, ragas or
+  trulens Job or CronJob's AIBOM never named the data it was evaluated
+  on, although `docs/scraper-heuristics.md` describes the rule for
+  evaluation jobs too. `eval.spec` now applies the same rule, with
+  locators on the kind's pod spec path. Training documents are
+  unchanged; evaluation documents gain the `data` components.
+
 - **Training CronJobs get an AIBOM** (#220). The Jobs a CronJob spawns
   roll up into the CronJob's document (Design 005), but `training.spec`
   did not handle CronJobs, so the CronJob's inputs stayed unresolved and
