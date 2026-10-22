@@ -66,6 +66,34 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Evaluation jobs list their dataset mounts** (#218). Only
+  `training.spec` turned volume mounts named `dataset` or
+  `training-data`, or mounted at `/data`, into `data` components, and
+  it keeps its result only for training jobs, so an lm-eval, ragas or
+  trulens Job or CronJob's AIBOM never named the data it was evaluated
+  on, although `docs/scraper-heuristics.md` describes the rule for
+  evaluation jobs too. `eval.spec` now applies the same rule, with
+  locators on the kind's pod spec path. Training documents are
+  unchanged; evaluation documents gain the `data` components.
+
+- **Training CronJobs get an AIBOM** (#220). The Jobs a CronJob spawns
+  roll up into the CronJob's document (Design 005), but `training.spec`
+  did not handle CronJobs, so the CronJob's inputs stayed unresolved and
+  a scheduled training run (for example `pytorch/pytorch`, or a job
+  with `WANDB_API_KEY`) had no AIBOM at all, while the same template as
+  a Job was reported as `training`. `training.spec` now reads a
+  CronJob's job template, with evidence locators on
+  `spec.jobTemplate.spec.template.spec`. Job documents are unchanged.
+
+- **Webhook sink errors keep the receiver's answer when the sink
+  deadline runs out mid-retry** (#222). When the 30s per-sink deadline
+  expired during a backoff or a retry, the webhook sink returned only
+  `context deadline exceeded`, so `SinkFailed` lost the status code and
+  body the receiver had returned, contrary to
+  `docs/webhook-sink-protocol.md`. The error is now the last receiver
+  error, followed by `(retries stopped: context deadline exceeded)`.
+  Retry counts and backoffs are unchanged.
+
 - **`Stale` reaches `staleThresholdReconciles` for an unchanged
   workload** (#223). Extraction errors are not part of the input hash,
   so from its second reconcile on a workload whose spec kept producing

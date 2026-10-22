@@ -18,6 +18,7 @@ package sink
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -359,6 +360,65 @@ func TestWebhookSink_ContextCanceled_AbortsRetryLoop(t *testing.T) {
 	}
 	if time.Since(start) > 1*time.Second {
 		t.Errorf("emit did not honor cancellation promptly: took %v", time.Since(start))
+	}
+}
+
+// When the per-sink deadline runs out mid-retry, the error must still
+// carry what the receiver last answered (docs/webhook-sink-protocol.md:
+// "the controller returns the last seen error"). It ends up in the
+// SinkFailed condition, where a bare "context deadline exceeded" says
+// nothing about the receiver.
+func TestWebhookSink_DeadlineMidRetry_ReturnsLastSeenError(t *testing.T) {
+	cases := []struct {
+		name string
+		// slowAfterFirst makes every request after the first hang
+		// until the client gives up, so the deadline expires during
+		// an attempt instead of during a backoff sleep.
+		slowAfterFirst bool
+		backoffs       []time.Duration
+	}{
+		{name: "deadline during backoff", backoffs: []time.Duration{10 * time.Millisecond, 5 * time.Second, 5 * time.Second}},
+		{name: "deadline during attempt", slowAfterFirst: true, backoffs: []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var attempts int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if n := atomic.AddInt32(&attempts, 1); n > 1 && tc.slowAfterFirst {
+					// Drain the body so the server notices the client
+					// hanging up and cancels r.Context().
+					_, _ = io.Copy(io.Discard, r.Body)
+					select {
+					case <-r.Context().Done():
+					case <-time.After(2 * time.Second):
+					}
+					return
+				}
+				http.Error(w, "receiver overloaded", http.StatusServiceUnavailable)
+			}))
+			defer srv.Close()
+
+			s, err := NewWebhookSink(WebhookSinkConfig{Endpoint: srv.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			origBackoffs := WebhookRetryBackoffs
+			WebhookRetryBackoffs = tc.backoffs
+			defer func() { WebhookRetryBackoffs = origBackoffs }()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			_, err = s.Emit(ctx, newTestWebhookDoc(), newTestWebhookMeta())
+			if err == nil {
+				t.Fatal("expected error when the deadline expires mid-retry")
+			}
+			if !strings.Contains(err.Error(), "HTTP 503") || !strings.Contains(err.Error(), "receiver overloaded") {
+				t.Errorf("error should carry the last receiver response (HTTP 503: receiver overloaded); got: %v", err)
+			}
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Errorf("error should still wrap context.DeadlineExceeded; got: %v", err)
+			}
+		})
 	}
 }
 

@@ -113,6 +113,10 @@ func (s *EvalSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.
 				inputs.Components = append(inputs.Components, comp)
 			}
 		}
+		// Datasets the evaluation reads, found the same way as for
+		// training jobs. Kept only when the job is an evaluation: the
+		// scraper's result is dropped while its confidence is unresolved.
+		inputs.Components = append(inputs.Components, datasetMountComponents(c, i, specLocator)...)
 	}
 	return isEval
 }
