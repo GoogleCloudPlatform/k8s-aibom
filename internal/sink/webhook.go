@@ -254,7 +254,7 @@ func (s *WebhookSink) deliver(ctx context.Context, doc *bom.Document, meta SinkM
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return retriesStopped(lastErr, ctx.Err())
 			case <-time.After(WebhookRetryBackoffs[attempt-1]):
 			}
 		}
@@ -264,6 +264,11 @@ func (s *WebhookSink) deliver(ctx context.Context, doc *bom.Document, meta SinkM
 		}
 		resp, err := s.client.Do(req)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil && lastErr != nil {
+				// The deadline cut this attempt short; the previous
+				// attempt's answer is the last thing the receiver said.
+				return retriesStopped(lastErr, ctxErr)
+			}
 			lastErr = fmt.Errorf("webhook sink: POST %s: %w", s.cfg.Endpoint, err)
 			continue
 		}
@@ -286,6 +291,17 @@ func (s *WebhookSink) deliver(ctx context.Context, doc *bom.Document, meta SinkM
 		lastErr = formatHTTPError(s.cfg.Endpoint, resp.StatusCode, bodyBytes, truncated)
 	}
 	return lastErr
+}
+
+// retriesStopped is the error deliver returns when the context ends
+// between or during retries. It keeps the last error the receiver
+// produced, which is what the SinkFailed condition should show, and
+// still wraps the context error.
+func retriesStopped(lastErr, ctxErr error) error {
+	if lastErr == nil {
+		return ctxErr
+	}
+	return fmt.Errorf("%w (retries stopped: %w)", lastErr, ctxErr)
 }
 
 func (s *WebhookSink) buildRequest(ctx context.Context, doc *bom.Document, meta SinkMeta) (*http.Request, error) {
