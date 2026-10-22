@@ -64,6 +64,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+## [1.6.2] - 2026-10-22
+
+Patch release: eight defects found in the days after 1.6.0, two of them by
+NVIDIA AICR's requalification run and six by community review. Two change
+what the controller reports: the watch supervisor now sees a conversion-webhook
+outage, and schema skew is detected for nested CRD fields. The rest correct
+emitted documents (vector-database false positives, sink category, dataset
+mounts, training CronJobs) and status (`Stale`, webhook error text). No new
+patterns and no new capability; the CRDs, RBAC and the document shape are
+those of 1.6.0.
+
 ### Fixed
 
 - **The watch supervisor's steady-state probe now reads one object by
@@ -90,6 +101,28 @@ All notable changes to k8s-aibom are documented here. The format follows
   schema does not describe is not reported. The chart refuses to render an
   allowlist against CRDs that do not declare it, with the same remedy text as
   the verification guard.
+
+- **The vector-database scraper no longer reports Milvus tool images as
+  Milvus** (#210). The `milvus`, `qdrant` and `chroma` patterns ended
+  in `.*`, so every image in the vendor's namespace that starts with
+  the database name matched: a Deployment running
+  `milvusdb/milvus-operator`, `milvusdb/milvus-backup`,
+  `milvusdb/milvus-cdc` or `milvusdb/milvus-config-tool` got category
+  `vector-database` and a `milvus` component. The three patterns now
+  end at the image-name boundary, as `weaviate` and `pgvector` already
+  did; `milvusdb/milvus-dev` (the server's development build) still
+  matches.
+
+--- e3c905d
+
+- **External sinks receive the scraped workload category** (#212).
+  Every reconciler seeds its workload as `inference`, and the
+  scraper's category (`agent`, `vector-database`, `training`,
+  `evaluation`) was copied into the document and the status but not
+  into the sink metadata. A GCS path template's `{category}` token and
+  the webhook `X-Aibom-Workload-Category` header therefore said
+  `inference` for every workload. They now carry the same category as
+  the document's `aibom.workload.category`.
 
 - **Evaluation jobs list their dataset mounts** (#218). Only
   `training.spec` turned volume mounts named `dataset` or
@@ -193,26 +226,6 @@ those of 1.6.0.
   apply. The README's manual step applies the chart's CRDs rather than
   the release `install.yaml`, which also carries the Deployment, RBAC and
   `AIBOMControllerConfig/default`.
-
-- **The vector-database scraper no longer reports Milvus tool images as
-  Milvus** (#210). The `milvus`, `qdrant` and `chroma` patterns ended
-  in `.*`, so every image in the vendor's namespace that starts with
-  the database name matched: a Deployment running
-  `milvusdb/milvus-operator`, `milvusdb/milvus-backup`,
-  `milvusdb/milvus-cdc` or `milvusdb/milvus-config-tool` got category
-  `vector-database` and a `milvus` component. The three patterns now
-  end at the image-name boundary, as `weaviate` and `pgvector` already
-  did; `milvusdb/milvus-dev` (the server's development build) still
-  matches.
-
-- **External sinks receive the scraped workload category** (#212).
-  Every reconciler seeds its workload as `inference`, and the
-  scraper's category (`agent`, `vector-database`, `training`,
-  `evaluation`) was copied into the document and the status but not
-  into the sink metadata. A GCS path template's `{category}` token and
-  the webhook `X-Aibom-Workload-Category` header therefore said
-  `inference` for every workload. They now carry the same category as
-  the document's `aibom.workload.category`.
 
 ## [1.6.0] - 2026-10-19
 
