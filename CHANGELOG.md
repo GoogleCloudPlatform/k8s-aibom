@@ -4,6 +4,81 @@ All notable changes to k8s-aibom are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (see `VERSIONING.md`).
 
+## [1.6.2] - 2026-10-22
+
+Patch release: eight defects found in the days after 1.6.0, two of them by
+NVIDIA AICR's requalification run and six by community review. Two change
+what the controller reports: the watch supervisor now sees a conversion-webhook
+outage, and schema skew is detected for nested CRD fields. The rest correct
+emitted documents (vector-database false positives, sink category, dataset
+mounts, training CronJobs) and status (`Stale`, webhook error text). No new
+patterns and no new capability; the CRDs, RBAC and the document shape are
+those of 1.6.0.
+
+### Fixed
+
+- **The watch supervisor's steady-state probe now reads one object by
+  name, not just a one-item list** (#216). While a conversion webhook is
+  down the API server keeps serving LIST and WATCH for the kind from its
+  per-version watch cache, so the list probe succeeded and a Dynamo
+  operator outage never produced `Degraded=True`, `WatchUnhealthy` or
+  `aibom_watch_healthy=0` (measured on GKE 1.35, 7 minutes). A
+  single-object GET goes to storage and through the webhook, so the
+  signal fires again within one probe interval; a kind with no objects
+  falls back to the list. Correctness was never affected: the kind's
+  API rejects every write during the outage and existing documents stay
+  right.
+
+- **Schema skew is detected for nested fields, and the chart guards
+  `config.discovery.workloadKinds`** (#105 follow-up, found by NVIDIA AICR
+  against 1.5.1 CRDs). 1.6.0's only CRD addition, `discovery.workloadKinds`,
+  sits inside an existing object, so the controller's top-level skew check
+  reported nothing while the API server pruned the field, and the chart's
+  render-time guard covered only `verification`. The skew check now compares
+  nested paths from the compiled-in types (`discovery.workloadKinds`,
+  `verification.identities`, ...) and names them in the
+  `SchemaPredatesController` condition; a parent whose children the served
+  schema does not describe is not reported. The chart refuses to render an
+  allowlist against CRDs that do not declare it, with the same remedy text as
+  the verification guard.
+
+- **Evaluation jobs list their dataset mounts** (#218). Only
+  `training.spec` turned volume mounts named `dataset` or
+  `training-data`, or mounted at `/data`, into `data` components, and
+  it keeps its result only for training jobs, so an lm-eval, ragas or
+  trulens Job or CronJob's AIBOM never named the data it was evaluated
+  on, although `docs/scraper-heuristics.md` describes the rule for
+  evaluation jobs too. `eval.spec` now applies the same rule, with
+  locators on the kind's pod spec path. Training documents are
+  unchanged; evaluation documents gain the `data` components.
+
+- **Training CronJobs get an AIBOM** (#220). The Jobs a CronJob spawns
+  roll up into the CronJob's document (Design 005), but `training.spec`
+  did not handle CronJobs, so the CronJob's inputs stayed unresolved and
+  a scheduled training run (for example `pytorch/pytorch`, or a job
+  with `WANDB_API_KEY`) had no AIBOM at all, while the same template as
+  a Job was reported as `training`. `training.spec` now reads a
+  CronJob's job template, with evidence locators on
+  `spec.jobTemplate.spec.template.spec`. Job documents are unchanged.
+
+- **Webhook sink errors keep the receiver's answer when the sink
+  deadline runs out mid-retry** (#222). When the 30s per-sink deadline
+  expired during a backoff or a retry, the webhook sink returned only
+  `context deadline exceeded`, so `SinkFailed` lost the status code and
+  body the receiver had returned, contrary to
+  `docs/webhook-sink-protocol.md`. The error is now the last receiver
+  error, followed by `(retries stopped: context deadline exceeded)`.
+  Retry counts and backoffs are unchanged.
+
+- **`Stale` reaches `staleThresholdReconciles` for an unchanged
+  workload** (#223). Extraction errors are not part of the input hash,
+  so from its second reconcile on a workload whose spec kept producing
+  the same errors took the dedup fast path, which skipped the error
+  count: `status.consecutiveErrors` stayed at 1 and `Stale` never
+  became `True`. The fast path now counts extraction errors like the
+  full path, and clears the `ExtractionErrorsPersistent` `Stale` once
+  the errors are gone. Documents and input hashes are unchanged.
+
 ## [1.6.1] - 2026-10-21
 
 Patch release: four defects found in v1.6.0 by community review in the
