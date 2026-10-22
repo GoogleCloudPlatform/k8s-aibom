@@ -17,6 +17,7 @@
 # (Previously created via a pre-install hook, which Helm never upgrades or
 # removes, and carried an invalid namespace on a cluster-scoped object.)
 {{- include "k8s-aibom.verificationSchemaGuard" . }}
+{{- include "k8s-aibom.workloadKindsSchemaGuard" . }}
 apiVersion: aibom.k8saibom.dev/v1beta1
 kind: AIBOMControllerConfig
 metadata:
