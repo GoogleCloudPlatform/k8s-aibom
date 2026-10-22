@@ -85,6 +85,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   CronJob's job template, with evidence locators on
   `spec.jobTemplate.spec.template.spec`. Job documents are unchanged.
 
+- **Webhook sink errors keep the receiver's answer when the sink
+  deadline runs out mid-retry** (#222). When the 30s per-sink deadline
+  expired during a backoff or a retry, the webhook sink returned only
+  `context deadline exceeded`, so `SinkFailed` lost the status code and
+  body the receiver had returned, contrary to
+  `docs/webhook-sink-protocol.md`. The error is now the last receiver
+  error, followed by `(retries stopped: context deadline exceeded)`.
+  Retry counts and backoffs are unchanged.
+
 ## [1.6.1] - 2026-10-21
 
 Patch release: four defects found in v1.6.0 by community review in the
