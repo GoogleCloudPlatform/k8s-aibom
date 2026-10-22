@@ -86,6 +86,66 @@ func TestServedSpecFields_ErrorsAreNotSkew(t *testing.T) {
 	}
 }
 
+// openAPIDocWithNestedSpec builds a spec whose "discovery" object declares
+// the given child properties, next to a plain "verification" object.
+func openAPIDocWithNestedSpec(discoveryChildren ...string) []byte {
+	props := make([]string, 0, len(discoveryChildren))
+	for _, f := range discoveryChildren {
+		props = append(props, fmt.Sprintf(`%q: {"type":"string"}`, f))
+	}
+	return []byte(fmt.Sprintf(`{"components":{"schemas":{%q:{"properties":{"spec":{"properties":{"discovery":{"type":"object","properties":{%s}},"verification":{"type":"object"},"bomGeneration":{"type":"object"},"logging":{"type":"object"},"sinks":{"type":"array"}}}}}}}}`,
+		openAPIConfigSchemaName, strings.Join(props, ",")))
+}
+
+func TestExpectedSpecFields_IncludesNestedWorkloadKinds(t *testing.T) {
+	got := expectedSpecFields()
+	for _, want := range []string{"discovery", "discovery.workloadKinds", "discovery.namespaceSelector", "verification.enabled"} {
+		found := false
+		for _, g := range got {
+			if g == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expectedSpecFields() = %v; must include %q (derived from the Go types)", got, want)
+		}
+	}
+}
+
+// The 1.6.0 shape: 1.5.1 CRDs declare discovery with its two older
+// children and no workloadKinds. The nested path must be reported.
+func TestServedSpecFields_NestedFieldMissingIsSkew(t *testing.T) {
+	served, err := servedSpecFieldsFromOpenAPI(openAPIDocWithNestedSpec("namespaceSelector", "inferenceRuntimeImagePatterns"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := missingFields([]string{"discovery", "discovery.workloadKinds", "discovery.namespaceSelector"}, served)
+	if len(m) != 1 || m[0] != "discovery.workloadKinds" {
+		t.Fatalf("missing = %v, want [discovery.workloadKinds]", m)
+	}
+	served, err = servedSpecFieldsFromOpenAPI(openAPIDocWithNestedSpec("namespaceSelector", "inferenceRuntimeImagePatterns", "workloadKinds"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := missingFields([]string{"discovery", "discovery.workloadKinds"}, served); len(m) != 0 {
+		t.Fatalf("missing = %v, want none once the child is declared", m)
+	}
+}
+
+// A parent whose children the served schema does not describe (no
+// properties, as with a $ref or preserve-unknown-fields object) must not
+// have its children reported: "cannot tell" is not skew.
+func TestServedSpecFields_UndescribedChildrenAreNotSkew(t *testing.T) {
+	served, err := servedSpecFieldsFromOpenAPI(openAPIDocWithSpecFields("discovery", "verification"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := missingFields([]string{"discovery", "discovery.workloadKinds", "verification", "verification.enabled"}, served); len(m) != 0 {
+		t.Fatalf("missing = %v, want none when the parents declare no properties", m)
+	}
+}
+
 func TestSchemaSkewMessage_NamesFieldsAndRemedy(t *testing.T) {
 	msg := schemaSkewMessage([]string{"verification"})
 	for _, want := range []string{

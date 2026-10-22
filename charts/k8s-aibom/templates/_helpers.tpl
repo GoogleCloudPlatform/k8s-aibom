@@ -109,3 +109,20 @@ reading CRDs.
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Same guard for config.discovery.workloadKinds (#105 again, found by NVIDIA
+AICR against 1.5.1 CRDs during the 1.6.1 requalification): the field is
+nested under discovery, so the top-level check above does not cover it.
+Only runs when workloadKinds is set; lookup is empty under helm template.
+*/}}
+{{- define "k8s-aibom.workloadKindsSchemaGuard" -}}
+{{- if (dig "discovery" "workloadKinds" list .Values.config) }}
+{{- $crd := lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "aibomcontrollerconfigs.aibom.k8saibom.dev" }}
+{{- range (dig "spec" "versions" list $crd) }}
+{{- if and (eq .name "v1beta1") (not (hasKey (dig "schema" "openAPIV3Schema" "properties" "spec" "properties" "discovery" "properties" dict .) "workloadKinds")) }}
+{{- fail (printf "config.discovery.workloadKinds is set, but the installed AIBOMControllerConfig CRD does not declare spec.discovery.workloadKinds (Helm does not upgrade CRDs). Applying this release would roll the controller and then fail on the config (Helm 4) or silently drop the allowlist, so every kind would be inventoried (Helm 3). If the k8s-aibom-crds chart manages these CRDs, upgrade it to %s first; otherwise apply this chart's CRDs, then retry:\n  helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version %s | kubectl apply --server-side --force-conflicts --field-manager=k8s-aibom-crds -f -" $.Chart.Version $.Chart.Version) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

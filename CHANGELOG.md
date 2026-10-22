@@ -78,6 +78,19 @@ All notable changes to k8s-aibom are documented here. The format follows
   API rejects every write during the outage and existing documents stay
   right.
 
+- **Schema skew is detected for nested fields, and the chart guards
+  `config.discovery.workloadKinds`** (#105 follow-up, found by NVIDIA AICR
+  against 1.5.1 CRDs). 1.6.0's only CRD addition, `discovery.workloadKinds`,
+  sits inside an existing object, so the controller's top-level skew check
+  reported nothing while the API server pruned the field, and the chart's
+  render-time guard covered only `verification`. The skew check now compares
+  nested paths from the compiled-in types (`discovery.workloadKinds`,
+  `verification.identities`, ...) and names them in the
+  `SchemaPredatesController` condition; a parent whose children the served
+  schema does not describe is not reported. The chart refuses to render an
+  allowlist against CRDs that do not declare it, with the same remedy text as
+  the verification guard.
+
 - **Evaluation jobs list their dataset mounts** (#218). Only
   `training.spec` turned volume mounts named `dataset` or
   `training-data`, or mounted at `/data`, into `data` components, and

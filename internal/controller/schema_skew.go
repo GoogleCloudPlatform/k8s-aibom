@@ -97,33 +97,59 @@ func (c *OpenAPISchemaChecker) MissingSpecFields(_ context.Context) ([]string, e
 	return missingFields(expectedSpecFields(), served), nil
 }
 
-// expectedSpecFields lists the JSON names of every top-level field on
-// AIBOMControllerConfigSpec as compiled into this binary.
+// expectedSpecFields lists the JSON paths of the fields on
+// AIBOMControllerConfigSpec as compiled into this binary: every
+// top-level field, and every field of a nested struct declared in this
+// API package (for example "discovery.workloadKinds"). Slices, maps and
+// upstream types (label selectors) are not descended into.
+//
+// Nested paths matter because the CRD grows inside existing objects as
+// often as at the top: 1.6.0 added discovery.workloadKinds and nothing
+// else, so a top-level diff reported no skew against 1.5.1 CRDs while
+// the API server pruned the field (the #105 failure shape, found by
+// NVIDIA AICR during the 1.6.1 requalification).
 func expectedSpecFields() []string {
-	t := reflect.TypeOf(aibomv1beta1.AIBOMControllerConfigSpec{})
 	var out []string
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		name := strings.Split(tag, ",")[0]
-		if name == "" || name == "-" {
-			continue
+	var walk func(t reflect.Type, prefix string, depth int)
+	walk = func(t reflect.Type, prefix string, depth int) {
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			tag := f.Tag.Get("json")
+			name := strings.Split(tag, ",")[0]
+			if name == "" || name == "-" {
+				continue
+			}
+			path := prefix + name
+			out = append(out, path)
+			ft := f.Type
+			if ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if depth < 1 && ft.Kind() == reflect.Struct && ft.PkgPath() == t.PkgPath() {
+				walk(ft, path+".", depth+1)
+			}
 		}
-		out = append(out, name)
 	}
+	walk(reflect.TypeOf(aibomv1beta1.AIBOMControllerConfigSpec{}), "", 0)
 	sort.Strings(out)
 	return out
 }
 
-// servedSpecFieldsFromOpenAPI extracts the declared top-level spec
-// property names for AIBOMControllerConfig from an OpenAPI v3 group-
-// version document.
+// servedSpecFieldsFromOpenAPI extracts the declared spec property
+// paths for AIBOMControllerConfig from an OpenAPI v3 group-version
+// document: top-level names, and "parent.child" for every nested
+// property the served schema declares. A parent that declares nested
+// properties also yields the marker "parent.*", which is what lets
+// missingFields tell "the child is absent" from "the parent's children
+// are not described here" (a $ref or preserve-unknown-fields object).
 func servedSpecFieldsFromOpenAPI(doc []byte) (map[string]struct{}, error) {
+	type schemaNode struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
 	var parsed struct {
 		Components struct {
 			Schemas map[string]struct {
-				Properties map[string]struct {
-					Properties map[string]json.RawMessage `json:"properties"`
-				} `json:"properties"`
+				Properties map[string]json.RawMessage `json:"properties"`
 			} `json:"schemas"`
 		} `json:"components"`
 	}
@@ -134,21 +160,41 @@ func servedSpecFieldsFromOpenAPI(doc []byte) (map[string]struct{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("openapi v3: schema %q not found", openAPIConfigSchemaName)
 	}
-	spec, ok := schema.Properties["spec"]
+	specRaw, ok := schema.Properties["spec"]
 	if !ok {
 		return nil, fmt.Errorf("openapi v3: schema %q has no spec", openAPIConfigSchemaName)
 	}
-	out := make(map[string]struct{}, len(spec.Properties))
-	for k := range spec.Properties {
+	var spec schemaNode
+	if err := json.Unmarshal(specRaw, &spec); err != nil {
+		return nil, fmt.Errorf("openapi v3: parse spec: %w", err)
+	}
+	out := make(map[string]struct{}, len(spec.Properties)*2)
+	for k, raw := range spec.Properties {
 		out[k] = struct{}{}
+		var child schemaNode
+		if err := json.Unmarshal(raw, &child); err != nil || child.Properties == nil {
+			continue
+		}
+		out[k+".*"] = struct{}{}
+		for ck := range child.Properties {
+			out[k+"."+ck] = struct{}{}
+		}
 	}
 	return out, nil
 }
 
-// missingFields returns, sorted, the expected fields absent from served.
+// missingFields returns, sorted, the expected paths absent from served.
+// A nested path "a.b" counts as missing only when the served schema
+// describes a's children (marker "a.*"); if a itself is missing, a is
+// reported and its children are not repeated.
 func missingFields(expected []string, served map[string]struct{}) []string {
 	var missing []string
 	for _, f := range expected {
+		if parent, _, nested := strings.Cut(f, "."); nested {
+			if _, ok := served[parent+".*"]; !ok {
+				continue
+			}
+		}
 		if _, ok := served[f]; !ok {
 			missing = append(missing, f)
 		}
