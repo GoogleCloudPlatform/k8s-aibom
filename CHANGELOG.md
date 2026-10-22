@@ -66,6 +66,18 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The watch supervisor's steady-state probe now reads one object by
+  name, not just a one-item list** (#216). While a conversion webhook is
+  down the API server keeps serving LIST and WATCH for the kind from its
+  per-version watch cache, so the list probe succeeded and a Dynamo
+  operator outage never produced `Degraded=True`, `WatchUnhealthy` or
+  `aibom_watch_healthy=0` (measured on GKE 1.35, 7 minutes). A
+  single-object GET goes to storage and through the webhook, so the
+  signal fires again within one probe interval; a kind with no objects
+  falls back to the list. Correctness was never affected: the kind's
+  API rejects every write during the outage and existing documents stay
+  right.
+
 - **Evaluation jobs list their dataset mounts** (#218). Only
   `training.spec` turned volume mounts named `dataset` or
   `training-data`, or mounted at `/data`, into `data` components, and

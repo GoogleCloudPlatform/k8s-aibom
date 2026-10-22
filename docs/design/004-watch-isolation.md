@@ -103,6 +103,16 @@ controllers) owns the lifecycle:
   path): a failing probe marks the kind unhealthy, a clean probe clears
   it. Cost with AICR's two kinds: one extra request per minute on top
   of the measured sub-1-req/min steady state.
+- **Amendment (2026-10-22, #216).** The steady-state probe is a one-item
+  list **followed by a GET of that item by name**. On GKE 1.35 with
+  dynamo-platform 1.4.2, a 7-minute operator outage never failed the
+  Limit=1 list: the API server serves LIST and WATCH for a served
+  version from its per-version watch cache while the conversion webhook
+  is down, and only storage reads (single-object GET) and writes reach
+  the webhook. The GET restores the honest failure; a kind with no
+  objects falls back to the list. Evidence:
+  `docs/evidence/v1.6.1-gke-adr019-dynamo.md`, leg 2.
+
 - **Teardown on probe failure after start?** No. A kind that was
   healthy and is now failing its relists keeps serving its last-known
   cache (existing AIBOMs are reconciled from a stale but real view) and
