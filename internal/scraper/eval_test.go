@@ -217,3 +217,107 @@ func TestEvalSpecScraper_LocatorNamesThePathInTheKind(t *testing.T) {
 		})
 	}
 }
+
+// An evaluation job's dataset mounts are recorded the same way as a
+// training job's (docs/scraper-heuristics.md, "Training Dataset
+// Heuristics"). They used to come only from training.spec, whose result
+// is dropped for a job that is not training, so an evaluation job's BOM
+// never named the data it was evaluated on.
+func TestEvalSpecScraper_DatasetMounts(t *testing.T) {
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "evaluator",
+				Image: "eleutherai/lm-eval:v0.4.0",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "eval-set", MountPath: "/data"},
+					{Name: "dataset", MountPath: "/mnt/benchmarks"},
+					{Name: "cache", MountPath: "/root/.cache"},
+				},
+			}},
+		},
+	}
+	cases := []struct {
+		name        string
+		w           Workload
+		specLocator string
+	}{
+		{
+			name: "Job",
+			w: Workload{
+				Kind:   WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+				Object: &batchv1.Job{Spec: batchv1.JobSpec{Template: podTemplate}},
+			},
+			specLocator: "spec.template.spec",
+		},
+		{
+			name: "CronJob",
+			w: Workload{
+				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+				Object: &batchv1.CronJob{Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: podTemplate}},
+				}},
+			},
+			specLocator: "spec.jobTemplate.spec.template.spec",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The scrapers the manager wires for batch kinds, in its order.
+			got, err := NewMultiScraper(NewTrainingSpecScraper(), NewEvalSpecScraper()).
+				Scrape(context.Background(), tc.w, nil)
+			if err != nil {
+				t.Fatalf("Scrape failed: %v", err)
+			}
+			if got.Category != CategoryEval {
+				t.Fatalf("Category = %q, want %q", got.Category, CategoryEval)
+			}
+			want := map[string]string{
+				tc.specLocator + ".containers[0].volumeMounts[eval-set]": "/data",
+				tc.specLocator + ".containers[0].volumeMounts[dataset]":  "/mnt/benchmarks",
+			}
+			for _, c := range got.Components {
+				if c.Type != ComponentData {
+					continue
+				}
+				path, ok := want[c.Evidence.Locator]
+				if !ok {
+					t.Errorf("unexpected data component %q at %q", c.Name, c.Evidence.Locator)
+					continue
+				}
+				if c.Evidence.Source != SourceVolumeSource || c.Confidence != ConfidenceInferred || c.Properties["dataset.path"] != path {
+					t.Errorf("data component at %q = %+v, want source %q, confidence %q, dataset.path %q",
+						c.Evidence.Locator, c, SourceVolumeSource, ConfidenceInferred, path)
+				}
+				delete(want, c.Evidence.Locator)
+			}
+			for loc := range want {
+				t.Errorf("missing data component at %q", loc)
+			}
+		})
+	}
+}
+
+// A job that is not an evaluation still yields nothing from eval.spec,
+// dataset mounts or not.
+func TestEvalSpecScraper_DatasetMountsAloneAreNotAnEvaluation(t *testing.T) {
+	w := Workload{
+		Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+		Object: &batchv1.Job{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:         "etl",
+				Image:        "busybox:1.36",
+				VolumeMounts: []corev1.VolumeMount{{Name: "dataset", MountPath: "/data"}},
+			}}},
+		}}},
+	}
+	got, err := NewMultiScraper(NewTrainingSpecScraper(), NewEvalSpecScraper()).
+		Scrape(context.Background(), w, nil)
+	if err != nil {
+		t.Fatalf("Scrape failed: %v", err)
+	}
+	if got.Confidence != ConfidenceUnresolved || got.Category != "" || len(got.Components) != 0 {
+		t.Errorf("got confidence %q, category %q, %d components; want unresolved, no category, none",
+			got.Confidence, got.Category, len(got.Components))
+	}
+}
