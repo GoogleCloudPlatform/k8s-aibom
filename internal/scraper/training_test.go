@@ -33,6 +33,7 @@ func TestTrainingSpecScraper_HandlesKind(t *testing.T) {
 		want bool
 	}{
 		{WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"}, true},
+		{WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"}, true},
 		{WorkloadKind{Group: "kubeflow.org", Version: "v1", Kind: "PyTorchJob"}, true},
 		{WorkloadKind{Group: "ray.io", Version: "v1", Kind: "RayJob"}, true},
 		{WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, false},
@@ -221,6 +222,84 @@ func TestTrainingSpecScraper_Scrape(t *testing.T) {
 				}
 				if !found {
 					t.Errorf("expected component not found: %+v", wantComp)
+				}
+			}
+		})
+	}
+}
+
+// A CronJob's Jobs roll up into the CronJob's document (Design 005), so a
+// scheduled training run is reported only if training.spec reads the
+// CronJob's job template. It used to skip CronJobs, which left the
+// document unresolved and the run with no AIBOM at all. Locators name the
+// CronJob's pod spec path; a Job's are unchanged.
+func TestTrainingSpecScraper_CronJob(t *testing.T) {
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "setup", Image: "busybox:1.36"},
+				{
+					Name:         "trainer",
+					Image:        "pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime",
+					Env:          []corev1.EnvVar{{Name: "WANDB_API_KEY", Value: "secret-wandb-key"}},
+					VolumeMounts: []corev1.VolumeMount{{Name: "training-data", MountPath: "/data"}},
+				},
+			},
+		},
+	}
+	cases := []struct {
+		name        string
+		w           Workload
+		specLocator string
+	}{
+		{
+			name: "CronJob",
+			w: Workload{
+				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+				Object: &batchv1.CronJob{Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: podTemplate}},
+				}},
+			},
+			specLocator: "spec.jobTemplate.spec.template.spec",
+		},
+		{
+			name: "Job",
+			w: Workload{
+				Kind:   WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+				Object: &batchv1.Job{Spec: batchv1.JobSpec{Template: podTemplate}},
+			},
+			specLocator: "spec.template.spec",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The scrapers the manager wires for batch kinds, in its order.
+			got, err := NewMultiScraper(NewTrainingSpecScraper(), NewEvalSpecScraper()).
+				Scrape(context.Background(), tc.w, nil)
+			if err != nil {
+				t.Fatalf("Scrape failed: %v", err)
+			}
+			if got.Confidence != ConfidenceInferred || got.Category != CategoryTraining {
+				t.Fatalf("got confidence %q, category %q; want %q, %q",
+					got.Confidence, got.Category, ConfidenceInferred, CategoryTraining)
+			}
+			want := map[string]Component{
+				tc.specLocator + ".containers[1].image":                       {Type: ComponentApplication, Name: "pytorch", Evidence: Evidence{Source: SourceImagePattern}},
+				tc.specLocator + ".containers[1].env[WANDB_API_KEY]":          {Type: ComponentApplication, Name: "wandb", Evidence: Evidence{Source: SourceEnvVarNamePresent}},
+				tc.specLocator + ".containers[1].volumeMounts[training-data]": {Type: ComponentData, Name: "training-data", Evidence: Evidence{Source: SourceVolumeSource}},
+			}
+			if len(got.Components) != len(want) {
+				t.Errorf("len(Components) = %d, want %d: %+v", len(got.Components), len(want), got.Components)
+			}
+			for _, c := range got.Components {
+				w, ok := want[c.Evidence.Locator]
+				if !ok {
+					t.Errorf("unexpected component %s %q at %q", c.Type, c.Name, c.Evidence.Locator)
+					continue
+				}
+				if c.Type != w.Type || c.Name != w.Name || c.Evidence.Source != w.Evidence.Source {
+					t.Errorf("component at %q = %s %q (%s), want %s %q (%s)",
+						c.Evidence.Locator, c.Type, c.Name, c.Evidence.Source, w.Type, w.Name, w.Evidence.Source)
 				}
 			}
 		})
