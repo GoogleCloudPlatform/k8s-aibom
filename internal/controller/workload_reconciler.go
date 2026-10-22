@@ -314,7 +314,9 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				"workload_name", req.Workload.Name,
 				"input_hash", inputHash[:12],
 			)
+			prevErrors := existing.Status.ConsecutiveErrors
 			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
+			recordExtractionErrors(&existing.Status, prevErrors, inputs.Errors, snap.StaleThresholdReconciles)
 			if err := r.Status().Update(ctx, &existing); err != nil {
 				if apierrors.IsConflict(err) {
 					return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
@@ -404,17 +406,6 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 
 	// Phase 14: extraction errors and Stale wiring
-	if len(inputs.Errors) > 0 {
-		status.ConsecutiveErrors = existing.Status.ConsecutiveErrors + 1
-	} else {
-		status.ConsecutiveErrors = 0
-	}
-
-	staleThreshold := snap.StaleThresholdReconciles
-	if staleThreshold <= 0 {
-		staleThreshold = config.DefaultStaleThresholdReconciles
-	}
-
 	for _, e := range inputs.Errors {
 		source := "unknown"
 		if extErr, ok := e.(*scraper.ExtractionError); ok {
@@ -422,28 +413,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		}
 		metrics.ScraperExtractionErrors.WithLabelValues(r.Scraper.Name(), source).Inc()
 	}
-
-	if status.ConsecutiveErrors >= staleThreshold {
-		for i, c := range status.Conditions {
-			if c.Type == aibomv1beta1.ConditionStale {
-				status.Conditions[i].Status = metav1.ConditionTrue
-				status.Conditions[i].Reason = "ExtractionErrorsPersistent"
-
-				var sources []string
-				for _, e := range inputs.Errors {
-					if extErr, ok := e.(*scraper.ExtractionError); ok {
-						sources = append(sources, string(extErr.EvidenceSource))
-					}
-				}
-				if len(sources) > 0 {
-					status.Conditions[i].Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles; sources: %s", status.ConsecutiveErrors, strings.Join(sources, ", "))
-				} else {
-					status.Conditions[i].Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles", status.ConsecutiveErrors)
-				}
-				break
-			}
-		}
-	}
+	recordExtractionErrors(&status, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
 
 	// CreateOrUpdate the AIBOM with owner reference, then update status.
 	aibom := &aibomv1beta1.AIBOM{
@@ -490,6 +460,58 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{RequeueAfter: SinkRetryRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// reasonExtractionErrorsPersistent is the Stale reason
+// recordExtractionErrors sets.
+const reasonExtractionErrorsPersistent = "ExtractionErrorsPersistent"
+
+// recordExtractionErrors counts this reconcile's extraction errors into
+// status.ConsecutiveErrors (prev is the count the AIBOM already
+// carries) and sets Stale=True once the count reaches threshold. It
+// runs on the full path and on the dedup fast path: extraction errors
+// are not part of the input hash, so a workload whose unchanged spec
+// keeps producing the same errors takes the fast path from its second
+// reconcile on and must still be counted there. The fast path keeps the
+// previous conditions, so a Stale this function set is cleared here
+// once the errors are gone.
+func recordExtractionErrors(status *aibomv1beta1.AIBOMStatus, prev int32, errs []error, threshold int32) {
+	if threshold <= 0 {
+		threshold = config.DefaultStaleThresholdReconciles
+	}
+	stale := apimeta.FindStatusCondition(status.Conditions, aibomv1beta1.ConditionStale)
+	transition := func(to metav1.ConditionStatus) {
+		if stale.Status != to && status.LastReconciled != nil {
+			stale.LastTransitionTime = *status.LastReconciled
+		}
+		stale.Status = to
+	}
+	if len(errs) == 0 {
+		status.ConsecutiveErrors = 0
+		if stale != nil && stale.Reason == reasonExtractionErrorsPersistent {
+			transition(metav1.ConditionFalse)
+			stale.Reason = aibomv1beta1.ReasonBOMGenerated
+			stale.Message = "controller reconciled this AIBOM during the current cycle"
+		}
+		return
+	}
+	status.ConsecutiveErrors = prev + 1
+	if status.ConsecutiveErrors < threshold || stale == nil {
+		return
+	}
+	transition(metav1.ConditionTrue)
+	stale.Reason = reasonExtractionErrorsPersistent
+	var sources []string
+	for _, e := range errs {
+		if extErr, ok := e.(*scraper.ExtractionError); ok {
+			sources = append(sources, string(extErr.EvidenceSource))
+		}
+	}
+	if len(sources) > 0 {
+		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles; sources: %s", status.ConsecutiveErrors, strings.Join(sources, ", "))
+	} else {
+		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles", status.ConsecutiveErrors)
+	}
 }
 
 // persistFailureStatus best-effort flips Ready=False (with reason and

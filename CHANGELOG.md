@@ -94,6 +94,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   error, followed by `(retries stopped: context deadline exceeded)`.
   Retry counts and backoffs are unchanged.
 
+- **`Stale` reaches `staleThresholdReconciles` for an unchanged
+  workload** (#223). Extraction errors are not part of the input hash,
+  so from its second reconcile on a workload whose spec kept producing
+  the same errors took the dedup fast path, which skipped the error
+  count: `status.consecutiveErrors` stayed at 1 and `Stale` never
+  became `True`. The fast path now counts extraction errors like the
+  full path, and clears the `ExtractionErrorsPersistent` `Stale` once
+  the errors are gone. Documents and input hashes are unchanged.
+
 ## [1.6.1] - 2026-10-21
 
 Patch release: four defects found in v1.6.0 by community review in the
