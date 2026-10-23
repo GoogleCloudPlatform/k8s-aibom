@@ -75,6 +75,18 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"find", "--digest", "sha256:"}, "--digest"},
 		{[]string{"view"}, "view requires exactly one AIBOM name"},
 		{[]string{"verify", "a", "b"}, "verify requires exactly one AIBOM name"},
+		// An argument the subcommand does not use is an error, not
+		// silently dropped: `find vllm` used to list every AIBOM, and
+		// `view NAME -A` to send a cluster-scoped GET that 404s.
+		{[]string{"find", "vllm"}, `find takes no positional arguments, got "vllm"`},
+		{[]string{"find", "--runtime", "vllm", "extra"}, `find takes no positional arguments, got "extra"`},
+		{[]string{"summary", "prod-jobs"}, `summary takes no positional arguments, got "prod-jobs"`},
+		{[]string{"summary", "--runtime", "vllm"}, "--runtime does not apply to summary"},
+		{[]string{"summary", "--raw"}, "--raw does not apply to summary"},
+		{[]string{"view", "my-aibom", "-A"}, "-A does not apply to view"},
+		{[]string{"verify", "-A", "my-aibom"}, "-A does not apply to verify"},
+		{[]string{"verify", "my-aibom", "--raw"}, "--raw does not apply to verify"},
+		{[]string{"view", "my-aibom", "--model", "Qwen"}, "--model does not apply to view"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -87,8 +99,17 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 // fails there, as before.
 func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 	withoutCluster(t)
-	err := run([]string{"summary"})
-	if err == nil || !strings.Contains(err.Error(), "no configuration has been provided") {
-		t.Errorf("run(summary) = %v, want the kubeconfig error", err)
+	for _, args := range [][]string{
+		{"summary"},
+		{"summary", "-A"},
+		{"find", "-A", "--runtime", "vllm", "--signed", "verified"},
+		{"find", "-n", "prod-jobs", "--model=Qwen", "--image", "vllm", "--digest", "sha256:abc"},
+		{"view", "my-aibom", "-n", "prod-jobs", "--raw"},
+		{"verify", "-n", "prod-jobs", "my-aibom"},
+	} {
+		err := run(args)
+		if err == nil || !strings.Contains(err.Error(), "no configuration has been provided") {
+			t.Errorf("run(%q) = %v, want the kubeconfig error", args, err)
+		}
 	}
 }

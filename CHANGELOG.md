@@ -66,6 +66,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom` rejects arguments a subcommand does not use**
+  (#235). `kubectl aibom find vllm` listed every AIBOM unfiltered,
+  `summary prod-jobs` summarized the current namespace instead of
+  `prod-jobs`, `summary --runtime vllm` ignored the filter, and `view
+  NAME -A` sent a cluster-scoped GET that came back 404. These are now
+  argument errors, reported before the kubeconfig is loaded, with a
+  hint (`filters are flags, e.g. --runtime vllm`). `-n`, `--kubeconfig`
+  and `--context` still apply to every subcommand.
+
 - **AIBOM conditions keep their `lastTransitionTime` when their status
   does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
   `SinkFailed` and `Stale` with the reconcile time every time, so while
