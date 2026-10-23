@@ -414,6 +414,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		metrics.ScraperExtractionErrors.WithLabelValues(r.Scraper.Name(), source).Inc()
 	}
 	recordExtractionErrors(&status, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
+	keepTransitionTimes(status.Conditions, existing.Status.Conditions)
 
 	// CreateOrUpdate the AIBOM with owner reference, then update status.
 	aibom := &aibomv1beta1.AIBOM{
@@ -511,6 +512,23 @@ func recordExtractionErrors(status *aibomv1beta1.AIBOMStatus, prev int32, errs [
 		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles; sources: %s", status.ConsecutiveErrors, strings.Join(sources, ", "))
 	} else {
 		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles", status.ConsecutiveErrors)
+	}
+}
+
+// keepTransitionTimes carries each condition's LastTransitionTime over
+// from prev when its status did not change. BuildStatus stamps every
+// condition with the reconcile time; without this a full rebuild (a
+// spec change, or a sink retry every SinkRetryRequeueAfter) would move
+// lastTransitionTime although nothing transitioned, so "SinkFailed has
+// been True since" or "Ready since" could not be read from the status.
+// The Kubernetes convention, which apimeta.SetStatusCondition follows
+// on the failure path and the fast path keeps by copying prev, is that
+// lastTransitionTime moves only when the status does.
+func keepTransitionTimes(conds, prev []metav1.Condition) {
+	for i := range conds {
+		if p := apimeta.FindStatusCondition(prev, conds[i].Type); p != nil && p.Status == conds[i].Status {
+			conds[i].LastTransitionTime = p.LastTransitionTime
+		}
 	}
 }
 
