@@ -64,6 +64,18 @@ All notable changes to k8s-aibom are documented here. The format follows
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+### Fixed
+
+- **AIBOM conditions keep their `lastTransitionTime` when their status
+  does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
+  `SinkFailed` and `Stale` with the reconcile time every time, so while
+  a sink failed and was retried every minute, `SinkFailed=True` always
+  looked less than a minute old and "failing since" could not be read
+  from the status. The full path now keeps the previous time for a
+  condition whose status is the same, as the dedup fast path and the
+  scrape/build failure path already did; a condition that flips still
+  gets the reconcile time.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
