@@ -46,6 +46,13 @@ progress, paused, or failed), the BOM reports the **running** digest, not
 anything derived from the spec. The BOM describes what is actually
 running.
 
+When the workload's pods report different digests for the same container
+(a rollout in progress, or a moving tag such as `:latest` pulled at
+different times), the BOM reports the digest the most pods run; a tie
+goes to the lowest digest. The choice does not depend on the order the
+pods are listed in, so the document and its input hash stay the same
+from one reconcile to the next while the set of running digests does.
+
 ## KServe vs. inference-spec: confidence semantics
 
 The project ships two inference-shaped scrapers with deliberately

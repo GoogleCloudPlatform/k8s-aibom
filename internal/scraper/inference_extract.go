@@ -134,7 +134,13 @@ func parseImageDigest(imageID string) string {
 //     container name and extract the digest from imageID. The evidence
 //     source is SourcePodStatus. The pod status describes what is
 //     ACTUALLY RUNNING, which may differ from the spec during a rollout —
-//     the BOM intentionally reports the running digest.
+//     the BOM intentionally reports the running digest. When pods
+//     report different digests for the container (a rollout in
+//     progress, or a moving tag such as :latest pulled at different
+//     times), the digest the most pods report wins, and a tie goes to
+//     the lowest digest. The pods come from the informer cache in no
+//     fixed order, so taking the first match would change the digest,
+//     and with it the input hash, from one reconcile to the next.
 //  3. If nothing resolves, return ("", "") and the caller marks the
 //     component ConfidenceUnresolved.
 //
@@ -145,6 +151,7 @@ func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, 
 	if d != "" {
 		return d, SourceImageReference
 	}
+	counts := map[string]int{}
 	for _, pod := range pods {
 		statuses := pod.Status.ContainerStatuses
 		if init {
@@ -171,11 +178,20 @@ func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, 
 				}
 			}
 			if d := parseImageDigest(cs.ImageID); d != "" {
-				return d, SourcePodStatus
+				counts[d]++
 			}
 		}
 	}
-	return "", ""
+	best := ""
+	for d, n := range counts {
+		if best == "" || n > counts[best] || (n == counts[best] && d < best) {
+			best = d
+		}
+	}
+	if best == "" {
+		return "", ""
+	}
+	return best, SourcePodStatus
 }
 
 // normalizeImageName equates the forms a registry-default image name
