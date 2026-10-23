@@ -66,6 +66,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **AIBOM conditions keep their `lastTransitionTime` when their status
+  does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
+  `SinkFailed` and `Stale` with the reconcile time every time, so while
+  a sink failed and was retried every minute, `SinkFailed=True` always
+  looked less than a minute old and "failing since" could not be read
+  from the status. The full path now keeps the previous time for a
+  condition whose status is the same, as the dedup fast path and the
+  scrape/build failure path already did; a condition that flips still
+  gets the reconcile time.
+
 - **A dataset mount is reported once when a Job matches both
   `training.spec` and `eval.spec`** (#232). Both scrapers report
   dataset mounts since #218, and the multi-scraper appended their
