@@ -30,6 +30,7 @@ func (m *MultiScraper) Name() string {
 
 func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
 	var finalInputs *BOMInputs
+	merged := false
 
 	for _, s := range m.scrapers {
 		if !s.HandlesKind(w.Kind) {
@@ -43,6 +44,7 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 			if finalInputs == nil {
 				finalInputs = inputs
 			} else {
+				merged = true
 				finalInputs.Components = append(finalInputs.Components, inputs.Components...)
 				finalInputs.Services = append(finalInputs.Services, inputs.Services...)
 				finalInputs.Provenance = append(finalInputs.Provenance, inputs.Provenance...)
@@ -67,6 +69,15 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		}, nil
 	}
 
+	if merged {
+		// Scrapers can report the same field: training.spec and
+		// eval.spec share datasetMountComponents, so a Job both match
+		// (an lm-eval run logging to W&B) would list each dataset mount
+		// twice. Deduplicate keys on type, name, version, source and
+		// locator, so it drops only those copies. A single scraper's
+		// result is returned as it was.
+		finalInputs.Deduplicate()
+	}
 	return finalInputs, nil
 }
 

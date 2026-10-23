@@ -321,3 +321,69 @@ func TestEvalSpecScraper_DatasetMountsAloneAreNotAnEvaluation(t *testing.T) {
 			got.Confidence, got.Category, len(got.Components))
 	}
 }
+
+// A job both training.spec and eval.spec match (an lm-eval run that
+// logs to Weights & Biases) gets each dataset mount once, not once per
+// scraper, and keeps both scrapers' own components.
+func TestMultiScraper_DatasetMountReportedOnceWhenTrainingAndEvalMatch(t *testing.T) {
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:         "evaluator",
+				Image:        "eleutherai/lm-eval:v0.4.0",
+				Env:          []corev1.EnvVar{{Name: "WANDB_API_KEY", Value: "redacted"}},
+				VolumeMounts: []corev1.VolumeMount{{Name: "eval-set", MountPath: "/data"}},
+			}},
+		},
+	}
+	cases := []struct {
+		name        string
+		w           Workload
+		specLocator string
+	}{
+		{
+			name: "Job",
+			w: Workload{
+				Kind:   WorkloadKind{Group: "batch", Version: "v1", Kind: "Job"},
+				Object: &batchv1.Job{Spec: batchv1.JobSpec{Template: podTemplate}},
+			},
+			specLocator: "spec.template.spec",
+		},
+		{
+			name: "CronJob",
+			w: Workload{
+				Kind: WorkloadKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+				Object: &batchv1.CronJob{Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: podTemplate}},
+				}},
+			},
+			specLocator: "spec.jobTemplate.spec.template.spec",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NewMultiScraper(NewTrainingSpecScraper(), NewEvalSpecScraper()).
+				Scrape(context.Background(), tc.w, nil)
+			if err != nil {
+				t.Fatalf("Scrape failed: %v", err)
+			}
+			mountLocator := tc.specLocator + ".containers[0].volumeMounts[eval-set]"
+			var mounts int
+			names := map[string]bool{}
+			for _, c := range got.Components {
+				names[c.Name] = true
+				if c.Type == ComponentData && c.Evidence.Locator == mountLocator {
+					mounts++
+				}
+			}
+			if mounts != 1 {
+				t.Errorf("data components at %q = %d, want 1", mountLocator, mounts)
+			}
+			for _, want := range []string{"wandb", "lm-eval"} {
+				if !names[want] {
+					t.Errorf("missing %q component; got %+v", want, got.Components)
+				}
+			}
+		})
+	}
+}
