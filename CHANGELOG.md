@@ -76,6 +76,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   scrape/build failure path already did; a condition that flips still
   gets the reconcile time.
 
+- **A dataset mount is reported once when a Job matches both
+  `training.spec` and `eval.spec`** (#232). Both scrapers report
+  dataset mounts since #218, and the multi-scraper appended their
+  results without deduplicating, so an lm-eval Job that logs to
+  Weights & Biases (`WANDB_API_KEY`) listed each mount twice. Merged
+  results are now deduplicated on type, name, version, evidence source
+  and locator; a single scraper's result is unchanged.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
