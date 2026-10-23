@@ -311,6 +311,53 @@ func TestInferenceSpecScraper_RunningDigestDiffersFromSpec(t *testing.T) {
 	t.Fatal("missing container component")
 }
 
+// The same pods listed in a different order must give the same
+// document and input hash; otherwise every reconcile of a workload
+// whose replicas run different digests re-sends the document.
+func TestInferenceSpecScraper_InputHashDoesNotDependOnPodOrder(t *testing.T) {
+	s := newScraper()
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "vllm", Namespace: "ns"},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "vllm", Image: "vllm/vllm-openai:latest"},
+					},
+				},
+			},
+		},
+	}
+	pod := func(name, digest string) corev1.Pod {
+		p := corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "vllm", Image: "docker.io/vllm/vllm-openai:latest", ImageID: "docker.io/vllm/vllm-openai@" + digest},
+		}}}
+		p.Name = name
+		return p
+	}
+	a := pod("vllm-a", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	b := pod("vllm-b", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	var hashes []string
+	for _, pods := range [][]corev1.Pod{{a, b}, {b, a}} {
+		got, err := s.Scrape(context.Background(), Workload{
+			Kind:   WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			Object: dep,
+			Pods:   pods,
+		}, testConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+		h, err := HashBOMInputs(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hashes = append(hashes, h)
+	}
+	if hashes[0] != hashes[1] {
+		t.Errorf("input hash depends on pod order: %s (a, b) vs %s (b, a)", hashes[0], hashes[1])
+	}
+}
+
 func TestInferenceSpecScraper_DigestFromSpec(t *testing.T) {
 	s := newScraper()
 	dep := &appsv1.Deployment{

@@ -84,6 +84,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   results are now deduplicated on type, name, version, evidence source
   and locator; a single scraper's result is unchanged.
 
+- **A container's digest no longer depends on the order pods are
+  listed in** (#236). When a workload's replicas ran different digests
+  (a moving tag such as `:latest`, or a rollout in progress), the
+  digest came from whichever matching pod the informer cache listed
+  first, which changes between calls. The document and its input hash
+  could change on every reconcile and be re-sent to every sink. The
+  digest the most pods report now wins, and a tie goes to the lowest
+  digest. Workloads whose pods all run one digest, and digests pinned
+  in the spec image, are unchanged.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by

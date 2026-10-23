@@ -209,6 +209,39 @@ func TestResolveContainerDigest_PodStatusReflectsRunningNotSpec(t *testing.T) {
 	}
 }
 
+func TestResolveContainerDigest_MixedDigestsDoNotDependOnPodOrder(t *testing.T) {
+	// Replicas can run different digests (a rollout in progress, or a
+	// moving tag such as :latest pulled at different times). The pod
+	// list comes from the informer cache in no fixed order, so the
+	// result must not depend on it: the digest the most pods report
+	// wins, and a tie goes to the lowest digest.
+	low := "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	high := "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	pod := func(name, digest string) corev1.Pod {
+		p := corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "vllm", Image: "vllm/vllm-openai:latest", ImageID: "vllm/vllm-openai@" + digest},
+		}}}
+		p.Name = name
+		return p
+	}
+	for _, tc := range []struct {
+		name string
+		pods []corev1.Pod
+		want string
+	}{
+		{"tie, low first", []corev1.Pod{pod("a", low), pod("b", high)}, low},
+		{"tie, high first", []corev1.Pod{pod("b", high), pod("a", low)}, low},
+		{"most pods win, minority first", []corev1.Pod{pod("a", low), pod("b", high), pod("c", high)}, high},
+		{"most pods win, majority first", []corev1.Pod{pod("b", high), pod("c", high), pod("a", low)}, high},
+		{"most pods win, minority in the middle", []corev1.Pod{pod("b", high), pod("a", low), pod("c", high)}, high},
+	} {
+		d, src := resolveContainerDigest("vllm/vllm-openai:latest", "vllm", tc.pods, false)
+		if d != tc.want || src != SourcePodStatus {
+			t.Errorf("%s: got (%q, %q), want (%q, pod_status)", tc.name, d, src, tc.want)
+		}
+	}
+}
+
 func TestResolveContainerDigest_ForeignImageNameNeverSuppliesDigest(t *testing.T) {
 	// A same-named container running a DIFFERENT image must never
 	// supply this component's digest — the mis-attribution guard.
