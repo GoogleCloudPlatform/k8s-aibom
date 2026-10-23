@@ -132,6 +132,36 @@ Flags:
 	}
 
 	// Argument errors are reported before the kubeconfig is loaded too.
+	// An argument the subcommand does not use is an error rather than
+	// dropped: `find vllm` would list every AIBOM unfiltered, and
+	// `view NAME -A` would send a cluster-scoped GET that 404s.
+	used := map[string]bool{"n": true, "kubeconfig": true, "context": true}
+	switch sub {
+	case "summary":
+		used["A"] = true
+	case "find":
+		for _, name := range []string{"A", "runtime", "model", "image", "digest", "signed"} {
+			used[name] = true
+		}
+	case "view":
+		used["raw"] = true
+	}
+	var unused []string
+	fs.Visit(func(fl *flag.Flag) {
+		if !used[fl.Name] {
+			unused = append(unused, flagName(fl.Name))
+		}
+	})
+	if len(unused) > 0 {
+		return fmt.Errorf("%s does not apply to %s", strings.Join(unused, ", "), sub)
+	}
+	if (sub == "summary" || sub == "find") && len(positional) > 0 {
+		hint := fmt.Sprintf("for a namespace, use -n %s", positional[0])
+		if sub == "find" {
+			hint = fmt.Sprintf("filters are flags, e.g. --runtime %s", positional[0])
+		}
+		return fmt.Errorf("%s takes no positional arguments, got %q (%s)", sub, positional[0], hint)
+	}
 	f := findFilter{runtime: *fRuntime, model: *fModel, image: *fImage, digest: *fDigest, signed: *fSigned}
 	switch sub {
 	case "find":
@@ -223,4 +253,13 @@ Flags:
 		return nil
 	}
 	return nil
+}
+
+// flagName spells a flag the way the usage text does: -n and -A,
+// --runtime and the other long names.
+func flagName(name string) string {
+	if len(name) == 1 {
+		return "-" + name
+	}
+	return "--" + name
 }
