@@ -248,6 +248,22 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 	return true, facts, unavailable, nil
 }
 
+// uniqueStrings returns items without repeats, in first-seen order.
+// One document lists the same image once per container that runs it
+// (an LWS leader and worker template, say), and the summary lists a
+// model once per place it was found (--model and an env var).
+func uniqueStrings(items []string) []string {
+	seen := make(map[string]bool, len(items))
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		if !seen[it] {
+			seen[it] = true
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 // joinTruncated renders up to max items and a +N suffix for the rest;
 // view remains the full record.
 func joinTruncated(items []string, max int) string {
@@ -282,18 +298,10 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 			return v
 		}
 		identities, states := summaryModels(u)
-		images := joinTruncated(facts.images, 2)
+		images := joinTruncated(uniqueStrings(facts.images), 2)
 		if unavailable != "" {
 			images = unavailable
 			unavailableRows = append(unavailableRows, u.GetNamespace()+"/"+u.GetName())
-		}
-		seen := map[string]bool{}
-		var uniqStates []string
-		for _, st := range states {
-			if !seen[st] {
-				seen[st] = true
-				uniqStates = append(uniqStates, st)
-			}
 		}
 		// NAME is the AIBOM object name — what you pass to view/verify
 		// next; KIND comes from the summary.
@@ -302,9 +310,9 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 			orDash(get("status", "summary", "workload", "kind")),
 			u.GetName(),
 			orDash(get("status", "summary", "runtime", "name")),
-			joinTruncated(identities, 2),
+			joinTruncated(uniqueStrings(identities), 2),
 			images,
-			joinTruncated(uniqStates, 3),
+			joinTruncated(uniqueStrings(states), 3),
 			orDash(get("status", "summary", "confidence")),
 		}, "\t"))
 	}

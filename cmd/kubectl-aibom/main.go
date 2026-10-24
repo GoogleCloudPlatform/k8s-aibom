@@ -147,13 +147,27 @@ Flags:
 		used["raw"] = true
 	}
 	var unused []string
+	nsSet := false
 	fs.Visit(func(fl *flag.Flag) {
+		if fl.Name == "n" {
+			nsSet = true
+		}
 		if !used[fl.Name] {
 			unused = append(unused, flagName(fl.Name))
 		}
 	})
 	if len(unused) > 0 {
 		return fmt.Errorf("%s does not apply to %s", strings.Join(unused, ", "), sub)
+	}
+	// -n and -A pick the scope one way or the other (`[-n namespace |
+	// -A]`). With both, -A used to win and -n was dropped, so
+	// `find -A -n prod-jobs` listed every namespace.
+	if *allNS && nsSet {
+		one := *namespace
+		if one == "" {
+			one = "NAMESPACE"
+		}
+		return fmt.Errorf("-n and -A cannot be used together (-n %s for one namespace, -A for all)", one)
 	}
 	if (sub == "summary" || sub == "find") && len(positional) > 0 {
 		hint := fmt.Sprintf("for a namespace, use -n %s", positional[0])

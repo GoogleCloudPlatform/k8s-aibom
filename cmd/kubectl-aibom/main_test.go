@@ -87,6 +87,14 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"verify", "-A", "my-aibom"}, "-A does not apply to verify"},
 		{[]string{"verify", "my-aibom", "--raw"}, "--raw does not apply to verify"},
 		{[]string{"view", "my-aibom", "--model", "Qwen"}, "--model does not apply to view"},
+		// -n and -A together: -A used to win and -n was dropped, so
+		// the command listed every namespace.
+		{[]string{"find", "-A", "-n", "prod-jobs", "--runtime", "vllm"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
+		{[]string{"find", "-n=prod-jobs", "-A"}, "-n and -A cannot be used together"},
+		{[]string{"summary", "-n", "prod-jobs", "-A"}, "-n and -A cannot be used together"},
+		{[]string{"summary", "-A", "-n", ""}, "-n and -A cannot be used together (-n NAMESPACE for one namespace"},
+		// A flag the subcommand does not take is still reported first.
+		{[]string{"view", "my-aibom", "-n", "prod-jobs", "-A"}, "-A does not apply to view"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -103,6 +111,7 @@ func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 		{"summary"},
 		{"summary", "-A"},
 		{"find", "-A", "--runtime", "vllm", "--signed", "verified"},
+		{"find", "-A=false", "-n", "prod-jobs"},
 		{"find", "-n", "prod-jobs", "--model=Qwen", "--image", "vllm", "--digest", "sha256:abc"},
 		{"view", "my-aibom", "-n", "prod-jobs", "--raw"},
 		{"verify", "-n", "prod-jobs", "my-aibom"},
