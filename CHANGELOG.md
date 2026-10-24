@@ -66,6 +66,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom find` and `summary` reject `-n` together with `-A`**
+  (#239). With both, `-A` won and `-n` was dropped, so `find --runtime
+  vllm -A -n prod-jobs` listed matches from every namespace and exited
+  0. The combination is now an argument error, reported before the
+  kubeconfig is loaded: `-n and -A cannot be used together (-n
+  prod-jobs for one namespace, -A for all)`. Either flag alone behaves
+  as before.
+
 - **`kubectl aibom` rejects arguments a subcommand does not use**
   (#235). `kubectl aibom find vllm` listed every AIBOM unfiltered,
   `summary prod-jobs` summarized the current namespace instead of
