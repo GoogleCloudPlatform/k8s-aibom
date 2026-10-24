@@ -149,6 +149,38 @@ func TestFind_NoFilterListsEverythingWithImages(t *testing.T) {
 	}
 }
 
+// A model named by both --model and an env var, and an image shared by
+// an LWS leader and worker template, are listed once each in their
+// columns, as summary already does for MODELS; the +N suffix counts
+// distinct values only.
+func TestFind_ColumnsListEachValueOnce(t *testing.T) {
+	doc := []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
+	 {"type":"container","name":"vllm","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
+	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"lws.role","value":"leader"}]},
+	 {"type":"container","name":"vllm","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
+	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"lws.role","value":"worker"}]},
+	 {"type":"container","name":"envoy","properties":[{"name":"image.reference","value":"envoyproxy/envoy:v1.31.0"}]}
+	]}`)
+	// fixtureAIBOM lists Qwen/Qwen2.5-0.5B-Instruct twice in
+	// status.summary.models (container_arg and env_var).
+	u := fixtureAIBOM(t, doc, false)
+	out, _ := runFindCapture(t, []unstructured.Unstructured{*u}, findFilter{})
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want a header and one row:\n%s", out)
+	}
+	got := strings.Fields(lines[1])
+	if len(got) != 8 {
+		t.Fatalf("want 8 columns, got %q", got)
+	}
+	if models := got[4]; models != "Qwen/Qwen2.5-0.5B-Instruct" {
+		t.Errorf("MODELS = %q, want the identity once", models)
+	}
+	if images := got[5]; images != "vllm/vllm-openai:v0.6.3,envoyproxy/envoy:v1.31.0" {
+		t.Errorf("IMAGES = %q, want each image once and no +N", images)
+	}
+}
+
 // fixtureNoDocument is an AIBOM whose status has not been written yet:
 // the controller creates the object before its status update lands, and
 // a failed status write leaves it that way until the next reconcile.
