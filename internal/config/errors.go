@@ -96,14 +96,11 @@ func (r LoadResult) AggregateMessage() string {
 // share the same auditor-facing precision standard and so tests can
 // assert message shape against a known constructor.
 
-// errSinkMissingTypeBody is emitted when a SinkConfig declares
-// Type=GCS but the GCS field is nil (or Type=Webhook but Webhook is
-// nil). The customer set the discriminator but forgot the body.
 // errWebhookAuthOverCleartext reports a webhook sink that would send
 // a credential over unencrypted http.
 func errWebhookAuthOverCleartext(sinkName string) LoadError {
 	return LoadError{
-		Field: fmt.Sprintf("spec.sinks[name=%s].webhook.url", sinkName),
+		Field: fmt.Sprintf("spec.sinks[name=%s].webhook.endpoint", sinkName),
 		Message: fmt.Sprintf(
 			"Sink %q configures auth with an http:// URL: credentials must not be sent over cleartext. Use https://, or remove auth for an unauthenticated in-cluster receiver.",
 			sinkName,
@@ -111,6 +108,9 @@ func errWebhookAuthOverCleartext(sinkName string) LoadError {
 	}
 }
 
+// errSinkMissingTypeBody is emitted when a SinkConfig declares
+// Type=GCS but the GCS field is nil (or Type=Webhook but Webhook is
+// nil). The customer set the discriminator but forgot the body.
 func errSinkMissingTypeBody(sinkName, sinkType string) LoadError {
 	subfield := strings.ToLower(sinkType)
 	return LoadError{

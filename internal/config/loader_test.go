@@ -634,7 +634,7 @@ func TestLoad_InvalidCR_WebhookAuthOverCleartext(t *testing.T) {
 		t.Fatalf("Errors = %d, want 1: %+v", len(result.Errors), result.Errors)
 	}
 	got := result.Errors[0]
-	if got.Field != "spec.sinks[name=audit-webhook].webhook.url" {
+	if got.Field != "spec.sinks[name=audit-webhook].webhook.endpoint" {
 		t.Errorf("Field = %q", got.Field)
 	}
 	for _, sub := range []string{`"audit-webhook"`, "cleartext", "https://", "remove auth"} {

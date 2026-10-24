@@ -120,6 +120,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   values in first-seen order, and `+N` counts distinct values.
   Filtering is unchanged.
 
+- **The cleartext-credential config error names the real field**
+  (#243). A webhook sink with `auth` and an `http://` endpoint is
+  rejected at config load, and the `ConfigInvalid` message pointed at
+  `spec.sinks[name=X].webhook.url`, a field that does not exist. It
+  now names `spec.sinks[name=X].webhook.endpoint`. The check itself is
+  unchanged.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
