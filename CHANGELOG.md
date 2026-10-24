@@ -66,6 +66,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom find` and `summary` reject `-n` together with `-A`**
+  (#239). With both, `-A` won and `-n` was dropped, so `find --runtime
+  vllm -A -n prod-jobs` listed matches from every namespace and exited
+  0. The combination is now an argument error, reported before the
+  kubeconfig is loaded: `-n and -A cannot be used together (-n
+  prod-jobs for one namespace, -A for all)`. Either flag alone behaves
+  as before.
+
 - **`kubectl aibom` rejects arguments a subcommand does not use**
   (#235). `kubectl aibom find vllm` listed every AIBOM unfiltered,
   `summary prod-jobs` summarized the current namespace instead of
@@ -102,6 +110,22 @@ All notable changes to k8s-aibom are documented here. The format follows
   digest the most pods report now wins, and a tie goes to the lowest
   digest. Workloads whose pods all run one digest, and digests pinned
   in the spec image, are unchanged.
+
+- **`kubectl aibom find` lists each model and image once** (#241). The
+  MODELS and IMAGES columns repeated a value once per place it was
+  found: a LeaderWorkerSet whose leader and worker run the same image
+  showed it twice, and the repeat pushed other images behind the `+N`
+  suffix. A model named by both `--model` and an env var also showed
+  twice, where `summary` shows it once. Both columns now list distinct
+  values in first-seen order, and `+N` counts distinct values.
+  Filtering is unchanged.
+
+- **The cleartext-credential config error names the real field**
+  (#243). A webhook sink with `auth` and an `http://` endpoint is
+  rejected at config load, and the `ConfigInvalid` message pointed at
+  `spec.sinks[name=X].webhook.url`, a field that does not exist. It
+  now names `spec.sinks[name=X].webhook.endpoint`. The check itself is
+  unchanged.
 
 - **`SinkFailed` marks a webhook receiver's body `(truncated)` only
   when text was dropped** (#245). The marker was added to every
