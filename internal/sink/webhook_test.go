@@ -335,6 +335,53 @@ func TestWebhookSink_ErrorMessageRedaction(t *testing.T) {
 	}
 }
 
+// The "...(truncated)" marker must mean the receiver's body was cut,
+// either by the read limit or by the 256-rune cap. A body longer than
+// 256 bytes that still fits after ANSI stripping, or that is 256 runes
+// of multi-byte UTF-8, is shown whole and must not carry the marker.
+func TestWebhookSink_ErrorBodyTruncationMarker(t *testing.T) {
+	ansi := strings.Repeat("\x1b[1m", 253) // 1012 bytes, stripped to nothing
+	cases := []struct {
+		name          string
+		body          string
+		wantText      string
+		wantTruncated bool
+	}{
+		{name: "short ascii", body: "bad request", wantText: "bad request"},
+		{name: "exactly 256 runes", body: strings.Repeat("A", 256), wantText: strings.Repeat("A", 256)},
+		{name: "257 runes", body: strings.Repeat("A", 257), wantText: strings.Repeat("A", 256), wantTruncated: true},
+		{name: "256 two-byte runes", body: strings.Repeat("é", 256), wantText: strings.Repeat("é", 256)},
+		{name: "ansi stripped under the cap", body: strings.Repeat("\x1b[31m", 60) + "bad request", wantText: "bad request"},
+		{name: "exactly the 1024-byte read limit", body: ansi + "bad request!", wantText: "bad request!"},
+		{name: "past the 1024-byte read limit", body: ansi + "bad request!!", wantText: "bad request!", wantTruncated: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			s, err := NewWebhookSink(WebhookSinkConfig{Endpoint: srv.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = s.Emit(context.Background(), newTestWebhookDoc(), newTestWebhookMeta())
+			if err == nil {
+				t.Fatal("expected error on 400")
+			}
+			want := "returned HTTP 400: " + tc.wantText
+			if tc.wantTruncated {
+				want += "...(truncated)"
+			}
+			if !strings.HasSuffix(err.Error(), want) {
+				t.Errorf("error = %q\nwant suffix %q", err.Error(), want)
+			}
+		})
+	}
+}
+
 func TestWebhookSink_ContextCanceled_AbortsRetryLoop(t *testing.T) {
 	// Cancellation during a backoff sleep must abort the retry loop
 	// promptly.

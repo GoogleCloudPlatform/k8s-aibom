@@ -57,6 +57,10 @@ var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]")
 
 const maxErrorBodyBytes = 256
 
+// maxErrorReadBytes is how much of an error response body is read
+// before stripping and capping it to maxErrorBodyBytes.
+const maxErrorReadBytes = 1024
+
 type WebhookSinkConfig struct {
 	Endpoint           string
 	InsecureSkipVerify bool
@@ -273,9 +277,14 @@ func (s *WebhookSink) deliver(ctx context.Context, doc *bom.Document, meta SinkM
 			continue
 		}
 
-		// Read a slightly larger chunk to ensure we have enough runway to strip ANSI codes properly
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		truncated := len(bodyBytes) == 1024
+		// Read a slightly larger chunk to ensure we have enough runway to strip ANSI codes properly.
+		// The one byte past the limit tells a body that was cut from
+		// one that is exactly maxErrorReadBytes long.
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorReadBytes+1))
+		truncated := len(bodyBytes) > maxErrorReadBytes
+		if truncated {
+			bodyBytes = bodyBytes[:maxErrorReadBytes]
+		}
 
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()
@@ -344,8 +353,10 @@ func formatHTTPError(endpoint string, status int, body []byte, networkTruncated 
 		runeTruncated = true
 	}
 
-	truncated := networkTruncated || len(body) > maxErrorBodyBytes || runeTruncated
-	if truncated {
+	// Mark only text that was actually cut. A body over
+	// maxErrorBodyBytes bytes can still be shown whole: multi-byte
+	// runes, or ANSI sequences stripped above.
+	if networkTruncated || runeTruncated {
 		bodyStr += "...(truncated)"
 	}
 
