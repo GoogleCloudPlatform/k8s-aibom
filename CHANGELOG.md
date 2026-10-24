@@ -111,6 +111,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   digest. Workloads whose pods all run one digest, and digests pinned
   in the spec image, are unchanged.
 
+- **`kubectl aibom find` lists each model and image once** (#241). The
+  MODELS and IMAGES columns repeated a value once per place it was
+  found: a LeaderWorkerSet whose leader and worker run the same image
+  showed it twice, and the repeat pushed other images behind the `+N`
+  suffix. A model named by both `--model` and an env var also showed
+  twice, where `summary` shows it once. Both columns now list distinct
+  values in first-seen order, and `+N` counts distinct values.
+  Filtering is unchanged.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
