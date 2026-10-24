@@ -103,6 +103,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   digest. Workloads whose pods all run one digest, and digests pinned
   in the spec image, are unchanged.
 
+- **`SinkFailed` marks a webhook receiver's body `(truncated)` only
+  when text was dropped** (#245). The marker was added to every
+  response body over 256 bytes, counted before ANSI color codes are
+  stripped, so a body shown in full (multi-byte UTF-8, or a short
+  message wrapped in color codes) still read as cut off. A
+  body of exactly 1024 bytes, the read limit, was marked too. The
+  marker now means the read limit was passed or the text was capped
+  at 256 characters.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
