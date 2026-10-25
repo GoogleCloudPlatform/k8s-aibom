@@ -263,102 +263,92 @@ the runner and wait for it to return before anything else.
 | 11 | Discovery failure or webhook outage | unchanged | §3 / A6 | — | `WatchUnhealthy` | kept |
 
 `MarkDisabled` gains a reason (`config`, `crd-removed`) recorded in
-`WatchStatus`; it still returns true only on entry, so each sweep runs
+`WatchStatus` and included in the `WatchDisabled` event message; it
+still returns true only on entry, so each sweep runs
 once. `TrackedKinds` membership follows CRD presence, not health:
 `Remove` only at rows 8–9. After every `Add` or `Remove` the supervisor
 runs one allowlist fan-out, so children reconciled as roots before
 their owner was tracked are absorbed (Design 006 §4), and children of a
 removed owner re-root through `ownerUnresolved` (Design 005).
 
-### A3. Readiness and discovery, one independent unit per candidate
+### A3. Readiness and discovery: one metadata informer
 
-- **Readiness is read, not inferred.** A metadata event or a
-  `RESTMapping` success does not show `Established` or served versions,
-  so every classification is a GET of the full CRD by name through the
-  uncached API reader. CRD reads never pass a conversion webhook.
-- **Startup.** On `Start` (after leader acquisition), each candidate
-  independently GETs its CRD and verifies readiness before its first
-  `apply()`. A slow or failed GET cannot delay other candidates. Ready
-  candidates start through the ordinary supervisor path. A 403,
-  timeout or other non-NotFound error is reported (A6) and retried;
-  it never authorizes a runner or triggers cleanup.
-  `RegisterThirdPartyWatches` always adds the supervisor; its former
-  `RESTMapping` presence check becomes diagnostic only, never a
-  substitute for `Established=True` and a served GVK. `TrackedKinds`
-  membership is added after confirmed readiness, before runner start.
-  Absent candidates do not cause a health entry, event or sweep.
-- **Late changes.** Each candidate has its own discovery unit: a
-  dedicated cache with one metadata-only informer on
-  `customresourcedefinitions`, field selector `metadata.name=<CRD>`, no
-  resync, `managedFields` and annotations stripped. It has its own
-  goroutine that re-reads the CRD on every event (status-only updates
-  included; Established is one). Reads coalesce, a failed read is
-  retried with backoff until it succeeds, and there is no timer
-  otherwise.
-- **No shared controller.** A controller-runtime controller starts no
-  workers until every one of its sources has synced
-  (`startEventSourcesAndQueueLocked` waits on all of them), so one
-  unmanaged controller over six caches would let one failing informer
-  block all six. Units share nothing but the supervisor's apply
-  goroutine.
-- **Isolation from the manager.** No discovery informer is on the
-  manager cache, and readiness does not consider them.
+- **Readiness is read, not inferred.** An informer event or
+  `RESTMapping` success cannot prove `Established=True` or served
+  versions, so each classification GETs the full CRD by compiled
+  name through the uncached API reader and verifies A1's conditions.
+  CRD reads do not involve conversion webhooks.
+- **Startup.** On `Start`, after leader acquisition, independently
+  GET each candidate before its first `apply()`. A Ready candidate
+  starts through the existing supervisor path. A missing candidate
+  has no runner, health entry, event or sweep. Other GET failures
+  (including 403 and timeout) are recorded (A6) and retried, never
+  interpreted as Ready or Removed. `RegisterThirdPartyWatches`
+  always registers the supervisor, even with no CRDs present. Its
+  former `RESTMapping` check is not evidence of CRD readiness.
+  `TrackedKinds` is updated only after readiness is confirmed.
+- **One shared metadata-only informer.** Inside the leader's
+  `WatchSupervisor`, outside the manager cache, watch
+  `apiextensions.k8s.io/v1 CustomResourceDefinition` metadata using
+  one informer, with no resync and no CRD writes. Its LIST/WATCH
+  includes CRD metadata across the cluster, but handlers filter by
+  the six exact compiled CRD names. Updates (including status-only
+  Established changes) and DELETE events enqueue matching names;
+  unrelated CRDs are ignored. No six per-name informer caches and
+  no controller-runtime multi-source controller. Drop unneeded
+  `managedFields` and annotations where supported.
+- **Independent candidate reconciliation.** Once this informer
+  synchronizes, enqueue every candidate name once. Per-candidate
+  queues coalesce repeated events, re-read the full CRD by name and
+  retry failed GETs with independent backoff; one candidate's
+  error or slow GET never prevents other candidates being processed.
+  Only the supervisor's serialized `apply()` loop mutates runner,
+  health and cleanup state. No periodic discovery polling.
+- **Isolation.** One shared informer LIST/WATCH/sync failure is
+  discovery-wide and reported under `CRDDiscovery` (A6); already
+  running isolated watches and manager readiness remain unaffected.
+  Missing events and informer errors never imply a CRD deletion.
 
-### A4. RESTMapper and `WatchStarted`
+### A4. Existing dynamic RESTMapper and `WatchStarted`
 
-Facts in the pinned versions (controller-runtime v0.24.0, client-go and
-apimachinery v0.36.0):
+The pinned controller-runtime v0.24.0 default mapper
+(`apiutil.NewDynamicRESTMapper`) already handles late-installed
+kinds. `RESTMapping`, `KindFor`, `ResourceFor` and related
+operations call `addKnownGroupAndReload` on NoMatch, which
+re-fetches `/apis/<group>/<version>` and rebuilds the mapper.
+This includes a newly served kind in a group/version already
+mapped for another kind (e.g. DGD after DCD).
 
-- The manager's default mapper (`apiutil.NewDynamicRESTMapper`) re-fetches
-  `/apis/<group>/<version>` only on a miss. It keeps successful
-  mappings, has no reset, and does not implement
-  `meta.ResettableRESTMapper`.
-- The controller-runtime client separately caches each GVK's
-  successful mapping (`clientRestResources.resourceByType`) with no
-  invalidation API. The manager client, API reader and every reconciler
-  use it.
-- No pinned API invalidates one group.
+After full CRD readiness is confirmed, the supervisor calls
+`RESTMapping(GK, version)` before starting a candidate through
+the existing `apply()` path. If it returns NoMatch shortly after
+`Established=True`, treat that as discovery lag: preserve the
+previous CRD state and retry with backoff; mark Unhealthy only if
+it persists past `CacheSyncTimeout` (2 minutes).
 
-Decision:
+**No custom `ResettableRESTMapper` wrapper, no `MapperProvider`
+change in `cmd/manager`, and no reset at transitions.** Existing
+clients may cache a successful GVK mapping; A1 verifies the exact
+compiled CRD name, kind, served version and namespaced scope so
+that mapping remains correct for Ready. For Unservable or Removed,
+stale mapping errors alone never authorize destructive cleanup.
 
-1. `cmd/manager` sets `MapperProvider` to a small wrapper that
-   implements `meta.ResettableRESTMapper` over the dynamic mapper.
-   `Reset` builds a fresh dynamic mapper and swaps it in under a lock.
-   Calls already in flight finish on the old one. The manager cache,
-   client and per-kind caches hold the wrapper, so every later lookup
-   uses fresh discovery.
-2. The supervisor calls `Reset` at every transition into or out of
-   `Ready` (rows 2, 3, 5, 6, 8, 9) and then requires
-   `RESTMapping(GK, version)` to succeed before starting. A NoMatch just
-   after Established is discovery lag: the candidate's state is left
-   unchanged and the read is retried; only after `CacheSyncTimeout`
-   (2 min) is the kind marked Unhealthy. The reset is mapper-wide
-   because no per-group reset exists. It re-runs aggregated discovery
-   lazily, and only at these rare transitions.
-3. Mappings already cached by clients are **not** refreshed, and the
-   design does not rely on that. The supervisor's own probe uses a
-   client built at each runner start, so it resolves through the reset
-   mapper. For the other clients, a cached mapping stays correct while
-   the CRD is Ready: the CRD name is `<plural>.<group>`, compiled in,
-   and Ready requires the compiled kind, version and `Namespaced` scope,
-   which together are the whole mapping. While a CRD is `Unservable` or
-   `Removed` a stale mapping only yields 404s, which no destructive path
-   consumes (A1).
-
-`WatchStarted` (new, Normal) replaces `WatchRecovered` on first sync
-only for a kind installed or recreated after supervisor startup (row 2).
-It is never emitted before informer sync. If the runner stops first,
-neither event fires. Kinds already present at supervisor startup,
-allowlist re-enables (row 10) and recovery (row 6) still emit
-`WatchRecovered`, preserving the pre-existing event semantics.
+`WatchStarted` (new, Normal) replaces `WatchRecovered` on the
+first successful informer sync only for a kind installed or
+recreated *after supervisor startup* (row 2). If its runner
+stops before sync, neither event fires. Kinds already present at
+startup, allowlist re-enables (row 10) and recovery (row 6)
+retain their `WatchRecovered` semantics.
 
 ### A5. Leadership and concurrency
 
-- `NeedLeaderElection()` stays true. Discovery units, runners, sweeps
-  and fan-outs are created inside `Start`, so a standby reads no CRDs
+- `NeedLeaderElection()` stays true. The shared discovery informer, per-candidate
+  reconciliation workers, runners, sweeps and fan-outs are created inside `Start`, so a standby reads no CRDs
   and sweeps nothing. Losing the lease ends `mgr.Start`.
-- CRD state is written only by discovery units. Runners, health and
-  sweeps change only in `apply()`, from one snapshot per pass.
+- Per-candidate discovery workers submit results for serialized
+  processing. Runners, health and sweeps change only in `apply()`,
+  from one snapshot per pass; a blocked candidate GET cannot delay
+  another candidate.
 - A runner starts only if none is running and is awaited before
   removal, so duplicate runners cannot exist. Row 9's ordering keeps a
   sweep for an old UID from deleting a new generation's documents.
@@ -370,7 +360,8 @@ allowlist re-enables (row 10) and recovery (row 6) still emit
   `ctx` is done. The supervisor calls it from one coalescing goroutine
   under its root context and wait group. Supervised kinds without a
   running runner are skipped.
-- On shutdown, cancelling the root context stops everything; `apply()`
+- On shutdown, cancelling the root context stops the shared informer,
+  candidate workers and all other supervisor goroutines; `apply()`
   starts no sweep once it is cancelled; `wg.Wait()` covers all new
   goroutines (checked by the harness's goleak).
 
@@ -381,8 +372,9 @@ marker, in `config/rbac/role.yaml`, and in the Helm ClusterRole with
 this comment:
 
 ```yaml
-# CRD discovery (Design 004 amendment, #226): metadata-only watches on
-# the six candidate third-party CRD names and a GET of each on change,
+# CRD discovery (Design 004 amendment, #226): one metadata-only CRD
+# informer whose event handlers filter six candidate names; GET each
+# candidate on change,
 # to read Established and served versions. Read-only; never writes a CRD.
 - apiGroups: ["apiextensions.k8s.io"]
   resources: ["customresourcedefinitions"]
@@ -390,14 +382,16 @@ this comment:
 ```
 
 CRDs are only read, so the `docs/external-crd-versions.md` invariant
-holds. A failing unit (LIST/WATCH error through its cache's
-`DefaultWatchErrorHandler`, a GET error, or no sync) records the error
-under one aggregate `CRDDiscovery` health entry. It tracks every
-failing unit and clears only after the last unit recovers, reporting
-the set through Degraded, transition events and the gauge. Each unit
-retries with supervisor backoff. Its candidate's state is frozen
-(no transitions, no sweeps), and the other units, the running watches,
-the manager cache and readiness are unaffected.
+holds. The single metadata informer records a LIST/WATCH/sync error as
+a discovery-wide failure; each failed full-CRD GET is tracked by its
+candidate name. One aggregate `CRDDiscovery` health entry exposes all
+outstanding failures through Degraded status, one `WatchUnhealthy`
+transition event and the gauge, clearing on recovery of the informer
+and every failed candidate. Supervisor backoff retries failures.
+A per-candidate GET failure freezes only that candidate's state;
+a shared informer failure freezes discovery transitions for all
+candidates. Neither error triggers a sweep, and existing runners,
+the manager cache and readiness remain unaffected.
 
 ### A7. Testing
 
@@ -428,32 +422,45 @@ files at start and an event recorder:
   `WatchRecovered`.
 - Duplicate events: no-op CRD updates (labels, `setDGDConversion`)
   cause no restart and no event.
-- One unit failing to sync (its CRD Forbidden via a test hook) does not
-  delay a second candidate's late install.
+- A forbidden or slow full-CRD GET for one candidate does not delay
+  another candidate's late install. A shared informer LIST/WATCH
+  failure reports `CRDDiscovery` while existing runners stay healthy.
 - Existing watch-isolation, allowlist, roll-up and conversion suites,
   plus goleak, unchanged.
 - Unit tests:
   - the A1 classification and A2 table;
   - `MarkDisabled` reasons;
-  - `Reset` concurrency;
+  - one-informer name filtering and independent GET retries;
   - `TriggerContext` cancellation;
   - each `Watch().CRD` matching its fixture and the ClusterRole.
 
-### A8. Rollout and open questions
+### A8. Rollout, two implementation PRs and open questions
 
-Additive MINOR on the v1.7 train. Changes: one ClusterRole rule and one
-Normal event reason. Unchanged: chart values, APIs, document shape and
-metric names. CHANGELOG, `docs/external-crd-versions.md` and Design
-006's "CRD absent" row are updated with the implementation.
+Additive MINOR on the v1.7 train. Changes: one ClusterRole rule and
+one Normal event reason. Unchanged: chart values, APIs, document shape
+and metric names. CHANGELOG, `docs/external-crd-versions.md` and
+Design 006's "CRD absent" row are updated with the implementation.
 
-1. The reset is mapper-wide, and already-cached client mappings are
-   relied on to be correct by construction. Is that acceptable in place
-   of the per-group reset the issue names, which the pinned APIs do not
-   provide?
-2. Is `CRDDiscovery` acceptable as a value of the gauge's `kind` label,
+After the three-working-day design review window, implementation is
+split into two separately reviewable PRs under this amendment:
+
+1. **Phase A — late installation** (A2 rows 1–4 and 10):
+   metadata-only discovery, startup/late watch activation,
+   `workloadKinds` allowlist precedence, `WatchStarted`, read-only
+   RBAC, the primary late-Dynamo envtest and allowlist cases.
+   This first PR delivers the no-restart behavior. Full CRD
+   deletion/unservability/recreation semantics are Phase B work.
+2. **Phase B — lifecycle and cleanup** (A2 rows 5–9):
+   Unservable, Removed and UID-change transitions,
+   `MarkDisabled` reason in the `WatchDisabled` event message,
+   stopping watches, sweeping stale AIBOMs, owner re-rooting,
+   removal/recreation tests and cleanup regressions. This PR may
+   follow Phase A by a week.
+
+Open questions:
+1. Is `CRDDiscovery` acceptable as a value of the gauge's `kind` label,
    or should it be a dedicated gauge?
-3. Should a watched version that stops being served stay Degraded with
-   AIBOMs kept (proposed: its workloads still exist), or be disabled and
-   swept?
-4. Should `resourceNames` narrowing to the six CRD names be a follow-up
-   after it is checked on all supported Kubernetes versions?
+2. Should a watched version that stops being served stay Degraded with
+   AIBOMs kept (proposed), or be disabled and swept?
+3. Should `resourceNames` narrowing to the six CRD names be a follow-up
+   after checking all supported Kubernetes versions?
