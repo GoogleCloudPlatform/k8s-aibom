@@ -136,6 +136,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   marker now means the read limit was passed or the text was capped
   at 256 characters.
 
+- **`kubectl aibom verify` states each model's signature once**
+  (#249). A model named in two places (`--model` and an env var) has
+  two `status.summary.models` entries, and `verify` printed
+  `model X: signature unsigned` once per entry, so one model read as
+  two. Identical lines are now printed once, in first-seen order; a
+  model whose entries record different states still shows each. The
+  digest check and the exit code are unchanged.
+
 ## [1.6.2] - 2026-10-22
 
 Patch release: eight defects found in the days after 1.6.0, two of them by
