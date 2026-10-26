@@ -273,6 +273,8 @@ spec:
               key: token
 ```
 
+**GCS object paths:** `pathTemplate` placeholders are `{namespace}`, `{kind}`, `{name}`, `{category}`, `{timestamp}` and `{hash}`. `{kind}` is lowercased (`deployment`), `{timestamp}` is UTC to the millisecond with colons replaced by dashes (`2026-05-10T12-00-00.123Z`), and `{hash}` is the first 12 hex characters of the document's sha256. In the namespace, kind, name and category, `/`, `\`, `.` and line breaks become `_`. The default template, `mlbom/{namespace}/{kind}-{name}/{timestamp}.json`, writes objects such as `mlbom/prod-inference/deployment-vllm-llama3/2026-05-10T12-00-00.123Z.json`.
+
 Configuration changes take effect on the next reconcile, without restarting the controller. Invalid configuration is rejected; the previous good configuration remains in effect, and the failure is surfaced as a condition on the `AIBOMControllerConfig` CR. This is the *last-known-good* property: an operator mistake in the configuration does not break the pipeline.
 
 **Workload-kind allowlist:** `spec.discovery.workloadKinds` lists the kinds the controller inventories, as `Group/Kind` strings (`apps/Deployment`, `nvidia.com/DynamoGraphDeployment`, `leaderworkerset.x-k8s.io/LeaderWorkerSet`, `disaggregatedset.x-k8s.io/DisaggregatedSet`, ...). Absent or empty means every known kind. An entry that is not a known kind is a configuration error (last-known-good retained, the entry named in the condition), never a silent no-op. A kind not in the list gets no documents and its existing ones are deleted; for the third-party kinds the controller also stops watching it. A kind that is switched off stops absorbing the workloads it owns, which are reported on their own again. Changes apply without a restart.

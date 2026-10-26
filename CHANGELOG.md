@@ -127,6 +127,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   now names `spec.sinks[name=X].webhook.endpoint`. The check itself is
   unchanged.
 
+- **The GCS sink docs describe the object paths it writes** (#257).
+  The `{kind}` placeholder was documented as `Deployment`; the sink
+  writes it lowercased (`deployment`), as the tests expect.
+  `docs/security-model.md` gave the timestamp at second granularity;
+  it is to the millisecond. The README now says how each `pathTemplate`
+  placeholder renders, including `{category}` and the `_` that replaces
+  `/`, `\`, `.` and line breaks in workload values. Paths are
+  unchanged.
+
 - **`SinkFailed` marks a webhook receiver's body `(truncated)` only
   when text was dropped** (#245). The marker was added to every
   response body over 256 bytes, counted before ANSI color codes are
