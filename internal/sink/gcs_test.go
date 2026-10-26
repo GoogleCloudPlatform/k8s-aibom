@@ -94,6 +94,32 @@ func TestRenderGCSPath_CustomTemplate(t *testing.T) {
 	}
 }
 
+// TestRenderGCSPath_DocumentedForm pins the rendering the README and
+// the DefaultGCSPathTemplate godoc describe: {kind} lowercased, the
+// timestamp to the millisecond, and "/", "\", "." and line breaks in
+// workload-provided values replaced by "_".
+func TestRenderGCSPath_DocumentedForm(t *testing.T) {
+	meta := SinkMeta{
+		WorkloadKind:      "Deployment",
+		WorkloadNamespace: "prod-inference",
+		WorkloadName:      "vllm-llama3",
+		WorkloadCategory:  "vector-database",
+		BOMHash:           "abcdef0123456789" + strings.Repeat("f", 48),
+		Timestamp:         time.Date(2026, 5, 10, 12, 0, 0, 123_000_000, time.UTC),
+	}
+	if got, want := renderGCSPath(DefaultGCSPathTemplate, meta), "mlbom/prod-inference/deployment-vllm-llama3/2026-05-10T12-00-00.123Z.json"; got != want {
+		t.Errorf("renderGCSPath(default) = %q, want %q", got, want)
+	}
+	if got, want := renderGCSPath("{category}/{hash}", meta), "vector-database/abcdef012345"; got != want {
+		t.Errorf("renderGCSPath({category}/{hash}) = %q, want %q", got, want)
+	}
+	meta.WorkloadKind = "LeaderWorkerSet"
+	meta.WorkloadName = `llama-3.1/a\b` + "\nc"
+	if got, want := renderGCSPath("{kind}-{name}", meta), "leaderworkerset-llama-3_1_a_b_c"; got != want {
+		t.Errorf("renderGCSPath({kind}-{name}) = %q, want %q", got, want)
+	}
+}
+
 // TestRenderGCSPath_NoColonsInOutput pins one of the FR4.4 immutability
 // path properties: the rendered object name MUST NOT contain colons (which
 // are unsafe across some object stores and CLI tools). RFC3339 timestamps

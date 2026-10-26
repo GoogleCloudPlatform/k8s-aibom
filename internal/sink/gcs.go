@@ -35,14 +35,19 @@ import (
 // Supported placeholders:
 //
 //	{namespace} — workload namespace
-//	{kind}      — workload kind (e.g., "Deployment")
+//	{kind}      — workload kind, lowercased (e.g., "deployment")
 //	{name}      — workload name
-//	{timestamp} — RFC3339-shaped UTC timestamp with colons replaced by dashes
+//	{category}  — workload category (e.g., "inference")
+//	{timestamp} — RFC3339-shaped UTC timestamp to the millisecond, with
+//	              colons replaced by dashes (e.g., "2026-05-10T12-00-00.123Z")
 //	{hash}      — short (12-char) prefix of the BOM's sha256 hash
+//
+// In {namespace}, {kind}, {name} and {category}, "/", "\", "." and line
+// breaks are replaced by "_" (see renderGCSPath).
 //
 // The default uses timestamp uniqueness to satisfy the FR4.4 immutability
 // guarantee: distinct reconcile cycles produce distinct object paths;
-// within-second collisions are caught by the DoesNotExist precondition
+// same-millisecond collisions are caught by the DoesNotExist precondition
 // on the write and surfaced as a per-write error.
 const DefaultGCSPathTemplate = "mlbom/{namespace}/{kind}-{name}/{timestamp}.json"
 
@@ -189,10 +194,10 @@ func (s *GCSSink) WriteOnly() bool { return false }
 // canonical gs:// URL of the written object on success.
 //
 // The write is gated by a DoesNotExist precondition: if an object with
-// the same name already exists (rare, only possible on second-resolution
-// timestamp collisions), the write fails with a clear error and the
-// caller surfaces it on the SinkFailed condition. The next reconcile
-// produces a new timestamp and succeeds.
+// the same name already exists (rare with the default template, only
+// possible on same-millisecond timestamp collisions), the write fails
+// with a clear error and the caller surfaces it on the SinkFailed
+// condition. The next reconcile produces a new timestamp and succeeds.
 func (s *GCSSink) Emit(ctx context.Context, doc *bom.Document, meta SinkMeta) (string, error) {
 	if doc == nil {
 		return "", errors.New("gcs sink: doc is nil")

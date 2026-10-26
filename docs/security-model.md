@@ -99,10 +99,10 @@ v1.0 env vars, retained for archaeology only:
 
 The GCS sink never overwrites a prior BOM object.
 
-- Object names include the reconcile timestamp at second granularity:
-  `mlbom/{namespace}/{kind}-{name}/{timestamp}.json`.
+- Object names include the reconcile timestamp at millisecond
+  granularity: `mlbom/{namespace}/{kind}-{name}/{timestamp}.json`.
 - Every write is gated by a `DoesNotExist` precondition. On collision
-  (rare, possible only on second-resolution timestamp overlap), the
+  (rare, possible only on same-millisecond timestamp overlap), the
   write fails. The next reconcile produces a new timestamp and
   succeeds. The collision is surfaced as a `SinkFailed` condition on
   the AIBOM CR for visibility; it is self-healing across reconcile
