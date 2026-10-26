@@ -62,12 +62,24 @@ jobs:
         include:
           - name: floor
             node_image: kindest/node:v1.27.16
+            helm: v3.22.1
           - name: latest
             node_image: ""   # kind default: newest stable node image
+            helm: v3.22.1
+          - name: latest-helm4
+            # Helm 4 on purpose, weekly, so its --wait and SSA behaviour is
+            # exercised here instead of arriving through a runner image
+            # change (#253, #260). Everything else pins Helm 3.
+            node_image: ""
+            helm: v4.3.1
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       with:
         persist-credentials: false
+    - name: Set up Helm ${{ matrix.helm }}
+      uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+      with:
+        version: ${{ matrix.helm }}
     - name: Create kind cluster (${{ matrix.name }})
       uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
       with:

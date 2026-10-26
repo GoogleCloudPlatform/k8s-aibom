@@ -51,6 +51,12 @@ jobs:
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+    - name: Set up Helm
+      # kind-action uses whatever Helm the runner image ships; ubuntu-latest
+      # moved to Helm 4 on 2026-10-26 and broke e2e leg B1 (#253). Pin it.
+      uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+      with:
+        version: v3.22.1  # pinned; see docs/release-checklist.md "Before tagging"
     - name: Create k8s Kind Cluster
       uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
 
