@@ -83,6 +83,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   hint (`filters are flags, e.g. --runtime vllm`). `-n`, `--kubeconfig`
   and `--context` still apply to every subcommand.
 
+- **`kubectl aibom` reads `--A` as `-A`** (#255). The flag package
+  takes `--A` for `-A`, but the plugin's argument splitter knew only
+  the one-dash spelling was a boolean, so `--A` swallowed the next
+  argument: `find --A --runtime vllm` failed with `flag needs an
+  argument: -runtime`, and `summary --A prod-jobs` listed every
+  namespace instead of rejecting `prod-jobs`. Both spellings of `-A`
+  and `--raw` now take no value.
+
 - **AIBOM conditions keep their `lastTransitionTime` when their status
   does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
   `SinkFailed` and `Stale` with the reconcile time every time, so while
