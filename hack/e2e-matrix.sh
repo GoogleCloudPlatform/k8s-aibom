@@ -146,7 +146,9 @@ kubectl -n "$NS_SYS" rollout status deploy/echo-sink --timeout=120s >/dev/null
 
 # B1: http + bearer must be rejected at load: the config CR goes
 # Ready=False naming the cleartext rule, and the controller falls
-# back all-or-nothing (no partial sink).
+# back all-or-nothing (no partial sink). No --wait: the release is
+# meant to end up not Ready (strictConfig is still on from leg A),
+# and Helm 4's --wait also waits for the config CR to become Ready.
 helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --set rbac.sinkSecretAccess=true \
   --set 'config.sinks[0].name=echo' \
@@ -154,7 +156,7 @@ helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --set 'config.sinks[0].webhook.endpoint=http://echo-sink.k8s-aibom-system.svc/bom' \
   --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.name=sink-token' \
   --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.key=token' \
-  --wait --timeout 2m >/dev/null
+  >/dev/null
 wait_for 60 "config rejected: credentials over cleartext" \
   bash -c 'kubectl get aibomcontrollerconfig default -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].message}" 2>/dev/null | grep -qi cleartext'
 
