@@ -49,9 +49,17 @@ additional framing, envelope, or transformation is applied.
 | Status range | Controller interpretation |
 |---|---|
 | `2xx` | Success. The sink reports the endpoint URL on `BOMDocumentRef.External.URL` for this delivery. The receiver is assumed to have durably accepted the BOM; the controller does NOT re-deliver until the BOM content changes. |
-| `4xx` | **Customer configuration problem.** No retry. The controller surfaces the response status code and a truncated response body (max 256 bytes) on the AIBOM CR's `SinkFailed` condition. The next reconcile cycle retries after the customer fixes the receiver. |
+| `3xx` | Redirects are **not followed**. Handled like `4xx`: no retry, and the status code and response body are surfaced on `SinkFailed`. |
+| `4xx` | **Customer configuration problem.** No retry. The controller surfaces the response status code and the response body (see below) on the AIBOM CR's `SinkFailed` condition. The next reconcile cycle retries after the customer fixes the receiver. |
 | `5xx` | **Transient receiver problem.** The controller retries with exponential backoff (250ms, 1s, 3s; 4 total attempts). After the final retry, the failure is recorded on `SinkFailed` and the next reconcile cycle tries again. |
 | Network / TLS error | Treated as transient. Same retry behavior as `5xx`. |
+
+The response body on `SinkFailed` is a bounded excerpt: the controller
+reads at most the first 1024 bytes, drops invalid UTF-8, turns line
+breaks into spaces and removes ANSI escape sequences, then keeps at
+most 256 characters (runes, not bytes). `...(truncated)` is appended
+when the read limit was passed or the text was cut to 256 characters.
+An empty body is reported as `(empty body)`.
 
 The entire retry sequence runs inside the reconciler's per-sink
 deadline (`DefaultExternalSinkTimeout`, 30s). If the deadline expires

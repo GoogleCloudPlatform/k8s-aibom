@@ -10,7 +10,7 @@ matching, or guesses.
 
 ## Workload Categorization (The MultiScraper Pipeline)
 
-The controller uses a chained pipeline of specialized scrapers. Workloads are categorized by the first scraper that returns a definitive signal (in this order):
+The controller runs a set of specialized scrapers over each workload. Every scraper that handles the workload's kind runs, and the results of all the scrapers that find a signal are merged into one BOM:
 
 1. **Inference (`inference.spec`)**: Matches recognized LLM serving runtimes (e.g., vLLM, Triton).
 2. **Vector Databases (`vectordb.spec`)**: Matches known RAG storage engines (e.g., Milvus, Qdrant).
@@ -18,9 +18,13 @@ The controller uses a chained pipeline of specialized scrapers. Workloads are ca
 4. **Training & Fine-Tuning (`training.spec`)**: Matches known training frameworks (e.g., PyTorch, KubeRay) or MLOps signatures (e.g., `WANDB_API_KEY`).
 5. **Evaluations (`eval.spec`)**: Matches evaluation jobs (e.g., lm-eval, Ragas).
 
+When more than one scraper reports a category, the workload takes the one with the highest priority, whatever the order above: `agent`, then `training`, then `evaluation`, then `vector-database`, then `inference`. A vLLM Deployment that also sets `LANGCHAIN_TRACING_V2` is categorized `agent`, and its BOM lists both the vLLM runtime and the LangChain framework. A workload that no scraper gives a category is categorized `inference`.
+
 ## Agent & Remote API Heuristics
 Agent workloads (unlike inference workloads) usually do not bundle local model weights; instead, they act as clients to remote Foundation Model APIs.
-**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency, marked with `declared` confidence. The actual value of the key is **never** extracted or logged.
+**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). The actual value of the key is **never** extracted or logged.
+
+An API key alone does not categorize a workload as `agent`: that takes a framework image (e.g., Langflow) or a framework environment signature (e.g., `LANGCHAIN_TRACING_V2`). A workload with only an API key keeps the category another scraper gives it, `inference` by default.
 
 ## Training Dataset Heuristics
 **Rule.** For Training and Evaluation jobs, the `TrainingSpecScraper` inspects `volumeMounts` mapped to traditional data directories (like `/data` or named `dataset`). It exposes these as `data` components in the BOM, allowing compliance teams to trace exactly which storage volumes a model was trained on.

@@ -135,6 +135,41 @@ func TestRunVerify(t *testing.T) {
 	}
 }
 
+// A model named in two places (--model and an env var) has two summary
+// entries; verify states its signature once. A model whose entries
+// disagree keeps a line per state.
+func TestRunVerify_SignatureLinePerModelState(t *testing.T) {
+	doc := []byte(`{"bomFormat":"CycloneDX"}`)
+	u := fixtureAIBOM(t, doc, false)
+	if err := unstructured.SetNestedSlice(u.Object, []interface{}{
+		map[string]interface{}{"identity": "Qwen/Qwen2.5-0.5B-Instruct", "source": "container_arg", "confidence": "declared"},
+		map[string]interface{}{"identity": "Qwen/Qwen2.5-0.5B-Instruct", "source": "env_var", "confidence": "inferred"},
+		map[string]interface{}{"identity": "meta-llama/Llama-3.1-8B-Instruct", "source": "container_arg", "confidence": "declared", "signed": "verified"},
+		map[string]interface{}{"identity": "meta-llama/Llama-3.1-8B-Instruct", "source": "env_var", "confidence": "inferred", "signed": "claimed"},
+	}, "status", "summary", "models"); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if ok, err := runVerify(u, &out); err != nil || !ok {
+		t.Fatalf("want match, got ok=%v err=%v", ok, err)
+	}
+	var got []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(line, "model ") {
+			got = append(got, line)
+		}
+	}
+	want := []string{
+		"model Qwen/Qwen2.5-0.5B-Instruct: signature unsigned",
+		"model meta-llama/Llama-3.1-8B-Instruct: signature verified",
+		"model meta-llama/Llama-3.1-8B-Instruct: signature claimed",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("signature lines:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestRunSummaryTable(t *testing.T) {
 	doc := []byte(`{}`)
 	items := []unstructured.Unstructured{*fixtureAIBOM(t, doc, false), *fixtureTruncated()}

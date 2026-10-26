@@ -66,6 +66,18 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Docs: workload categorization and the webhook `SinkFailed` body
+  match the code** (#250). `docs/scraper-heuristics.md` said a
+  workload takes the category of the first scraper that matches; every
+  scraper runs and the highest-priority category wins (`agent`,
+  `training`, `evaluation`, `vector-database`, `inference`). It also
+  gave API-key components `declared` confidence: they are `inferred`,
+  or `unresolved` for a `valueFrom` key, and an API key alone does not
+  make a workload an `agent`. `docs/webhook-sink-protocol.md` now
+  describes the `SinkFailed` body as up to 256 characters after ANSI
+  stripping, not 256 bytes, and lists `3xx`: redirects are not
+  followed or retried. Docs only.
+
 - **`kubectl aibom find` and `summary` reject `-n` together with `-A`**
   (#239). With both, `-A` won and `-n` was dropped, so `find --runtime
   vllm -A -n prod-jobs` listed matches from every namespace and exited
@@ -82,6 +94,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   argument errors, reported before the kubeconfig is loaded, with a
   hint (`filters are flags, e.g. --runtime vllm`). `-n`, `--kubeconfig`
   and `--context` still apply to every subcommand.
+
+- **`kubectl aibom` reads `--A` as `-A`** (#255). The flag package
+  takes `--A` for `-A`, but the plugin's argument splitter knew only
+  the one-dash spelling was a boolean, so `--A` swallowed the next
+  argument: `find --A --runtime vllm` failed with `flag needs an
+  argument: -runtime`, and `summary --A prod-jobs` listed every
+  namespace instead of rejecting `prod-jobs`. Both spellings of `-A`
+  and `--raw` now take no value.
 
 - **AIBOM conditions keep their `lastTransitionTime` when their status
   does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
@@ -144,6 +164,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   body of exactly 1024 bytes, the read limit, was marked too. The
   marker now means the read limit was passed or the text was capped
   at 256 characters.
+
+- **`kubectl aibom verify` states each model's signature once**
+  (#249). A model named in two places (`--model` and an env var) has
+  two `status.summary.models` entries, and `verify` printed
+  `model X: signature unsigned` once per entry, so one model read as
+  two. Identical lines are now printed once, in first-seen order; a
+  model whose entries record different states still shows each. The
+  digest check and the exit code are unchanged.
 
 ## [1.6.2] - 2026-10-22
 
