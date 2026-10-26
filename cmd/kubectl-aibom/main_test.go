@@ -95,6 +95,13 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"summary", "-A", "-n", ""}, "-n and -A cannot be used together (-n NAMESPACE for one namespace"},
 		// A flag the subcommand does not take is still reported first.
 		{[]string{"view", "my-aibom", "-n", "prod-jobs", "-A"}, "-A does not apply to view"},
+		// --A is -A: it takes no value, so the token after it is
+		// checked on its own. It used to be swallowed as --A's value,
+		// and `summary --A prod-jobs` listed every namespace.
+		{[]string{"summary", "--A", "prod-jobs"}, `summary takes no positional arguments, got "prod-jobs"`},
+		{[]string{"find", "--A", "vllm"}, `find takes no positional arguments, got "vllm"`},
+		{[]string{"find", "--A", "-n", "prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
+		{[]string{"view", "--A", "my-aibom"}, "-A does not apply to view"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -114,6 +121,12 @@ func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 		{"find", "-A=false", "-n", "prod-jobs"},
 		{"find", "-n", "prod-jobs", "--model=Qwen", "--image", "vllm", "--digest", "sha256:abc"},
 		{"view", "my-aibom", "-n", "prod-jobs", "--raw"},
+		// Both spellings of each boolean flag take no value.
+		{"summary", "--A"},
+		{"find", "--A", "--runtime", "vllm"},
+		{"find", "--A", "--signed", "verified", "--model", "Qwen"},
+		{"view", "-raw", "my-aibom", "-n", "prod-jobs"},
+		{"view", "--raw", "my-aibom"},
 		{"verify", "-n", "prod-jobs", "my-aibom"},
 	} {
 		err := run(args)

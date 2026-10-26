@@ -127,11 +127,16 @@ func runVerify(u *unstructured.Unstructured, w io.Writer) (bool, error) {
 // status.summary.models) to verify's output — signature verification
 // happens controller-side (Design 002); this surfaces the recorded
 // facts next to the document-integrity verdict.
+//
+// The summary lists a model once per place it was found (--model and
+// an env var, say), so each line is printed once, in first-seen order.
+// A model listed with two different states still shows both.
 func printSignatureFacts(u *unstructured.Unstructured, w io.Writer) {
 	list, found, _ := unstructured.NestedSlice(u.Object, "status", "summary", "models")
 	if !found || len(list) == 0 {
 		return
 	}
+	lines := make([]string, 0, len(list))
 	for _, m := range list {
 		mm, ok := m.(map[string]interface{})
 		if !ok {
@@ -142,7 +147,10 @@ func printSignatureFacts(u *unstructured.Unstructured, w io.Writer) {
 		if st == "" {
 			st = "unsigned"
 		}
-		fmt.Fprintf(w, "model %s: signature %s\n", id, st)
+		lines = append(lines, fmt.Sprintf("model %s: signature %s", id, st))
+	}
+	for _, line := range uniqueStrings(lines) {
+		fmt.Fprintln(w, line)
 	}
 }
 

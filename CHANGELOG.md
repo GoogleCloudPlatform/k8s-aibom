@@ -95,6 +95,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   hint (`filters are flags, e.g. --runtime vllm`). `-n`, `--kubeconfig`
   and `--context` still apply to every subcommand.
 
+- **`kubectl aibom` reads `--A` as `-A`** (#255). The flag package
+  takes `--A` for `-A`, but the plugin's argument splitter knew only
+  the one-dash spelling was a boolean, so `--A` swallowed the next
+  argument: `find --A --runtime vllm` failed with `flag needs an
+  argument: -runtime`, and `summary --A prod-jobs` listed every
+  namespace instead of rejecting `prod-jobs`. Both spellings of `-A`
+  and `--raw` now take no value.
+
 - **AIBOM conditions keep their `lastTransitionTime` when their status
   does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
   `SinkFailed` and `Stale` with the reconcile time every time, so while
@@ -147,6 +155,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   body of exactly 1024 bytes, the read limit, was marked too. The
   marker now means the read limit was passed or the text was capped
   at 256 characters.
+
+- **`kubectl aibom verify` states each model's signature once**
+  (#249). A model named in two places (`--model` and an env var) has
+  two `status.summary.models` entries, and `verify` printed
+  `model X: signature unsigned` once per entry, so one model read as
+  two. Identical lines are now printed once, in first-seen order; a
+  model whose entries record different states still shows each. The
+  digest check and the exit code are unchanged.
 
 ## [1.6.2] - 2026-10-22
 
