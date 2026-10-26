@@ -224,13 +224,13 @@ Flags:
 			if err != nil {
 				return err
 			}
-			return runSummary(l.Items, os.Stdout)
+			return runSummary(l.Items, os.Stdout, os.Stderr)
 		}
 		l, err := dyn.Resource(aibomGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return err
 		}
-		return runSummary(l.Items, os.Stdout)
+		return runSummary(l.Items, os.Stdout, os.Stderr)
 
 	case "find":
 		var items []unstructured.Unstructured

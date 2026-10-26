@@ -174,7 +174,7 @@ func TestRunSummaryTable(t *testing.T) {
 	doc := []byte(`{}`)
 	items := []unstructured.Unstructured{*fixtureAIBOM(t, doc, false), *fixtureTruncated()}
 	var out bytes.Buffer
-	if err := runSummary(items, &out); err != nil {
+	if err := runSummary(items, &out, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -194,5 +194,30 @@ func TestRunSummaryTable(t *testing.T) {
 	// The truncated fixture renders with dashes, not a crash.
 	if !strings.Contains(s, "big") {
 		t.Fatalf("second row missing:\n%s", s)
+	}
+}
+
+// Zero rows is most often an install with no namespace opted in (#261):
+// the hint and the opt-in command go to stderr, the (empty) table stays
+// on stdout, and nothing is printed to stderr when rows exist.
+func TestRunSummary_EmptyPrintsOptInHintOnStderr(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := runSummary(nil, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "kubectl label namespace <name> aibom.k8saibom.dev/enabled=true") {
+		t.Fatalf("stderr missing the opt-in command: %q", errOut.String())
+	}
+	if strings.Contains(out.String(), "kubectl label") {
+		t.Fatalf("hint leaked onto stdout: %q", out.String())
+	}
+
+	errOut.Reset()
+	u := fixtureAIBOM(t, []byte(`{"bomFormat":"CycloneDX"}`), false)
+	if err := runSummary([]unstructured.Unstructured{*u}, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("stderr should be silent when rows exist: %q", errOut.String())
 	}
 }

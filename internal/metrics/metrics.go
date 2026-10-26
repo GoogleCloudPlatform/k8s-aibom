@@ -72,6 +72,18 @@ var (
 	// while it is starting or degraded (Design 004). A down Dynamo
 	// operator shows here as dynamographdeployment=0 while every other
 	// series stays 1.
+	// NamespacesOptedIn is the number of Active namespaces that match
+	// spec.discovery.namespaceSelector. Zero on a stock install until an
+	// operator labels a namespace; it mirrors the NamespacesOptedIn
+	// condition so a dashboard can show "installed but nothing opted in"
+	// without reading the CR (#261).
+	NamespacesOptedIn = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aibom_namespaces_opted_in",
+			Help: "Number of Active namespaces matching spec.discovery.namespaceSelector; 0 means nothing is inventoried",
+		},
+	)
+
 	WatchHealthy = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "aibom_watch_healthy",
@@ -99,5 +111,5 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes, WatchHealthy, WatchErrors)
+	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes, WatchHealthy, WatchErrors, NamespacesOptedIn)
 }

@@ -173,6 +173,8 @@ The controller is installed cluster-wide but inactive until you opt in at least 
 kubectl label namespace my-ai-namespace aibom.k8saibom.dev/enabled=true
 ```
 
+Until then the controller is running and recording nothing, and it says so: `AIBOMControllerConfig/default` carries a `NamespacesOptedIn` condition that is `False` with this command in its message, and flips to `True` with the count once a namespace matches (`kubectl aibom summary` prints the same hint when it finds no documents). It is informational and never affects `Ready`.
+
 Within about a minute the controller records a `NamespaceObserved` event in the namespace, with how many workloads it considered and how many matched an AI workload signal. Workloads that match none get no `AIBOM`; that is conservative detection, not a fault:
 
 ```bash

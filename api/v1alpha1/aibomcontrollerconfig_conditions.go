@@ -41,6 +41,17 @@ const (
 	// the controller is operating in a fallback mode because of it.
 	// Both are typically True together on failure.
 	AIBOMControllerConfigConditionDegraded = "Degraded"
+
+	// AIBOMControllerConfigConditionNamespacesOptedIn is True when at
+	// least one Active namespace matches spec.discovery.namespaceSelector
+	// (the message carries the count), and False, with the exact opt-in
+	// command in the message, when none does. It is informational: a
+	// cluster with nothing opted in is healthy by design, so this
+	// condition never affects Ready, Degraded or readiness. It exists
+	// because an install that arrives by default (a distribution recipe)
+	// otherwise shows a Ready controller, an empty inventory and no cue
+	// that one label stands between the two (#261).
+	AIBOMControllerConfigConditionNamespacesOptedIn = "NamespacesOptedIn"
 )
 
 // Standard condition reasons for AIBOMControllerConfig conditions.
@@ -52,6 +63,14 @@ const (
 	// ReasonConfigLoaded is set on Ready=True when the config was
 	// loaded into a runtime snapshot successfully.
 	ReasonConfigLoaded = "ConfigLoaded"
+
+	// ReasonNamespacesMatchSelector is set on NamespacesOptedIn=True.
+	ReasonNamespacesMatchSelector = "NamespacesMatchSelector"
+
+	// ReasonNoNamespaceMatchesSelector is set on NamespacesOptedIn=False:
+	// no Active namespace matches spec.discovery.namespaceSelector, so
+	// nothing is inventoried until one does.
+	ReasonNoNamespaceMatchesSelector = "NoNamespaceMatchesSelector"
 
 	// ReasonConfigInvalid is set on Ready=False when the CR
 	// passed OpenAPI/CEL validation at apply time but failed
