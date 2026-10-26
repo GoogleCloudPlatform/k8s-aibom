@@ -161,7 +161,7 @@ func TestNamespacesOptedIn_TransitionEventsFireOncePerChange(t *testing.T) {
 
 	// Opt a namespace in → one NamespacesOptedIn event.
 	ns := labeledNamespace("ml-a", map[string]string{config.DefaultNamespaceOptInLabel: "true"})
-	if err := r.Client.Create(t.Context(), ns); err != nil {
+	if err := r.Create(t.Context(), ns); err != nil {
 		t.Fatalf("create ns: %v", err)
 	}
 	reconcileOnce(t, r)
@@ -172,7 +172,7 @@ func TestNamespacesOptedIn_TransitionEventsFireOncePerChange(t *testing.T) {
 
 	// Remove the label → back to False, second NoNamespacesOptedIn event.
 	ns.Labels = nil
-	if err := r.Client.Update(t.Context(), ns); err != nil {
+	if err := r.Update(t.Context(), ns); err != nil {
 		t.Fatalf("update ns: %v", err)
 	}
 	reconcileOnce(t, r)
