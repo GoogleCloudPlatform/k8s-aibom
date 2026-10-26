@@ -160,7 +160,7 @@ The image digest is printed in the release notes. Admission policies can verify 
 
 ### Other install paths
 
-- **NVIDIA AI Cluster Runtime (AICR)** — k8s-aibom is a qualified AICR component (adopted via [ADR-019](https://github.com/NVIDIA/aicr/blob/main/docs/design/019-k8s-aibom-runtime-inventory.md)). Since AICR v0.20.0 the stock `h100-gke-cos-inference` recipe selects it by default (decline at generation time with `aicr recipe --runtime-inventory disabled`); on any other recipe, add a `componentRef` in a custom overlay — see AICR's component catalog for values and health-contract details.
+- **NVIDIA AI Cluster Runtime (AICR)** — k8s-aibom is a qualified AICR component (adopted via [ADR-019](https://github.com/NVIDIA/aicr/blob/main/docs/design/019-k8s-aibom-runtime-inventory.md)). Since AICR v0.20.0 the stock `h100-gke-cos-inference` recipe selects it by default (decline at generation time with `aicr recipe --runtime-inventory disabled`). From AICR v1.0.0, `aicr recipe --runtime-inventory enabled` adds it to any other GKE recipe; on other services, add a `componentRef` in a custom overlay. See AICR's component catalog for values and health-contract details.
 - **Terraform** — GitOps-style deployment: see the [Terraform Automation Guide](terraform/README.md).
 - **Amazon EKS, Azure AKS, OpenShift, on-prem** — identical install; cloud-specific notes in [Installing on EKS, AKS, and other conformant clusters](docs/install-eks-aks.md).
 - **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
