@@ -66,6 +66,18 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Docs: workload categorization and the webhook `SinkFailed` body
+  match the code** (#250). `docs/scraper-heuristics.md` said a
+  workload takes the category of the first scraper that matches; every
+  scraper runs and the highest-priority category wins (`agent`,
+  `training`, `evaluation`, `vector-database`, `inference`). It also
+  gave API-key components `declared` confidence: they are `inferred`,
+  or `unresolved` for a `valueFrom` key, and an API key alone does not
+  make a workload an `agent`. `docs/webhook-sink-protocol.md` now
+  describes the `SinkFailed` body as up to 256 characters after ANSI
+  stripping, not 256 bytes, and lists `3xx`: redirects are not
+  followed or retried. Docs only.
+
 - **`kubectl aibom find` and `summary` reject `-n` together with `-A`**
   (#239). With both, `-A` won and `-n` was dropped, so `find --runtime
   vllm -A -n prod-jobs` listed matches from every namespace and exited
