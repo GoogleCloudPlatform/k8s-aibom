@@ -240,7 +240,15 @@ func orDash(s string) string {
 }
 
 // runSummary renders the table for a list of AIBOMs.
-func runSummary(items []unstructured.Unstructured, w io.Writer) error {
+func runSummary(items []unstructured.Unstructured, w, errw io.Writer) error {
+	if len(items) == 0 && errw != nil {
+		// An empty inventory is most often an install nobody has opted
+		// a namespace into (#261). Say so, with the command, and point
+		// at the condition that confirms it; stdout stays the table.
+		fmt.Fprintln(errw, "No AIBOMs found. Nothing is inventoried until a namespace is opted in:")
+		fmt.Fprintln(errw, "  kubectl label namespace <name> aibom.k8saibom.dev/enabled=true")
+		fmt.Fprintln(errw, "The controller reports the same in the NamespacesOptedIn condition of AIBOMControllerConfig/default.")
+	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAMESPACE\tNAME\tWORKLOAD\tWORKLOAD-NAME\tCATEGORY\tRUNTIME\tMODELS\tCONFIDENCE\tSIGNED\tREADY")
 	for i := range items {

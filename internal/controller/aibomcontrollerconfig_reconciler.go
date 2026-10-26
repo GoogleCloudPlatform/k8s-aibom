@@ -27,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -125,6 +127,16 @@ const (
 	// EventReasonSchemaCurrent fires (Normal) once when a previously
 	// reported schema skew clears.
 	EventReasonSchemaCurrent = "SchemaCurrent"
+
+	// EventReasonNoNamespacesOptedIn (Normal) is emitted on the CR when
+	// the opted-in namespace count transitions to zero, including the
+	// first observation after startup: the install is running and
+	// recording nothing. The message carries the opt-in command (#261).
+	EventReasonNoNamespacesOptedIn = "NoNamespacesOptedIn"
+
+	// EventReasonNamespacesOptedIn (Normal) is emitted when the count
+	// transitions from zero to at least one.
+	EventReasonNamespacesOptedIn = "NamespacesOptedIn"
 )
 
 // snapshotLoader is the loader contract consumed by
@@ -206,6 +218,11 @@ type AIBOMControllerConfigReconciler struct {
 	// fields), used to emit the schema Warning once per distinct set
 	// rather than on every reconcile.
 	lastSkew string
+
+	// lastOptedIn is the previous NamespacesOptedIn observation, nil
+	// before the first, so the transition events fire once per change
+	// (serialized by MaxConcurrentReconciles=1 like lastObserved).
+	lastOptedIn *bool
 
 	// lastObserved is the state machine's previous observation, used
 	// to suppress duplicate events when the CR remains in the same
@@ -598,9 +615,107 @@ func (r *AIBOMControllerConfigReconciler) updateConditions(
 		return nil
 	}
 
+	// NamespacesOptedIn reflects the snapshot actually in effect (the
+	// loaded spec, or defaults / last-known-good while the spec is
+	// invalid), so it is right in every state the CR can be in. A list
+	// error leaves the previous value in place rather than guessing.
+	if stored != nil {
+		if count, err := r.optedInNamespaces(ctx, stored); err == nil {
+			r.setNamespacesOptedIn(&cr, stored, count)
+		} else {
+			log.FromContext(ctx).V(1).Info("could not count opted-in namespaces; condition left unchanged", "err", err.Error())
+		}
+	}
+
 	cr.Status.EffectiveInferenceRuntimeImagePatterns = effectiveRuntimeImagePatterns(stored)
 	cr.Status.ObservedGeneration = cr.Generation
 	return r.Client.Status().Update(ctx, &cr)
+}
+
+// optedInNamespaces counts the non-Terminating namespaces whose labels
+// match the snapshot's selector, through the manager's cache.
+func (r *AIBOMControllerConfigReconciler) optedInNamespaces(ctx context.Context, snap *config.Snapshot) (int, error) {
+	if snap.NamespaceSelector == nil {
+		return 0, nil
+	}
+	var list corev1.NamespaceList
+	if err := r.List(ctx, &list); err != nil {
+		return 0, err
+	}
+	n := 0
+	for i := range list.Items {
+		ns := &list.Items[i]
+		if ns.Status.Phase == corev1.NamespaceTerminating {
+			continue
+		}
+		if snap.NamespaceSelector.Matches(labels.Set(ns.Labels)) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// setNamespacesOptedIn writes the condition, updates the gauge, and emits
+// the transition event once per change. Ready, Degraded and readiness
+// are never affected: nothing opted in is a healthy cluster by design.
+func (r *AIBOMControllerConfigReconciler) setNamespacesOptedIn(cr *aibomv1beta1.AIBOMControllerConfig, snap *config.Snapshot, count int) {
+	metrics.NamespacesOptedIn.Set(float64(count))
+	optedIn := count > 0
+	cond := metav1.Condition{
+		Type:               aibomv1beta1.AIBOMControllerConfigConditionNamespacesOptedIn,
+		ObservedGeneration: cr.Generation,
+		LastTransitionTime: metav1.Now(),
+		Message:            namespacesOptedInMessage(count, snap),
+	}
+	if optedIn {
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = aibomv1beta1.ReasonNamespacesMatchSelector
+	} else {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = aibomv1beta1.ReasonNoNamespaceMatchesSelector
+	}
+	// SetStatusCondition keeps LastTransitionTime when the status is
+	// unchanged, so repeated reconciles do not move it.
+	meta.SetStatusCondition(&cr.Status.Conditions, cond)
+
+	if r.lastOptedIn != nil && *r.lastOptedIn == optedIn {
+		return
+	}
+	r.lastOptedIn = &optedIn
+	if r.Recorder == nil {
+		return
+	}
+	ref := &corev1.ObjectReference{
+		APIVersion: aibomv1beta1.GroupVersion.String(),
+		Kind:       "AIBOMControllerConfig",
+		Name:       cr.Name,
+		UID:        cr.UID,
+	}
+	if optedIn {
+		r.Recorder.Event(ref, corev1.EventTypeNormal, EventReasonNamespacesOptedIn, cond.Message)
+	} else {
+		r.Recorder.Event(ref, corev1.EventTypeNormal, EventReasonNoNamespacesOptedIn, cond.Message)
+	}
+}
+
+// namespacesOptedInMessage is the operator-facing text. With the default
+// selector it carries the exact label command; with a custom selector it
+// names the selector in effect, since a label command would be wrong.
+func namespacesOptedInMessage(count int, snap *config.Snapshot) string {
+	switch {
+	case count == 1:
+		return "1 namespace matches spec.discovery.namespaceSelector; its workloads are inventoried."
+	case count > 1:
+		return fmt.Sprintf("%d namespaces match spec.discovery.namespaceSelector; their workloads are inventoried.", count)
+	}
+	sel := ""
+	if snap != nil && snap.NamespaceSelector != nil {
+		sel = snap.NamespaceSelector.String()
+	}
+	if sel == "" || sel == config.DefaultNamespaceOptInLabel+"=true" {
+		return fmt.Sprintf("No namespace matches spec.discovery.namespaceSelector; nothing is inventoried until one does. Opt a namespace in with: kubectl label namespace <name> %s=true", config.DefaultNamespaceOptInLabel)
+	}
+	return fmt.Sprintf("No namespace matches spec.discovery.namespaceSelector (%s); nothing is inventoried until one does. Label a namespace so it matches, or change the selector.", sel)
 }
 
 // effectiveRuntimeImagePatterns returns the runtime-detection patterns
@@ -617,6 +732,14 @@ func effectiveRuntimeImagePatterns(stored *config.Snapshot) []aibomv1beta1.Runti
 		out = append(out, aibomv1beta1.RuntimeImagePattern{Runtime: p.Runtime, Pattern: p.Pattern})
 	}
 	return out
+}
+
+// namespacePhase returns a namespace's phase, or "" for other objects.
+func namespacePhase(o client.Object) corev1.NamespacePhase {
+	if ns, ok := o.(*corev1.Namespace); ok {
+		return ns.Status.Phase
+	}
+	return ""
 }
 
 // configName returns the configured name, defaulting to
@@ -692,6 +815,23 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		})
 		b = b.WatchesRawSource(source.Channel(healthEvents, &handler.EnqueueRequestForObject{}))
 	}
+	// Namespace create, delete, label and phase changes re-evaluate
+	// NamespacesOptedIn. The manager cache already holds namespaces for
+	// the workload reconcilers, so this adds no new API-server watch.
+	// Every event maps to the singleton CR.
+	b = b.Watches(&corev1.Namespace{},
+		handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
+			return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: configName}}}
+		}),
+		builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(event.CreateEvent) bool { return true },
+			DeleteFunc: func(event.DeleteEvent) bool { return true },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				return !labels.Equals(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
+					namespacePhase(e.ObjectOld) != namespacePhase(e.ObjectNew)
+			},
+			GenericFunc: func(event.GenericEvent) bool { return false },
+		}))
 	return b.
 		WithOptions(controller.Options{
 			// REQUIRED for state-machine correctness. lastObserved

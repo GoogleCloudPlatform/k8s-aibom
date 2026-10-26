@@ -8,6 +8,17 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **The controller says when nothing is opted in** (#261). `AIBOMControllerConfig`
+  gains a `NamespacesOptedIn` condition: `False` with the exact opt-in command
+  in its message while no namespace matches
+  `spec.discovery.namespaceSelector`, `True` with the count once one does,
+  re-evaluated on namespace create, delete and label changes. A Normal event
+  fires on each transition, `aibom_namespaces_opted_in` exposes the count,
+  and `kubectl aibom summary` with zero rows prints the same hint on stderr.
+  Informational only: Ready, Degraded and readiness are unchanged, so a
+  distribution that installs k8s-aibom by default keeps its health check
+  while the cluster itself shows the one missing step.
+
 - **Effective runtime patterns in `AIBOMControllerConfig.status`**
   (#106). `status.effectiveInferenceRuntimeImagePatterns` lists the
   runtime-detection patterns the controller is matching images
