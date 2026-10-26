@@ -117,7 +117,7 @@ Flags:
 		flagArgs = append(flagArgs, a)
 		// A flag that takes a value consumes the next token unless it
 		// used the -flag=value form. -A and --raw are booleans.
-		if a != "-A" && a != "--raw" && a != "-raw" && !strings.Contains(a, "=") && i+1 < len(args) {
+		if !isBoolFlag(fs, a) && !strings.Contains(a, "=") && i+1 < len(args) {
 			i++
 			flagArgs = append(flagArgs, args[i])
 		}
@@ -267,6 +267,20 @@ Flags:
 		return nil
 	}
 	return nil
+}
+
+// isBoolFlag reports whether the token a names one of fs's boolean
+// flags (-A, --raw). The flag package accepts one or two dashes for
+// every flag, so --A and -raw are the same flags as -A and --raw, and
+// none of them takes the next token as its value.
+func isBoolFlag(fs *flag.FlagSet, a string) bool {
+	name := strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
+	fl := fs.Lookup(name)
+	if fl == nil {
+		return false
+	}
+	b, ok := fl.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
 }
 
 // flagName spells a flag the way the usage text does: -n and -A,
