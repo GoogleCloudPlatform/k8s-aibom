@@ -188,7 +188,9 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 	// 3. Declared claims: spec.env and spec.args through the allowlists,
 	// then workload annotations. These are the sources that win.
 	var declared []Component
-	if rawEnv, found, _ := unstructured.NestedSlice(u.Object, "spec", "env"); found {
+	if rawEnv, found, err := unstructured.NestedSlice(u.Object, "spec", "env"); err != nil {
+		inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.env: %w; skipped", err))
+	} else if found {
 		env := make([]corev1.EnvVar, 0, len(rawEnv))
 		for i, item := range rawEnv {
 			m, ok := item.(map[string]interface{})
@@ -205,7 +207,21 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 		}
 		declared = append(declared, envVarModels(env, "", "spec", cfg)...)
 	}
-	if args, found, _ := unstructured.NestedStringSlice(u.Object, "spec", "args"); found {
+	if rawArgs, found, err := unstructured.NestedSlice(u.Object, "spec", "args"); err != nil {
+		inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.args: %w; skipped", err))
+	} else if found {
+		// A non-string element is recorded and left empty in place, so
+		// the remaining args keep their indices in evidence locators and
+		// an empty value is never read as a model.
+		args := make([]string, len(rawArgs))
+		for i, item := range rawArgs {
+			s, ok := item.(string)
+			if !ok {
+				inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.args[%d]: not a string (%T); skipped", i, item))
+				continue
+			}
+			args[i] = s
+		}
 		declared = append(declared, argModels(args, "", "spec", cfg)...)
 	}
 	declared = append(declared,
