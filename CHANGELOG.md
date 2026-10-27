@@ -77,6 +77,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **NIMService `spec.args` with a non-string element is no longer
+  dropped silently** (#269). One such element made the scraper ignore
+  every arg, `--model` included, without recording anything, and the
+  model then came from the image path as `inferred`. The element is now
+  recorded as `spec.args[i]: not a string (<type>); skipped` and the
+  other args are read with their original indices, the same contract as
+  `spec.env`. A `spec.args` or `spec.env` that is not a list is recorded
+  too instead of being ignored.
+
 - **Docs: workload categorization and the webhook `SinkFailed` body
   match the code** (#250). `docs/scraper-heuristics.md` said a
   workload takes the category of the first scraper that matches; every

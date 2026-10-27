@@ -280,6 +280,72 @@ func TestNIMServiceScraper_MalformedEnv_Degrades(t *testing.T) {
 	}
 }
 
+// A non-string arg is recorded and skipped like a malformed env entry;
+// the other args still scrape, with their original indices.
+func TestNIMServiceScraper_MalformedArgs_Degrades(t *testing.T) {
+	u := nimService("ns", "bad-args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		int64(8), "--model", "org/args-model", "--max-batch", int64(8),
+	}, "spec", "args")
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape must succeed: %v", err)
+	}
+	if len(got.Errors) != 2 ||
+		!strings.Contains(got.Errors[0].Error(), "spec.args[0]: not a string (int64)") ||
+		!strings.Contains(got.Errors[1].Error(), "spec.args[4]: not a string (int64)") {
+		t.Errorf("errors = %v", got.Errors)
+	}
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "org/args-model" || models[0].Confidence != ConfidenceDeclared {
+		t.Fatalf("models = %+v", models)
+	}
+	if want := "spec.args[1 2](--model)"; models[0].Evidence.Locator != want {
+		t.Errorf("arg locator = %q, want %q", models[0].Evidence.Locator, want)
+	}
+}
+
+// A non-string value after a model flag is not read as an empty model,
+// and the next string is not taken as the value.
+func TestNIMServiceScraper_NonStringArgValue_NoModelFromNeighbour(t *testing.T) {
+	u := nimService("ns", "bad-value", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		"--model", int64(8), "org/not-a-model",
+	}, "spec", "args")
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape must succeed: %v", err)
+	}
+	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0].Error(), "spec.args[1]") {
+		t.Errorf("errors = %v", got.Errors)
+	}
+	for _, m := range componentsOf(got.Components, ComponentMLModel) {
+		if m.Name == "org/not-a-model" || m.Name == "" {
+			t.Errorf("unexpected model %+v", m)
+		}
+	}
+}
+
+// spec.args or spec.env that is not a list is recorded, not ignored.
+func TestNIMServiceScraper_ArgsEnvNotList_Recorded(t *testing.T) {
+	u := nimService("ns", "not-list", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	if err := unstructured.SetNestedField(u.Object, "--model org/args-model", "spec", "args"); err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedField(u.Object, "NIM_MODEL_NAME=x", "spec", "env"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape must succeed: %v", err)
+	}
+	if len(got.Errors) != 2 ||
+		!strings.HasPrefix(got.Errors[0].Error(), "spec.env: ") ||
+		!strings.HasPrefix(got.Errors[1].Error(), "spec.args: ") {
+		t.Errorf("errors = %v", got.Errors)
+	}
+}
+
 func TestNIMServiceScraper_Deterministic(t *testing.T) {
 	u := nimService("ns", "det", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
 	_ = unstructured.SetNestedField(u.Object, "c", "spec", "storage", "nimCache", "name")
