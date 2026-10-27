@@ -18,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -265,6 +266,57 @@ func TestCheckDigestFilter(t *testing.T) {
 	} {
 		if err := checkDigestFilter(d); err == nil {
 			t.Errorf("checkDigestFilter(%q) = nil, want an error", d)
+		}
+	}
+}
+
+// fixtureUnreadable is an AIBOM whose status carries inline data that
+// find cannot read: not base64, base64 of something that is not JSON,
+// or a value that is not a string at all.
+func fixtureUnreadable(t *testing.T, name string, data interface{}) *unstructured.Unstructured {
+	t.Helper()
+	u := fixtureAIBOM(t, containerDoc("vllm/vllm-openai:v0.6.3", testDigest), false)
+	u.SetName(name)
+	_ = unstructured.SetNestedField(u.Object, data, "status", "bomDocument", "inline", "data")
+	return u
+}
+
+func TestFind_UnreadableDocumentDoesNotFailTheRun(t *testing.T) {
+	bad := []unstructured.Unstructured{
+		*fixtureUnreadable(t, "not-base64", "%%% not base64 %%%"),
+		*fixtureUnreadable(t, "not-json", base64.StdEncoding.EncodeToString([]byte("{not json"))),
+		*fixtureUnreadable(t, "not-a-string", int64(42)),
+	}
+	items := append(findItems(t), bad...)
+
+	// No filter: every row is listed, the unreadable ones with
+	// IMAGES=unreadable, and the other rows are unaffected.
+	out, errOut := runFindCapture(t, items, findFilter{})
+	for _, want := range []string{"not-base64", "not-json", "not-a-string", "unreadable", "ghcr.io/berriai/litellm:main-v1.81.0"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+	if errOut != "" {
+		t.Fatalf("no warning expected without an image/digest filter: %q", errOut)
+	}
+
+	// A summary filter still evaluates the rows: the summary is readable
+	// even when the document is not.
+	out, errOut = runFindCapture(t, items, findFilter{runtime: "litellm"})
+	if !strings.Contains(out, "gateway") || strings.Contains(out, "not-json") || errOut != "" {
+		t.Fatalf("runtime filter wrong with unreadable rows:\n%s\nstderr: %q", out, errOut)
+	}
+
+	// An image filter cannot be evaluated for them: shown, not excluded,
+	// with the warning naming each row.
+	out, errOut = runFindCapture(t, items, findFilter{image: "berriai/litellm"})
+	if !strings.Contains(out, "gateway") || !strings.Contains(out, "not-json") || strings.Contains(out, "vllm-qwen") {
+		t.Fatalf("image filter wrong with unreadable rows:\n%s", out)
+	}
+	for _, want := range []string{"prod-jobs/not-base64", "prod-jobs/not-json", "prod-jobs/not-a-string", "shown, not excluded"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("warning missing %q: %q", want, errOut)
 		}
 	}
 }

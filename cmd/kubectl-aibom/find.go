@@ -38,9 +38,10 @@ import (
 //     print "0 matches" on stdout. An incident script must be able to
 //     tell "none found" from "plugin broke".
 //   - A row whose inline document is unavailable (external sink,
-//     truncated, or not written yet) is SHOWN, not excluded, when an
-//     image or digest filter is active — with IMAGES reading
-//     external/truncated/no-document and a one-line stderr warning. Silently dropping it would turn "cannot evaluate"
+//     truncated, not written yet, or unreadable) is SHOWN, not
+//     excluded, when an image or digest filter is active — with IMAGES
+//     reading external/truncated/no-document/unreadable and a one-line
+//     stderr warning. Silently dropping it would turn "cannot evaluate"
 //     into "not present", which is the one lie this command must not
 //     tell. Zero matches is never proof of absence: namespaces that are
 //     not opted in, unattributed images, and unresolved digests are all
@@ -66,28 +67,30 @@ type containerFacts struct {
 // inlineContainers decodes the inline document and collects container
 // facts. unavailable is "" when the document was read, otherwise
 // "external", "truncated" or "no-document" (the reason the document is
-// not inline). An AIBOM whose status has no document yet is one row the
-// command cannot evaluate, not a reason for the whole command to fail.
-func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unavailable string, err error) {
+// not inline), or "unreadable" when inline data is there but does not
+// decode to a JSON document. An AIBOM whose document is missing or
+// unreadable is one row the command cannot evaluate, not a reason for
+// the whole command to fail; view and verify still report the error.
+func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unavailable string) {
 	// A document flagged truncated is unavailable for filtering even if
 	// partial bytes are inline: a truncated BOM can never support the
 	// negative conclusion "this image/digest is not here".
 	if truncated, _, _ := unstructured.NestedBool(u.Object, "status", "bomDocument", "truncated"); truncated {
-		return containerFacts{}, "truncated", nil
+		return containerFacts{}, "truncated"
 	}
 	doc, err := inlineBOM(u)
 	if err != nil {
 		if errors.Is(err, errNoDocument) {
-			return containerFacts{}, "no-document", nil
+			return containerFacts{}, "no-document"
 		}
 		var et errTruncated
 		if errors.As(err, &et) {
 			if strings.Contains(et.reason, "external") {
-				return containerFacts{}, "external", nil
+				return containerFacts{}, "external"
 			}
-			return containerFacts{}, "truncated", nil
+			return containerFacts{}, "truncated"
 		}
-		return containerFacts{}, "", err
+		return containerFacts{}, "unreadable"
 	}
 	var parsed struct {
 		Components []struct {
@@ -103,7 +106,7 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(doc, &parsed); err != nil {
-		return containerFacts{}, "", fmt.Errorf("parsing inline document: %w", err)
+		return containerFacts{}, "unreadable"
 	}
 	for _, c := range parsed.Components {
 		if c.Type != "container" {
@@ -120,7 +123,7 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 			}
 		}
 	}
-	return facts, "", nil
+	return facts, ""
 }
 
 // normalizeDigest strips an optional sha256: prefix (any case) and
@@ -185,15 +188,15 @@ func summaryModels(u *unstructured.Unstructured) (identities []string, signedSta
 
 // findMatch evaluates the filter against one AIBOM. matched reports the
 // verdict; unavailable is non-empty when an image/digest filter could
-// not be evaluated because the document is not inline (the row is then
-// treated as matched and the caller warns).
-func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts containerFacts, unavailable string, err error) {
+// not be evaluated because the document is not inline or unreadable (the
+// row is then treated as matched and the caller warns).
+func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts containerFacts, unavailable string) {
 	get := func(fields ...string) string {
 		v, _, _ := unstructured.NestedString(u.Object, fields...)
 		return v
 	}
 	if f.runtime != "" && get("status", "summary", "runtime", "name") != f.runtime {
-		return false, containerFacts{}, "", nil
+		return false, containerFacts{}, ""
 	}
 	identities, states := summaryModels(u)
 	if f.model != "" {
@@ -205,7 +208,7 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 			}
 		}
 		if !hit {
-			return false, containerFacts{}, "", nil
+			return false, containerFacts{}, ""
 		}
 	}
 	if f.signed != "" {
@@ -217,18 +220,15 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 			}
 		}
 		if !hit {
-			return false, containerFacts{}, "", nil
+			return false, containerFacts{}, ""
 		}
 	}
 	// Image/digest criteria need the document. Always collect facts
 	// (IMAGES column) even when no such filter is set.
-	facts, unavailable, err = inlineContainers(u)
-	if err != nil {
-		return false, containerFacts{}, "", err
-	}
+	facts, unavailable = inlineContainers(u)
 	if f.needsDocument() && unavailable != "" {
 		// Cannot evaluate: show, never exclude.
-		return true, facts, unavailable, nil
+		return true, facts, unavailable
 	}
 	if f.image != "" {
 		hit := false
@@ -239,13 +239,13 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 			}
 		}
 		if !hit {
-			return false, facts, "", nil
+			return false, facts, ""
 		}
 	}
 	if f.digest != "" && !digestMatches(f.digest, facts.digests) {
-		return false, facts, "", nil
+		return false, facts, ""
 	}
-	return true, facts, unavailable, nil
+	return true, facts, unavailable
 }
 
 // uniqueStrings returns items without repeats, in first-seen order.
@@ -276,8 +276,8 @@ func joinTruncated(items []string, max int) string {
 	return strings.Join(items[:max], ",") + fmt.Sprintf(",+%d", len(items)-max)
 }
 
-// runFind prints the filtered table. It returns an error only for
-// malformed objects; zero matches is a successful run.
+// runFind prints the filtered table. Zero matches is a successful run,
+// and so is a run with rows whose document could not be read.
 func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAMESPACE\tKIND\tNAME\tRUNTIME\tMODELS\tIMAGES\tSIGNED\tCONFIDENCE")
@@ -285,10 +285,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 	var unavailableRows []string
 	for i := range items {
 		u := &items[i]
-		matched, facts, unavailable, err := findMatch(u, f)
-		if err != nil {
-			return fmt.Errorf("%s/%s: %w", u.GetNamespace(), u.GetName(), err)
-		}
+		matched, facts, unavailable := findMatch(u, f)
 		if !matched {
 			continue
 		}
@@ -324,7 +321,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 		return err
 	}
 	if len(unavailableRows) > 0 && f.needsDocument() {
-		fmt.Fprintf(errw, "warning: %d row(s) have no inline document (external sink, truncated, or not written yet), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
+		fmt.Fprintf(errw, "warning: %d row(s) have no readable inline document (external sink, truncated, not written yet, or unreadable), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
 			len(unavailableRows), strings.Join(unavailableRows, ", "))
 	}
 	return nil
