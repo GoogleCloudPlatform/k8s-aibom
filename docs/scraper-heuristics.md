@@ -163,6 +163,15 @@ observable in a more authoritative way.
 
 ## Model claims via env vars
 
+The three model allowlists used below (`modelEnvVarNames`,
+`modelArgFlags`, `modelVolumePathPrefixes`) are compiled into the
+controller from
+[`internal/scraper/v1-runtime-patterns.yaml`](../internal/scraper/v1-runtime-patterns.yaml).
+The `AIBOMControllerConfig` CR does not expose them: it overrides only
+the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`).
+Extending an allowlist is a PR to that file; see
+[contributing a pattern](contributing-a-pattern.md).
+
 **Rule.** Container env vars whose `name` matches the configured
 `modelEnvVarNames` allowlist contribute `machine-learning-model`
 Components. The env var VALUE becomes the model identity; the env var NAME

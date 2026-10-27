@@ -102,6 +102,18 @@ All notable changes to k8s-aibom are documented here. The format follows
   `spec.env`. A `spec.args` or `spec.env` that is not a list is recorded
   too instead of being ignored.
 
+- **Docs: the model allowlists are not configurable through the CR**
+  (#270). The header and the `modelArgFlags` comment in
+  `internal/scraper/v1-runtime-patterns.yaml`, and the `InferenceConfig`
+  godoc, said customers override `modelEnvVarNames`, `modelArgFlags` and
+  the volume-path prefixes in `AIBOMControllerConfig`. The CR exposes
+  only `spec.discovery.inferenceRuntimeImagePatterns`; the three model
+  allowlists always come from the embedded file, so a value set in the
+  CR is pruned with no effect. The comments and
+  `docs/scraper-heuristics.md` now say so and point to
+  `docs/contributing-a-pattern.md`. Docs only; a loader test now pins
+  all three allowlists across a pattern override.
+
 - **Docs: workload categorization and the webhook `SinkFailed` body
   match the code** (#250). `docs/scraper-heuristics.md` said a
   workload takes the category of the first scraper that matches; every

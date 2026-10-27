@@ -16,10 +16,11 @@
 #
 # This file is embedded into the controller binary at build time via go:embed
 # and provides the default extraction patterns when no override is present in
-# the AIBOMControllerConfig CR. Customers override these defaults by editing
-# spec.discovery.inferenceRuntimeImagePatterns / modelEnvVarNames /
-# modelArgFlags / modelVolumePaths in the AIBOMControllerConfig CR (Phase 13
-# wires the override path).
+# the AIBOMControllerConfig CR. Only runtimeImagePatterns can be overridden
+# there, through spec.discovery.inferenceRuntimeImagePatterns, which replaces
+# the list below. modelEnvVarNames, modelArgFlags and modelVolumePathPrefixes
+# are not exposed by the CR and always come from this file; extending them is
+# a PR to this file (see docs/contributing-a-pattern.md).
 #
 # The set is intentionally an audit-reviewable allowlist: anything not listed
 # here is invisible to the scraper. Adding to it is a deliberate, reviewable
@@ -390,8 +391,8 @@ modelEnvVarNames:
 
 # Argument flag names that, when found in a container's args, are immediately
 # followed by (positional) or =-joined to a model identity. v1 recognizes
-# only this small allowlist; customers extend it via the AIBOMControllerConfig
-# CR.
+# only this small allowlist; the AIBOMControllerConfig CR does not override
+# it.
 modelArgFlags:
   - --model
   - --model-id

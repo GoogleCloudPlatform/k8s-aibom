@@ -32,8 +32,10 @@ var defaultV1PatternsYAML []byte
 // recognizes only what this config describes, never anything inferred
 // beyond it.
 //
-// Phase 5 loads InferenceConfig from the embedded YAML (DefaultV1Config).
-// Phase 13 wires the AIBOMControllerConfig CRD as the override path.
+// DefaultV1Config loads InferenceConfig from the embedded YAML. The
+// AIBOMControllerConfig CR can override RuntimeImagePatterns only
+// (spec.discovery.inferenceRuntimeImagePatterns); the model allowlists
+// always keep the embedded values.
 type InferenceConfig struct {
 	// RuntimeImagePatterns matches container image references against a set
 	// of known inference-runtime patterns. Each match produces an
