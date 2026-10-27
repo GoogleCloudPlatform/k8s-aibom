@@ -77,6 +77,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
+  (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
+  failed with `flag provided but not defined: -namespace`. They now set
+  the same values and follow the same rules: `--namespace` with `-A` or
+  `--all-namespaces` is an argument error, and `--all-namespaces` does
+  not apply to `view` or `verify`.
+
 - **Docs: workload categorization and the webhook `SinkFailed` body
   match the code** (#250). `docs/scraper-heuristics.md` said a
   workload takes the category of the first scraper that matches; every
