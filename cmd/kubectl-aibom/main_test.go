@@ -102,6 +102,11 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"find", "--A", "vllm"}, `find takes no positional arguments, got "vllm"`},
 		{[]string{"find", "--A", "-n", "prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
 		{[]string{"view", "--A", "my-aibom"}, "-A does not apply to view"},
+		// kubectl's long spellings follow the same rules as -n and -A.
+		{[]string{"find", "--all-namespaces", "--namespace", "prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
+		{[]string{"summary", "-A", "--namespace=prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
+		{[]string{"summary", "--all-namespaces", "prod-jobs"}, `summary takes no positional arguments, got "prod-jobs"`},
+		{[]string{"view", "my-aibom", "--all-namespaces"}, "--all-namespaces does not apply to view"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -128,6 +133,13 @@ func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 		{"view", "-raw", "my-aibom", "-n", "prod-jobs"},
 		{"view", "--raw", "my-aibom"},
 		{"verify", "-n", "prod-jobs", "my-aibom"},
+		// kubectl's long spellings of -n and -A.
+		{"summary", "--namespace", "prod-jobs"},
+		{"summary", "--all-namespaces"},
+		{"find", "--all-namespaces", "--runtime", "vllm"},
+		{"find", "--namespace=prod-jobs", "--model", "Qwen"},
+		{"view", "my-aibom", "--namespace", "prod-jobs", "--raw"},
+		{"verify", "--namespace", "prod-jobs", "my-aibom"},
 	} {
 		err := run(args)
 		if err == nil || !strings.Contains(err.Error(), "no configuration has been provided") {
