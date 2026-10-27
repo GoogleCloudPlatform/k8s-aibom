@@ -387,6 +387,12 @@ func TestLoad_ValidCR_AppliesSpec(t *testing.T) {
 	if !snap.Patterns.IsModelEnvVarName("HF_MODEL_ID") {
 		t.Errorf("HF_MODEL_ID should still be in modelEnvVarNames (compiled defaults)")
 	}
+	if !snap.Patterns.IsModelArgFlag("--model") {
+		t.Errorf("--model should still be in modelArgFlags (compiled defaults)")
+	}
+	if !snap.Patterns.IsModelVolumePath("/models/llama") {
+		t.Errorf("/models should still be in modelVolumePathPrefixes (compiled defaults)")
+	}
 }
 
 // TestLoad_NilDiscovery_DefaultsApplied verifies that a CR with
