@@ -69,6 +69,10 @@ func run(args []string) error {
 		kubeconfig = fs.String("kubeconfig", "", "path to the kubeconfig file")
 		kubectx    = fs.String("context", "", "kubeconfig context to use")
 	)
+	// kubectl's long spellings of -n and -A set the same values, so a
+	// command copied from kubectl keeps its scope.
+	fs.StringVar(namespace, "namespace", "", "same as -n")
+	fs.BoolVar(allNS, "all-namespaces", false, "same as -A")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), `Usage:
   kubectl aibom summary [-n namespace | -A]
@@ -135,12 +139,13 @@ Flags:
 	// An argument the subcommand does not use is an error rather than
 	// dropped: `find vllm` would list every AIBOM unfiltered, and
 	// `view NAME -A` would send a cluster-scoped GET that 404s.
-	used := map[string]bool{"n": true, "kubeconfig": true, "context": true}
+	used := map[string]bool{"n": true, "namespace": true, "kubeconfig": true, "context": true}
 	switch sub {
 	case "summary":
 		used["A"] = true
+		used["all-namespaces"] = true
 	case "find":
-		for _, name := range []string{"A", "runtime", "model", "image", "digest", "signed"} {
+		for _, name := range []string{"A", "all-namespaces", "runtime", "model", "image", "digest", "signed"} {
 			used[name] = true
 		}
 	case "view":
@@ -149,7 +154,7 @@ Flags:
 	var unused []string
 	nsSet := false
 	fs.Visit(func(fl *flag.Flag) {
-		if fl.Name == "n" {
+		if fl.Name == "n" || fl.Name == "namespace" {
 			nsSet = true
 		}
 		if !used[fl.Name] {

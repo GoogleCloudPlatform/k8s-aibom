@@ -77,6 +77,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
+  (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
+  failed with `flag provided but not defined: -namespace`. They now set
+  the same values and follow the same rules: `--namespace` with `-A` or
+  `--all-namespaces` is an argument error, and `--all-namespaces` does
+  not apply to `view` or `verify`.
+
 - **`kubectl aibom find` no longer fails when one AIBOM's document
   cannot be read** (#265). Inline data that is not base64, not JSON, or
   not a string made the whole command exit 1 with that AIBOM's error and
