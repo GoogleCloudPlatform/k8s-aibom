@@ -77,6 +77,22 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
+  (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
+  failed with `flag provided but not defined: -namespace`. They now set
+  the same values and follow the same rules: `--namespace` with `-A` or
+  `--all-namespaces` is an argument error, and `--all-namespaces` does
+  not apply to `view` or `verify`.
+
+- **`kubectl aibom find` no longer fails when one AIBOM's document
+  cannot be read** (#265). Inline data that is not base64, not JSON, or
+  not a string made the whole command exit 1 with that AIBOM's error and
+  no table, even with no filter or only `--runtime`,
+  `--model` or `--signed`, which never need the document. Such a row is
+  now listed with IMAGES `unreadable` and handled like `no-document`:
+  shown (not excluded) with the stderr warning when an image or digest
+  filter cannot be evaluated for it. `view` and `verify` keep the error.
+
 - **NIMService `spec.args` with a non-string element is no longer
   dropped silently** (#269). One such element made the scraper ignore
   every arg, `--model` included, without recording anything, and the
