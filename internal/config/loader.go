@@ -157,6 +157,7 @@ func (l *Loader) parseSpec(ctx context.Context, cr *aibomv1beta1.AIBOMController
 		StaleThresholdReconciles: resolveStaleThreshold(cr.Spec.BOMGeneration.StaleThresholdReconciles),
 		NamespaceSelector:        namespaceSelector,
 		WorkloadKinds:            workloadKinds,
+		LogLevel:                 cr.Spec.Logging.Level,
 		ExternalSinks:            sinks,
 		Source:                   SourceConfigCR,
 		SourceGeneration:         cr.Generation,

@@ -42,6 +42,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -111,6 +113,20 @@ func main() {
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// spec.logging.level sets the log level and hot-reloads through
+	// logLevel, unless --zap-log-level was passed explicitly: an
+	// operator's command-line override keeps priority.
+	logLevelFlagSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "zap-log-level" {
+			logLevelFlagSet = true
+		}
+	})
+	logLevel := uberzap.NewAtomicLevelAt(zapcore.InfoLevel)
+	if !logLevelFlagSet {
+		zapOpts.Level = logLevel
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
 	log := ctrl.Log.WithName("setup")
@@ -193,6 +209,11 @@ func main() {
 	// AIBOMControllerConfigReconciler hot-reloads it when the CR is
 	// applied / changed / deleted.
 	configStore := config.NewStore(config.DefaultSnapshot())
+	if logLevelFlagSet {
+		log.Info("--zap-log-level is set; spec.logging.level of AIBOMControllerConfig is ignored")
+	} else {
+		configStore.Subscribe(config.LogLevelSubscriber(logLevel))
+	}
 
 	// Opt-in strict readiness: surfaces invalid active configuration at
 	// the pod level. Off by default — last-known-good keeps a functioning
