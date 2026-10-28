@@ -187,10 +187,10 @@ kubectl get events -n my-ai-namespace --field-selector reason=NamespaceObserved
 kubectl get aibom -A
 ```
 
-You will see one `AIBOM` resource per tracked workload. To see the BOM itself:
+You will see one `AIBOM` resource per tracked workload, named `<group>-<kind>-<name>` with the dots in the API group replaced by dashes: a Deployment `my-workload` gets `apps-deployment-my-workload`. To see the BOM itself:
 
 ```bash
-kubectl describe aibom -n my-ai-namespace deployment-my-workload
+kubectl describe aibom -n my-ai-namespace apps-deployment-my-workload
 ```
 
 The full CycloneDX BOM is inline in `status.bomDocument` for BOMs under 256 KB, or referenced via URL for larger BOMs.
@@ -198,7 +198,7 @@ The full CycloneDX BOM is inline in `status.bomDocument` for BOMs under 256 KB, 
 If the BOM is inline, it is stored as base64-encoded data. You can decode and view the raw JSON by running:
 
 ```bash
-kubectl get aibom deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
+kubectl get aibom apps-deployment-my-workload -n my-ai-namespace -o jsonpath='{.status.bomDocument.inline.data}' | base64 --decode
 ```
 
 No `AIBOM` for a workload usually means none of its container images matched a runtime-detection pattern (detection is conservative by design). The patterns in effect, in match order, are listed on the controller config:
