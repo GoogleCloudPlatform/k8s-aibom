@@ -77,12 +77,33 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The per-document component cap now bounds the merged scraper
+  result** (#273). `MaxComponentsPerDocument` was applied only inside
+  `inference.spec` and the CRD scrapers. `agent.spec`, `vectordb.spec`,
+  `training.spec` and `eval.spec` returned uncapped lists, and the
+  `MultiScraper` appended them to a list `inference.spec` had already
+  capped. So a Deployment whose containers each set `OPENAI_API_KEY`
+  produced 512 components, or 356 with no runtime image, against a cap
+  of 256. The merged result is now capped too: the first components in
+  scraper order are kept, and the drop is counted in
+  `aibom.truncation.applied` along with any drop a merged scraper
+  recorded. Documents under the cap are unchanged.
+
+- **A model mounted from an OCI image volume is named by its image
+  reference** (#275). An `image` volume (KEP-4639) mounted at a model
+  path produced a `data` component named after the pod-local volume
+  name, with `volume.source: other`, so the image reference that
+  identifies the model was missing from the BOM. The component is now
+  named by `image.reference`, with `volume.source: image`. An image
+  volume without a reference keeps the volume name.
+
 - **Docs: the README's AIBOM name examples include the API group**
   (#277). "See the BOMs" used `deployment-my-workload`, but the
   controller names an AIBOM `<group>-<kind>-<name>`, so the Deployment's
   AIBOM is `apps-deployment-my-workload` and both commands failed with
   `not found`. The examples use that name, and the README states the
   naming rule.
+
 - **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
   (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
   failed with `flag provided but not defined: -namespace`. They now set

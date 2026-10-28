@@ -213,6 +213,43 @@ func TestInferenceSpecScraper_VLLMDeployment_HappyPath(t *testing.T) {
 	}, "expected inferred model component from HF_MODEL_ID env var")
 }
 
+// A model shipped as an OCI image volume (KEP-4639) and mounted at a
+// model path is named by its image reference, not recorded as an
+// "other" volume known only by its pod-local name.
+func TestInferenceSpecScraper_ImageVolumeModelNamedByReference(t *testing.T) {
+	s := newScraper()
+	const ref = "registry.example.com/models/llama-3-8b:v1"
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "vllm", Namespace: "ns"},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:         "vllm",
+						Image:        "vllm/vllm-openai:v0.6.3",
+						VolumeMounts: []corev1.VolumeMount{{Name: "weights", MountPath: "/models"}},
+					}},
+					Volumes: []corev1.Volume{{
+						Name:         "weights",
+						VolumeSource: corev1.VolumeSource{Image: &corev1.ImageVolumeSource{Reference: ref}},
+					}},
+				},
+			},
+		},
+	}
+	w := Workload{Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, Name: "vllm", Namespace: "ns", Object: dep}
+	got, err := s.Scrape(context.Background(), w, testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	mustFindOne(t, got.Components, func(c Component) bool {
+		return c.Type == ComponentData && c.Name == ref &&
+			c.Properties["volume.source"] == "image" &&
+			c.Properties["volume.name"] == "weights" &&
+			c.Properties["volume.mountPath"] == "/models"
+	}, "expected data component named by the image volume reference")
+}
+
 func TestInferenceSpecScraper_DigestUnresolvedWhenNoReadyPod(t *testing.T) {
 	s := newScraper()
 	dep := &appsv1.Deployment{
