@@ -77,6 +77,17 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`spec.logging.format` selects the controller's log encoder** (#281).
+  The field was accepted by the CRD and rendered by the chart
+  (`config.logging.format`), but nothing applied it, so the controller
+  always logged JSON. The chart now passes it to the controller as
+  `--zap-encoder`, with `text` mapped to zap's `console` encoder. The
+  encoder is fixed when the process starts, so the field is read at
+  startup: a change takes effect when the pod restarts, for example on
+  `helm upgrade`. Its documentation now says so, and no longer promises
+  a notice when it changes, which nothing logged. With the default
+  `json`, the controller logs as before.
+
 - **The per-document component cap now bounds the merged scraper
   result** (#273). `MaxComponentsPerDocument` was applied only inside
   `inference.spec` and the CRD scrapers. `agent.spec`, `vectordb.spec`,
