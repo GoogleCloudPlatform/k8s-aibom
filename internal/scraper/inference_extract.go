@@ -469,6 +469,15 @@ func lookupVolumeSource(volumeName string, volumes []corev1.Volume) (name, kind 
 			return v.NFS.Server + ":" + v.NFS.Path, "nfs"
 		case v.CSI != nil:
 			return v.CSI.Driver, "csi"
+		case v.Image != nil:
+			// An OCI image or artifact mounted as a volume (KEP-4639),
+			// the Kubernetes-native way to ship model weights. The
+			// reference names the model the way a PVC claim name names
+			// a volume of weights.
+			if v.Image.Reference == "" {
+				return volumeName, "image"
+			}
+			return TruncateString(v.Image.Reference, MaxComponentNameLength), "image"
 		}
 		return volumeName, "other"
 	}
