@@ -371,6 +371,59 @@ func TestScrape_ComponentCapIsAppliedAndRecorded(t *testing.T) {
 	}
 }
 
+// G0.3: the cap also bounds what the MultiScraper returns. agent.spec
+// has no cap of its own, and merging appends its components to a list
+// inference.spec has already capped.
+func TestMultiScraper_ComponentCapAppliesToMergedResult(t *testing.T) {
+	cases := []struct {
+		name          string
+		image         string
+		containers    int
+		wantTruncated int
+	}{
+		// Each container: a container and a vllm runtime component from
+		// inference.spec (512 in all, 256 dropped there), plus an
+		// openai-api component from agent.spec (256 more).
+		{name: "inference and agent", image: "vllm/vllm-openai:v0.6.3", containers: MaxComponentsPerDocument, wantTruncated: 2 * MaxComponentsPerDocument},
+		// No runtime image: inference.spec's result is unresolved and
+		// not merged, so agent.spec's own list is the whole result.
+		{name: "agent only", image: "busybox:1.36", containers: MaxComponentsPerDocument + 100, wantTruncated: 100},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			containers := make([]corev1.Container, 0, tc.containers)
+			for i := 0; i < tc.containers; i++ {
+				containers = append(containers, corev1.Container{
+					Name:  fmt.Sprintf("c%04d", i),
+					Image: tc.image,
+					Env:   []corev1.EnvVar{{Name: "OPENAI_API_KEY", Value: "redacted"}},
+				})
+			}
+			dep := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: containers},
+			}}}
+			w := Workload{Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, Name: "huge", Namespace: "ns", Object: dep}
+			m := NewMultiScraper(NewInferenceSpecScraper(nil), NewVectorDBSpecScraper(), NewAgentSpecScraper(), NewTrainingSpecScraper(), NewEvalSpecScraper())
+			inputs, err := m.Scrape(context.Background(), w, testConfig())
+			if err != nil {
+				t.Fatalf("scrape: %v", err)
+			}
+			if len(inputs.Components) != MaxComponentsPerDocument {
+				t.Fatalf("components = %d, want capped at %d", len(inputs.Components), MaxComponentsPerDocument)
+			}
+			if inputs.TruncatedComponents != tc.wantTruncated {
+				t.Fatalf("TruncatedComponents = %d, want %d", inputs.TruncatedComponents, tc.wantTruncated)
+			}
+			inputs2, _ := m.Scrape(context.Background(), w, testConfig())
+			h1, _ := HashBOMInputs(inputs)
+			h2, _ := HashBOMInputs(inputs2)
+			if h1 != h2 {
+				t.Fatalf("capped scrape is nondeterministic: %s != %s", h1, h2)
+			}
+		})
+	}
+}
+
 // G0.3: container component Name/Version are truncated like every
 // other authored string.
 func TestExtractContainerComponent_NameAndVersionTruncated(t *testing.T) {

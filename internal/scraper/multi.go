@@ -49,6 +49,7 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 				finalInputs.Services = append(finalInputs.Services, inputs.Services...)
 				finalInputs.Provenance = append(finalInputs.Provenance, inputs.Provenance...)
 				finalInputs.Errors = append(finalInputs.Errors, inputs.Errors...)
+				finalInputs.TruncatedComponents += inputs.TruncatedComponents
 				// Downgrade confidence if one is inferred
 				if inputs.Confidence == ConfidenceInferred {
 					finalInputs.Confidence = ConfidenceInferred
@@ -77,6 +78,16 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		// locator, so it drops only those copies. A single scraper's
 		// result is returned as it was.
 		finalInputs.Deduplicate()
+	}
+	// MaxComponentsPerDocument bounds the document, not one scraper's
+	// share of it: agent.spec, vectordb.spec, training.spec and
+	// eval.spec do not cap their own lists, and merging appends to a
+	// list inference.spec has already capped. Cap the result the same
+	// way, keeping the first components in scraper order, and record
+	// the drop.
+	if n := len(finalInputs.Components); n > MaxComponentsPerDocument {
+		finalInputs.TruncatedComponents += n - MaxComponentsPerDocument
+		finalInputs.Components = finalInputs.Components[:MaxComponentsPerDocument]
 	}
 	return finalInputs, nil
 }
