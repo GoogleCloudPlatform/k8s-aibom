@@ -89,6 +89,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   `aibom.truncation.applied` along with any drop a merged scraper
   recorded. Documents under the cap are unchanged.
 
+- **A model mounted from an OCI image volume is named by its image
+  reference** (#275). An `image` volume (KEP-4639) mounted at a model
+  path produced a `data` component named after the pod-local volume
+  name, with `volume.source: other`, so the image reference that
+  identifies the model was missing from the BOM. The component is now
+  named by `image.reference`, with `volume.source: image`. An image
+  volume without a reference keeps the volume name.
+
 - **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
   (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
   failed with `flag provided but not defined: -namespace`. They now set

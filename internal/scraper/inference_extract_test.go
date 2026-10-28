@@ -851,6 +851,12 @@ func TestLookupVolumeSource(t *testing.T) {
 		{Name: "ephemeral", VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		}},
+		{Name: "oci-model", VolumeSource: corev1.VolumeSource{
+			Image: &corev1.ImageVolumeSource{Reference: "registry.example.com/models/llama-3-8b:v1"},
+		}},
+		{Name: "oci-no-ref", VolumeSource: corev1.VolumeSource{
+			Image: &corev1.ImageVolumeSource{},
+		}},
 	}
 	cases := []struct {
 		vol      string
@@ -861,6 +867,8 @@ func TestLookupVolumeSource(t *testing.T) {
 		{"cm-config", "model-config", "configMap"},
 		{"host-data", "/data/models", "hostPath"},
 		{"ephemeral", "ephemeral", "emptyDir"},
+		{"oci-model", "registry.example.com/models/llama-3-8b:v1", "image"},
+		{"oci-no-ref", "oci-no-ref", "image"},
 		{"missing", "missing", "unknown"},
 	}
 	for _, tc := range cases {

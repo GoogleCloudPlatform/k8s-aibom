@@ -205,7 +205,8 @@ with this model identity.
 **Rule.** Container volume mounts whose `mountPath` matches one of the
 configured `modelVolumePathPrefixes` (prefix-at-path-boundary match)
 contribute `data`-class Components naming the volume's backing source
-(PVC claim name, ConfigMap name, hostPath, etc.).
+(PVC claim name, ConfigMap name, hostPath, the image reference of an
+`image` volume, etc.).
 
 Boundary match: `/models` matches `/models` and `/models/llama` but NOT
 `/models-shared` (because `/models-` is not a path boundary).
