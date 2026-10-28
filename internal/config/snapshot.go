@@ -100,7 +100,11 @@ type Snapshot struct {
 	// every known kind. Read by the workload reconcilers (reporting
 	// filter), the WatchSupervisor (which supervised kinds run) and the
 	// ownership roll-up (which kinds can absorb their children).
-	WorkloadKinds    WorkloadKindSet
+	WorkloadKinds WorkloadKindSet
+	// LogLevel is spec.logging.level (debug, info, warn or error), or
+	// "" for compiled defaults, which log at info. Applied to the
+	// running logger by LogLevelSubscriber.
+	LogLevel         string
 	ExternalSinks    []sink.Sink
 	Source           SnapshotSource
 	SourceGeneration int64

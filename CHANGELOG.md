@@ -77,6 +77,20 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`spec.logging.level` sets the controller's log level** (#279). The
+  field has been a no-op since 1.0: the CRD accepted it and the chart
+  rendered it (`config.logging.level`), but nothing read it, so the
+  controller always logged at info. **On upgrade, a level that was set
+  but ignored takes effect**; a cluster that set `debug` starts logging
+  the controller's debug lines. The levels map as follows: `debug` enables
+  the `V(1)` lines, `info` is the default, and `warn` and `error` quiet the
+  info lines (`error` also quiets warnings). The logger runs on an atomic
+  level that follows the active config snapshot, so a change to the CR
+  takes effect without a restart, as the field's documentation says.
+  Deleting the CR or running on compiled defaults returns to info. An
+  explicit `--zap-log-level` flag keeps priority, and the controller logs
+  once that the spec field is ignored. `spec.logging.format` is unchanged.
+
 - **The per-document component cap now bounds the merged scraper
   result** (#273). `MaxComponentsPerDocument` was applied only inside
   `inference.spec` and the CRD scrapers. `agent.spec`, `vectordb.spec`,
