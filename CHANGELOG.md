@@ -77,6 +77,18 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The per-document component cap now bounds the merged scraper
+  result** (#273). `MaxComponentsPerDocument` was applied only inside
+  `inference.spec` and the CRD scrapers. `agent.spec`, `vectordb.spec`,
+  `training.spec` and `eval.spec` returned uncapped lists, and the
+  `MultiScraper` appended them to a list `inference.spec` had already
+  capped. So a Deployment whose containers each set `OPENAI_API_KEY`
+  produced 512 components, or 356 with no runtime image, against a cap
+  of 256. The merged result is now capped too: the first components in
+  scraper order are kept, and the drop is counted in
+  `aibom.truncation.applied` along with any drop a merged scraper
+  recorded. Documents under the cap are unchanged.
+
 - **A model mounted from an OCI image volume is named by its image
   reference** (#275). An `image` volume (KEP-4639) mounted at a model
   path produced a `data` component named after the pod-local volume
