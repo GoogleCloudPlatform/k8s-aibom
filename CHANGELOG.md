@@ -97,6 +97,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   named by `image.reference`, with `volume.source: image`. An image
   volume without a reference keeps the volume name.
 
+- **Docs: the README's AIBOM name examples include the API group**
+  (#277). "See the BOMs" used `deployment-my-workload`, but the
+  controller names an AIBOM `<group>-<kind>-<name>`, so the Deployment's
+  AIBOM is `apps-deployment-my-workload` and both commands failed with
+  `not found`. The examples use that name, and the README states the
+  naming rule.
+
 - **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
   (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
   failed with `flag provided but not defined: -namespace`. They now set
