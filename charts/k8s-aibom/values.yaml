@@ -94,6 +94,9 @@ config:
   sinks: []
   logging:
     level: info
+    # json or text. Read at startup: passed to the controller as
+    # --zap-encoder (text is zap's console encoder), so a change applies
+    # when the pod restarts.
     format: json
 
 readiness:

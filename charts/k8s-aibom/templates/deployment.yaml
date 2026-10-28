@@ -53,6 +53,11 @@ spec:
           {{- if .Values.metrics.enabled }}
           {{- $args = append $args (printf "--metrics-bind-address=:%d" (int .Values.metrics.port)) }}
           {{- end }}
+          {{- /* config.logging.format is read at startup: the logger's encoder
+                 cannot change in a running process. zap calls "text" "console". */}}
+          {{- with (.Values.config.logging | default dict).format }}
+          {{- $args = append $args (printf "--zap-encoder=%s" (ternary "console" . (eq . "text"))) }}
+          {{- end }}
           {{- if $args }}
           args:
             {{- range $args }}

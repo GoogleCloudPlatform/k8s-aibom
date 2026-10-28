@@ -273,11 +273,12 @@ type LoggingConfig struct {
 	// +kubebuilder:validation:Enum=debug;info;warn;error
 	Level string `json:"level,omitempty"`
 
-	// Format is the log output format. RESTART-REQUIRED — the logger
-	// is constructed at controller startup; format changes require a
-	// pod restart to take effect. Exposed in the spec for honest
-	// surface; the controller logs a notice when this changes
-	// post-startup.
+	// Format is the log output format. It is read at startup: the Helm
+	// chart passes config.logging.format to the controller as
+	// --zap-encoder ("text" is zap's "console" encoder), because the
+	// logger's encoder cannot change in a running process. A change
+	// takes effect when the controller pod restarts, for example on
+	// helm upgrade. The controller does not watch this field.
 	// +optional
 	// +kubebuilder:default=json
 	// +kubebuilder:validation:Enum=json;text
