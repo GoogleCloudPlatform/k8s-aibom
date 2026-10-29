@@ -147,6 +147,24 @@ func TestVectorDBSpecScraper_Scrape(t *testing.T) {
 		{name: "Milvus CDC - No Match", image: "milvusdb/milvus-cdc:v2.0.0"},
 		{name: "Milvus insight GUI - No Match", image: "milvusdb/milvus-insight:v0.1.0"},
 		{name: "Qdrant-prefixed other repo - No Match", image: "qdrant/qdrant-baseten-docker:latest"},
+		vectorDBMatchCase("Vespa release - Match", "vespaengine/vespa:8.778.45", "vespa"),
+		vectorDBMatchCase("Vespa major tag - Match", "vespaengine/vespa:8", "vespa"),
+		vectorDBMatchCase("Vespa latest - Match", "vespaengine/vespa:latest", "vespa"),
+		vectorDBMatchCase("Vespa by digest - Match", "vespaengine/vespa@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "vespa"),
+		vectorDBMatchCase("Vespa generic x86_64 build - Match", "vespaengine/vespa-generic-intel-x86_64:8.400.15", "vespa"),
+		// Images in the vespaengine namespace that are not the server:
+		// build, dev and system-test images, the pipeline and minimal
+		// images and the tutorial image. Then another user's vespa, a
+		// name-prefix lookalike and the same name on another registry.
+		{name: "Vespa build image - No Match", image: "vespaengine/vespa-build-almalinux-8:latest"},
+		{name: "Vespa dev image - No Match", image: "vespaengine/vespa-dev-almalinux-9:latest"},
+		{name: "Vespa system-test image - No Match", image: "vespaengine/vespa-systemtest-preview:latest"},
+		{name: "Vespa pipeline image - No Match", image: "vespaengine/vespa-pipeline:latest"},
+		{name: "Vespa minimal image - No Match", image: "vespaengine/vespa-minimal:latest"},
+		{name: "Vespa tutorial image - No Match", image: "vespaengine/university-101:latest"},
+		{name: "Other user's vespa - No Match", image: "someone/vespa:8"},
+		{name: "Vespa name-prefix lookalike - No Match", image: "vespaengine/vespacli:8"},
+		{name: "Vespa on another registry - No Match", image: "ghcr.io/vespaengine/vespa:8"},
 	}
 
 	for _, tc := range cases {

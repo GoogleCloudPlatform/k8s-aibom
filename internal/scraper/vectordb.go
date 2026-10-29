@@ -40,13 +40,19 @@ type VectorDBPattern struct {
 // are not taken for the database: milvusdb/milvus-operator,
 // milvusdb/milvus-backup and milvusdb/milvus-config-tool run next to
 // Milvus but are not Milvus. milvusdb/milvus-dev is the server's
-// development build and is matched.
+// development build and is matched. Likewise the vespaengine namespace
+// holds build, dev and system-test images (vespa-build-*, vespa-dev-*,
+// vespa-systemtest-*), vespa-pipeline, vespa-minimal and the
+// university-101 tutorial image next to the server;
+// vespa-generic-intel-x86_64 is the server built for older x86_64
+// hardware and is matched.
 var DefaultVectorDBPatterns = []VectorDBPattern{
 	{Name: "milvus", Pattern: regexp.MustCompile(`^milvusdb/milvus(?:-dev)?(?:[:@]|$)`)},
 	{Name: "qdrant", Pattern: regexp.MustCompile(`^qdrant/qdrant(?:[:@]|$)`)},
 	{Name: "weaviate", Pattern: regexp.MustCompile(`^(?:.*/)?weaviate(?:[:@]|$)`)},
 	{Name: "chroma", Pattern: regexp.MustCompile(`^chromadb/chroma(?:[:@]|$)`)},
 	{Name: "pgvector", Pattern: regexp.MustCompile(`^(?:.*/)?pgvector(?:[:@]|$)`)},
+	{Name: "vespa", Pattern: regexp.MustCompile(`^vespaengine/vespa(?:-generic-intel-x86_64)?(?:[:@]|$)`)},
 }
 
 type VectorDBSpecScraper struct{}
