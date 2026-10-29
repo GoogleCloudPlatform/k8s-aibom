@@ -8,6 +8,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **The vector-database scraper detects Vespa** (#286). Workloads running
+  `vespaengine/vespa` (or `vespaengine/vespa-generic-intel-x86_64`, the
+  same server built for older x86_64 hardware) get category
+  `vector-database` and a `vespa` component. The pattern ends at the
+  repository name, so the build, dev, system-test, pipeline, minimal and
+  tutorial images in the `vespaengine` namespace are not matched.
+
 - **The controller says when nothing is opted in** (#261). `AIBOMControllerConfig`
   gains a `NamespacesOptedIn` condition: `False` with the exact opt-in command
   in its message while no namespace matches

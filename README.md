@@ -31,7 +31,7 @@ k8s-aibom recognizes workload kinds across the AI lifecycle and applies category
 
 **Agent stacks.** Workloads running agent frameworks (LangChain / LangGraph, AutoGen, CrewAI, Langflow, Flowise, Chainlit). The controller extracts the framework version, the external LLM API dependencies declared via environment variables (OpenAI, Anthropic, Google, Cohere), and telemetry signatures that indicate observability integration (LangSmith, LangChain tracing).
 
-**Vector databases and RAG infrastructure.** Workloads running Milvus, Qdrant, Weaviate, Chroma, or pgvector. The controller extracts the vector store identity, configured collections where determinable, and the workload's relationship to RAG-related dependencies.
+**Vector databases and RAG infrastructure.** Workloads running Milvus, Qdrant, Weaviate, Chroma, pgvector, or Vespa. The controller extracts the vector store identity, configured collections where determinable, and the workload's relationship to RAG-related dependencies.
 
 **Training and fine-tuning jobs.** Kubernetes Jobs and CronJobs running PyTorch, KubeRay, JAX, or Hugging Face Accelerate workloads. The controller extracts mounted training datasets via volume specifications, telemetry integrations (Weights & Biases, Hugging Face Hub), and runtime/framework version information.
 
