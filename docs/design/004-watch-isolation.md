@@ -5,7 +5,7 @@ critical path for the AICR Dynamo-pairing qualification. Review window
 stated on the PR; the Dynamo and AICR reviewers already on #127 are
 specifically invited.
 
-Amendment for v1.7 (#226), **Draft, not accepted**: third-party CRDs
+Amendment for v1.7 (#226), **Accepted 2026-10-29**: third-party CRDs
 installed after startup. See the amendment section at the end; the
 sections above it describe v1.6.
 
@@ -205,9 +205,9 @@ are the same; only which cache serves them changes). No new flags.
 
 ## Amendment (#226, v1.7): CRDs installed after startup
 
-Status: **Draft, not accepted.** Proposed 2026-10-24 for the v1.7
-train. Review window: three working days from the date the design PR
-is opened; implementation starts after it closes. The sections above
+Status: **Accepted 2026-10-29.** Proposed 2026-10-24 for the v1.7
+train; review window closed 2026-10-29 with the A3/A4 revisions of
+2026-10-25. Implementation follows the two-phase plan in A8. The sections above
 describe v1.6 and are unchanged except where they point here.
 
 ### Context and scope
