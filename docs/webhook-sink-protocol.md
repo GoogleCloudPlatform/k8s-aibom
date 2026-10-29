@@ -35,7 +35,7 @@ handling" below for the controller's interpretation.
 | `X-Aibom-Workload-Name` | always | Workload's Kubernetes `metadata.name`. |
 | `X-Aibom-Workload-Category` | always (v1) | High-level AI lifecycle category, the same value as the document's `aibom.workload.category` (`inference`, `agent`, `vector-database`, `training`, `evaluation`). |
 | `X-Aibom-Controller-Version` | always | Version of the k8s-aibom controller that produced this BOM. |
-| `Authorization` | when configured | Bearer token from the controller's configured `BearerTokenFile`. Sent only when the controller is configured with bearer-token auth. |
+| `Authorization` | when configured | `Bearer <token>`. Sent only when the sink sets `webhook.auth.bearerToken`. The token is the value of the Secret key named by `webhook.auth.bearerToken.secretRef` (a Secret in the controller's namespace), with surrounding whitespace trimmed; a whitespace-only value is a sink error. The chart needs `rbac.sinkSecretAccess=true` to let the controller read the Secret. Auth on an `http://` endpoint is rejected when the configuration loads, so the header is only sent over `https://`. |
 
 ## Body
 

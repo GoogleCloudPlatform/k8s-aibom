@@ -77,6 +77,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The webhook protocol doc names where the bearer token comes from**
+  (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
+  came from a `BearerTokenFile`, an internal setting that
+  `AIBOMControllerConfig` cannot set. It now names
+  `webhook.auth.bearerToken.secretRef` (a Secret in the controller's
+  namespace, readable with `rbac.sinkSecretAccess=true`), says the value
+  is whitespace-trimmed, and says the header is only sent over
+  `https://`, since auth on an `http://` endpoint is a configuration
+  error. Documentation only.
+
 - **`spec.logging.level` sets the controller's log level** (#279). The
   field has been a no-op since 1.0: the CRD accepted it and the chart
   rendered it (`config.logging.level`), but nothing read it, so the
