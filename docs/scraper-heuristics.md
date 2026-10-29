@@ -20,6 +20,11 @@ The controller runs a set of specialized scrapers over each workload. Every scra
 
 When more than one scraper reports a category, the workload takes the one with the highest priority, whatever the order above: `agent`, then `training`, then `evaluation`, then `vector-database`, then `inference`. A vLLM Deployment that also sets `LANGCHAIN_TRACING_V2` is categorized `agent`, and its BOM lists both the vLLM runtime and the LangChain framework. A workload that no scraper gives a category is categorized `inference`.
 
+## Vector Database Heuristics
+**Rule.** The `vector-database` category is for systems whose primary function is embedding storage and approximate nearest-neighbour search, so that the image alone is an AI signal. Milvus, Qdrant, Weaviate, Chroma and Vespa qualify on that reading, and so does a `pgvector` image, a PostgreSQL build made for vector search (a plain `postgres` image is not matched). Elasticsearch, OpenSearch and Redis do not qualify: vector search is one feature among many there, and the image usually means logs, search or caching.
+
+Each pattern is anchored at the image name, so a project's build, development and tooling images (for example `vespaengine/vespa-build-almalinux-8` or `vespaengine/vespacli`) are not reported as a vector database.
+
 ## Agent & Remote API Heuristics
 Agent workloads (unlike inference workloads) usually do not bundle local model weights; instead, they act as clients to remote Foundation Model APIs.
 **Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). The actual value of the key is **never** extracted or logged.
