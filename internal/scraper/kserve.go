@@ -130,6 +130,13 @@ func (s *KServeInferenceServiceScraper) Scrape(ctx context.Context, w Workload, 
 	applySignatures(ctx, s.verifier, inputs.Components, u.GetAnnotations())
 
 	sortComponents(inputs.Components)
+	// The reconciler calls this scraper directly, not through
+	// MultiScraper, so the per-document cap is applied here as the other
+	// CR scrapers do: every model.k8saibom.dev/* annotation is a component.
+	if len(inputs.Components) > MaxComponentsPerDocument {
+		inputs.TruncatedComponents = len(inputs.Components) - MaxComponentsPerDocument
+		inputs.Components = inputs.Components[:MaxComponentsPerDocument]
+	}
 	inputs.Confidence = aggregateConfidence(inputs.Components)
 	inputs.Provenance = []Provenance{{
 		ScraperName:     s.Name(),
