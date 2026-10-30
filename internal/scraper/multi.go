@@ -31,6 +31,16 @@ func (m *MultiScraper) Name() string {
 func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
 	var finalInputs *BOMInputs
 	merged := false
+	// Container components from a scraper that found no signal of its
+	// own. inference.spec builds one for every container, with its
+	// image and digest, but a Qdrant or Langflow Deployment has no
+	// runtime or model for it to find; the image is still what the
+	// workload runs, so it is kept once another scraper recognizes the
+	// workload. Nothing else from such a result is kept, except the
+	// count of components its own cap dropped.
+	var carried []Component
+	var carriedProvenance []Provenance
+	carriedTruncated := 0
 
 	for _, s := range m.scrapers {
 		if !s.HandlesKind(w.Kind) {
@@ -39,6 +49,13 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		inputs, err := s.Scrape(ctx, w, cfg)
 		if err != nil {
 			return nil, err
+		}
+		if inputs.Confidence == ConfidenceUnresolved {
+			if cs := containerComponents(inputs.Components); len(cs) > 0 {
+				carried = append(carried, cs...)
+				carriedProvenance = append(carriedProvenance, inputs.Provenance...)
+				carriedTruncated += inputs.TruncatedComponents
+			}
 		}
 		if inputs.Confidence != ConfidenceUnresolved {
 			if finalInputs == nil {
@@ -69,6 +86,15 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 			Confidence:  ConfidenceUnresolved,
 		}, nil
 	}
+	if len(carried) > 0 {
+		// Listed first, as inference.spec runs first. Container
+		// components are not counted in the workload confidence, so
+		// the merged confidence is unchanged.
+		finalInputs.Components = append(carried, finalInputs.Components...)
+		finalInputs.Provenance = append(carriedProvenance, finalInputs.Provenance...)
+		finalInputs.TruncatedComponents += carriedTruncated
+		merged = true
+	}
 
 	if merged {
 		// Scrapers can report the same field: training.spec and
@@ -90,6 +116,17 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		finalInputs.Components = finalInputs.Components[:MaxComponentsPerDocument]
 	}
 	return finalInputs, nil
+}
+
+// containerComponents returns the container-type components in cs.
+func containerComponents(cs []Component) []Component {
+	var out []Component
+	for _, c := range cs {
+		if c.Type == ComponentContainer {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func (m *MultiScraper) HandlesKind(k WorkloadKind) bool {

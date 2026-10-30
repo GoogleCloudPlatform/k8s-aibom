@@ -385,9 +385,11 @@ func TestMultiScraper_ComponentCapAppliesToMergedResult(t *testing.T) {
 		// inference.spec (512 in all, 256 dropped there), plus an
 		// openai-api component from agent.spec (256 more).
 		{name: "inference and agent", image: "vllm/vllm-openai:v0.6.3", containers: MaxComponentsPerDocument, wantTruncated: 2 * MaxComponentsPerDocument},
-		// No runtime image: inference.spec's result is unresolved and
-		// not merged, so agent.spec's own list is the whole result.
-		{name: "agent only", image: "busybox:1.36", containers: MaxComponentsPerDocument + 100, wantTruncated: 100},
+		// No runtime image: inference.spec's result is unresolved, so
+		// only its container components are kept (256, after its own
+		// cap dropped 100), ahead of agent.spec's 356 openai-api
+		// components; the merged 612 are capped at 256.
+		{name: "agent only", image: "busybox:1.36", containers: MaxComponentsPerDocument + 100, wantTruncated: 100 + MaxComponentsPerDocument + 100},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
