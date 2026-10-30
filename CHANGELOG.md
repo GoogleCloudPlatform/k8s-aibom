@@ -103,6 +103,18 @@ All notable changes to k8s-aibom are documented here. The format follows
   vector-database AIBOMs regenerate once. Jobs and CronJobs are not read
   by `inference.spec`, so training and evaluation BOMs are unchanged.
 
+- **The README's GCS sink example applies** (#292). It set
+  `gcs.workloadIdentity`, a field no `AIBOMControllerConfig` version has,
+  so `kubectl apply` rejected the example as an unknown field (and
+  non-strict validation dropped it silently). The field is gone, and the
+  README now says how the GCS sink authenticates: Application Default
+  Credentials with Workload Identity on the controller's ServiceAccount
+  (`serviceAccount.annotations` in the chart), or
+  `gcs.credentialsSecretRef`. `docs/security-model.md` described the
+  key-file fallback through `K8S_AIBOM_GCS_CREDENTIALS_FILE`, a v1.0
+  environment variable nothing reads; it now names
+  `gcs.credentialsSecretRef`. Documentation only.
+
 - **The webhook protocol doc names where the bearer token comes from**
   (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
   came from a `BearerTokenFile`, an internal setting that

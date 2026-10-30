@@ -263,7 +263,6 @@ spec:
       gcs:
         bucket: my-aibom-archive
         pathTemplate: "aibom/{namespace}/{kind}-{name}/{timestamp}.json"
-        workloadIdentity: k8s-aibom-controller@my-project.iam.gserviceaccount.com
     - name: graph-ingest
       type: Webhook
       webhook:
@@ -274,6 +273,8 @@ spec:
               name: graph-ingest-creds
               key: token
 ```
+
+**GCS authentication:** the GCS sink uses Application Default Credentials. On GKE, bind the controller's ServiceAccount to a Google service account with Workload Identity: set `serviceAccount.annotations` in the chart values to `iam.gke.io/gcp-service-account: <gsa-email>`, and grant that account `roles/storage.objectCreator` on the bucket. Where ADC is not available, `gcs.credentialsSecretRef` (`name`, `key`) names a Secret in the controller's namespace that holds a service-account JSON key. Details: [docs/security-model.md](docs/security-model.md#authentication).
 
 **GCS object paths:** `pathTemplate` placeholders are `{namespace}`, `{kind}`, `{name}`, `{category}`, `{timestamp}` and `{hash}`. `{kind}` is lowercased (`deployment`), `{timestamp}` is UTC to the millisecond with colons replaced by dashes (`2026-05-10T12-00-00.123Z`), and `{hash}` is the first 12 hex characters of the document's sha256. In the namespace, kind, name and category, `/`, `\`, `.` and line breaks become `_`. The default template, `mlbom/{namespace}/{kind}-{name}/{timestamp}.json`, writes objects such as `mlbom/prod-inference/deployment-vllm-llama3/2026-05-10T12-00-00.123Z.json`.
 
