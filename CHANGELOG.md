@@ -84,6 +84,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **KServe InferenceService BOMs are capped at 256 components** (#288).
+  The KServe scraper is called without `MultiScraper` and was the only
+  CR scraper that did not apply `MaxComponentsPerDocument`, so each
+  `model.k8saibom.dev/*` annotation added a component with no bound and
+  no `aibom.truncation.applied` property. It now caps and records the
+  drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
+  do.
+
 - **The webhook protocol doc names where the bearer token comes from**
   (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
   came from a `BearerTokenFile`, an internal setting that
