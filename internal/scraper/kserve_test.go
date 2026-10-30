@@ -18,6 +18,7 @@ package scraper
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -272,6 +273,37 @@ func TestKServeInferenceServiceScraper_AnnotationModels(t *testing.T) {
 	}
 	if annModelCount != 2 {
 		t.Errorf("expected 2 model.k8saibom.dev/* annotation components, got %d", annModelCount)
+	}
+}
+
+// An InferenceService with more model.k8saibom.dev/* annotations than
+// MaxComponentsPerDocument is capped like every other workload, and the
+// drop is recorded rather than silent.
+func TestKServeInferenceServiceScraper_CapsComponents(t *testing.T) {
+	s := newKServeScraper()
+	u := minimalKServeISVC("ns", "isvc")
+	_ = unstructured.SetNestedField(u.Object, "pytorch", "spec", "predictor", "model", "modelFormat", "name")
+	_ = unstructured.SetNestedField(u.Object, "gs://bucket/model/", "spec", "predictor", "model", "storageUri")
+	const annotated = MaxComponentsPerDocument + 10
+	annotations := map[string]string{}
+	for i := 0; i < annotated; i++ {
+		annotations[fmt.Sprintf("model.k8saibom.dev/m%03d", i)] = fmt.Sprintf("org/model-%03d", i)
+	}
+	u.SetAnnotations(annotations)
+
+	got, err := s.Scrape(context.Background(), Workload{
+		Kind:   WorkloadKind{Group: "serving.kserve.io", Version: "v1beta1", Kind: "InferenceService"},
+		Object: u,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Components) != MaxComponentsPerDocument {
+		t.Errorf("len(Components) = %d, want %d", len(got.Components), MaxComponentsPerDocument)
+	}
+	// The runtime and storageUri components plus one per annotation.
+	if want := 2 + annotated - MaxComponentsPerDocument; got.TruncatedComponents != want {
+		t.Errorf("TruncatedComponents = %d, want %d", got.TruncatedComponents, want)
 	}
 }
 

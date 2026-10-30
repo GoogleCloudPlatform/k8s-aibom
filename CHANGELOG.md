@@ -84,6 +84,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **KServe InferenceService BOMs are capped at 256 components** (#288).
+  The KServe scraper is called without `MultiScraper` and was the only
+  CR scraper that did not apply `MaxComponentsPerDocument`, so each
+  `model.k8saibom.dev/*` annotation added a component with no bound and
+  no `aibom.truncation.applied` property. It now caps and records the
+  drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
+  do.
+
 - **Agent and vector-database AIBOMs list the workload's containers**
   (#290). `inference.spec` is the only scraper that builds container
   components, and `MultiScraper` dropped its whole result when it found
