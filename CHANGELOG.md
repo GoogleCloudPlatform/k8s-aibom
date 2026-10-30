@@ -84,6 +84,25 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **KServe InferenceService BOMs are capped at 256 components** (#288).
+  The KServe scraper is called without `MultiScraper` and was the only
+  CR scraper that did not apply `MaxComponentsPerDocument`, so each
+  `model.k8saibom.dev/*` annotation added a component with no bound and
+  no `aibom.truncation.applied` property. It now caps and records the
+  drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
+  do.
+
+- **Agent and vector-database AIBOMs list the workload's containers**
+  (#290). `inference.spec` is the only scraper that builds container
+  components, and `MultiScraper` dropped its whole result when it found
+  no runtime or model, so a Qdrant or Langflow Deployment's BOM had no
+  image reference and no digest. Its container components are now kept
+  when another scraper recognizes the workload; nothing else from that
+  result is, so the confidence and category are unchanged and a
+  workload no scraper recognizes still gets no AIBOM. Existing agent and
+  vector-database AIBOMs regenerate once. Jobs and CronJobs are not read
+  by `inference.spec`, so training and evaluation BOMs are unchanged.
+
 - **The README's GCS sink example applies** (#292). It set
   `gcs.workloadIdentity`, a field no `AIBOMControllerConfig` version has,
   so `kubectl apply` rejected the example as an unknown field (and
