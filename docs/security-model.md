@@ -75,11 +75,14 @@ preference:
    (for non-GKE clusters: EKS, AKS, on-prem). Configure ADC via the
    federation JSON config; point `GOOGLE_APPLICATION_CREDENTIALS` at
    it. No long-lived credentials in the cluster.
-3. **Service account key file (documented fallback).** Mount a JSON
-   key file as a Kubernetes Secret in the controller's namespace; set
-   `K8S_AIBOM_GCS_CREDENTIALS_FILE` to its path. Key rotation is the
-   **customer's responsibility**; the controller has no rotation
-   support. Avoid this path in production.
+3. **Service account key (documented fallback).** Store a JSON key
+   in a Kubernetes Secret in the controller's namespace and reference
+   it from the sink with `gcs.credentialsSecretRef` (`name`, `key`).
+   The controller reads the Secret through the API, which needs the
+   chart installed with `rbac.sinkSecretAccess=true`; the key is not
+   mounted into the pod. Key rotation is the **customer's
+   responsibility**; the controller has no rotation support. Avoid this
+   path in production.
 
 ### Configuration (AIBOMControllerConfig CRD)
 
