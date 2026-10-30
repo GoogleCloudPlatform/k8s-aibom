@@ -92,6 +92,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
   do.
 
+- **Agent and vector-database AIBOMs list the workload's containers**
+  (#290). `inference.spec` is the only scraper that builds container
+  components, and `MultiScraper` dropped its whole result when it found
+  no runtime or model, so a Qdrant or Langflow Deployment's BOM had no
+  image reference and no digest. Its container components are now kept
+  when another scraper recognizes the workload; nothing else from that
+  result is, so the confidence and category are unchanged and a
+  workload no scraper recognizes still gets no AIBOM. Existing agent and
+  vector-database AIBOMs regenerate once. Jobs and CronJobs are not read
+  by `inference.spec`, so training and evaluation BOMs are unchanged.
+
 - **The webhook protocol doc names where the bearer token comes from**
   (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
   came from a `BearerTokenFile`, an internal setting that
