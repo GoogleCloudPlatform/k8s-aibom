@@ -257,7 +257,17 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 	}()
 	go func() {
 		defer s.wg.Done()
-		if toolscache.WaitForCacheSync(ctx.Done(), inf.HasSynced) {
+		// A stalled initial sync must become visible as Degraded (A6).
+		// Keep waiting under the manager context so a later sync clears
+		// the failure without restarting the supervisor.
+		syncCtx, stop := context.WithTimeout(ctx, s.CacheSyncTimeout)
+		synced := toolscache.WaitForCacheSync(syncCtx.Done(), inf.HasSynced)
+		stop()
+		if !synced && ctx.Err() == nil {
+			s.reportDiscoverySyncFailure(fmt.Errorf("CRD metadata informer did not sync within %s", s.CacheSyncTimeout))
+			synced = toolscache.WaitForCacheSync(ctx.Done(), inf.HasSynced)
+		}
+		if synced {
 			s.reportDiscoverySynced()
 			for _, k := range workers {
 				k.poke()
@@ -651,6 +661,7 @@ func (s *WatchSupervisor) initDiscoveryHealth() {
 	s.discovery.synced = false
 	s.discovery.informerOnline = false
 	s.discovery.informerErr = ""
+	s.discovery.syncErr = ""
 	s.discovery.candidateErr = make(map[string]string)
 	s.discovery.seen = make(map[string]bool)
 	s.Health.Register(CRDDiscoveryKind)
@@ -679,15 +690,38 @@ func (s *WatchSupervisor) reportDiscoveryInformer(err error) {
 	}
 }
 
-func (s *WatchSupervisor) reportDiscoverySynced() {
+// reportDiscoverySyncFailure flags a stalled initial informer sync.
+// It is cleared only once the informer actually synchronizes.
+func (s *WatchSupervisor) reportDiscoverySyncFailure(err error) {
+	if err == nil {
+		return
+	}
 	s.discovery.Lock()
 	if !s.discovery.enabled || s.discovery.synced {
 		s.discovery.Unlock()
 		return
 	}
-	s.discovery.synced = true
+	changed := s.discovery.syncErr != err.Error()
+	s.discovery.syncErr = err.Error()
 	s.discovery.Unlock()
-	s.wakeDiscoveryHealth()
+	if changed {
+		s.wakeDiscoveryHealth()
+	}
+}
+
+func (s *WatchSupervisor) reportDiscoverySynced() {
+	s.discovery.Lock()
+	if !s.discovery.enabled {
+		s.discovery.Unlock()
+		return
+	}
+	changed := !s.discovery.synced || s.discovery.syncErr != ""
+	s.discovery.synced = true
+	s.discovery.syncErr = ""
+	s.discovery.Unlock()
+	if changed {
+		s.wakeDiscoveryHealth()
+	}
 }
 
 // A successful GET or confirmed NotFound clears one candidate's error.
@@ -731,6 +765,9 @@ func (s *WatchSupervisor) applyDiscoveryHealth() {
 	var failures []string
 	if s.discovery.informerErr != "" {
 		failures = append(failures, "informer: "+s.discovery.informerErr)
+	}
+	if s.discovery.syncErr != "" {
+		failures = append(failures, "sync: "+s.discovery.syncErr)
 	}
 	kinds := make([]string, 0, len(s.discovery.candidateErr))
 	for kind := range s.discovery.candidateErr {

@@ -117,3 +117,21 @@ func TestCRDDiscovery_InformerRecoveryNeedsSync(t *testing.T) {
 		t.Fatal("empty metadata informer recovers on successful watch and sync")
 	}
 }
+
+func TestCRDDiscovery_SyncTimeoutClearsWhenInformerEventuallySyncs(t *testing.T) {
+	s := newApplyTestSupervisor(t)
+	s.initDiscoveryHealth()
+	s.reportCandidateCRDRead("DynamoGraphDeployment", nil)
+	s.reportDiscoveryInformer(nil)
+	s.reportDiscoverySyncFailure(errTest("metadata informer sync timed out"))
+	s.applyDiscoveryHealth()
+	st, _ := s.Health.Status(CRDDiscoveryKind)
+	if !st.Degraded() || !strings.Contains(st.LastError, "sync timed out") {
+		t.Fatalf("timed-out initial sync must Degrade: %+v", st)
+	}
+	s.reportDiscoverySynced()
+	s.applyDiscoveryHealth()
+	if !s.Health.IsHealthy(CRDDiscoveryKind) {
+		t.Fatal("eventual cache sync must clear sync failure and recover")
+	}
+}

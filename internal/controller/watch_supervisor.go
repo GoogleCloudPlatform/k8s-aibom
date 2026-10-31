@@ -160,6 +160,7 @@ type WatchSupervisor struct {
 		synced         bool
 		informerOnline bool
 		informerErr    string
+		syncErr        string
 		candidateErr   map[string]string
 		seen           map[string]bool
 	}
