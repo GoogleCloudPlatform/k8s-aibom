@@ -252,9 +252,10 @@ func TestIntegration_LateCRD_DynamoGraphDeploymentAfterStartup(t *testing.T) {
 	requireManagerRunning(t, env)
 }
 
-// No candidate CRD at startup: the supervisor is still registered (it
-// used not to be) and creates no health entries; CRDs installed later,
-// two of them in one group-version, all start without a restart.
+// No candidate CRD at startup: the supervisor is still registered and
+// reports healthy aggregate discovery, but no candidate watch health
+// entries or candidate-specific events exist. CRDs installed later,
+// two in one group-version, start without a restart.
 func TestIntegration_LateCRD_NoCandidateCRDsAtStartup(t *testing.T) {
 	opts := envTestOptions{
 		omitExternalCRDs: []string{dgdCRDFile, dcdCRDFile, lwsCRDFile, nimCRDFile, isvcCRDFile, dsetCRDFile},
@@ -274,8 +275,14 @@ func TestIntegration_LateCRD_NoCandidateCRDsAtStartup(t *testing.T) {
 	for _, k := range allCandidateKinds {
 		requireNoHealthEntry(t, env.watchHealth, k)
 	}
-	if got := events.all(); len(got) != 0 {
-		t.Fatalf("no events while every candidate is absent; got %q", got)
+	// A6 adds one healthy discovery pseudo-kind even when no candidate
+	// is installed. This must not announce any workload watch event.
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	events.wait(t, EventReasonWatchRecovered, CRDDiscoveryKind)
+	for _, event := range events.all() {
+		if !strings.Contains(event, " "+EventReasonWatchRecovered+" "+CRDDiscoveryKind+" ") {
+			t.Fatalf("no candidate watch events while all CRDs are absent; got %q", events.all())
+		}
 	}
 
 	for _, name := range []string{"dynamocomponentdeployments.nvidia.com", dgdCRDName, lwsCRDName} {
@@ -534,8 +541,12 @@ func TestIntegration_LateCRD_CandidateReadFailuresAreIsolated(t *testing.T) {
 			t.Errorf("a failing read is not evidence: %d WatchDisabled for %s", n, k)
 		}
 	}
-	if d := env.watchHealth.Degraded(); len(d) != 0 {
-		t.Errorf("no kind may be Degraded: %+v", d)
+	// A6 surfaces failed full-CRD GETs under one discovery pseudo-kind;
+	// individual workload watches must still remain unaffected.
+	d := env.watchHealth.Degraded()
+	if len(d) != 1 || d[0].Kind != CRDDiscoveryKind ||
+		!strings.Contains(d[0].LastError, "NIMService") {
+		t.Errorf("only aggregate CRDDiscovery may be Degraded by the forbidden candidate read: %+v", d)
 	}
 	requireManagerRunning(t, env)
 }
