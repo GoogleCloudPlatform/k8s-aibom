@@ -152,6 +152,17 @@ type WatchSupervisor struct {
 	// error can ask discovery to re-read its CRD. Read-only after
 	// startDiscovery.
 	crdWorkers map[string]*crdWorker
+	// Workers publish informer and candidate read failures here; only
+	// the serialized apply loop mutates the aggregate WatchHealth entry.
+	discovery struct {
+		sync.Mutex
+		enabled        bool
+		synced         bool
+		informerOnline bool
+		informerErr    string
+		candidateErr   map[string]string
+		seen           map[string]bool
+	}
 	// absentSince: when a kind's runner first saw an absence-shaped
 	// error (NotFound, NoMatch) in the current streak.
 	absentSince struct {
@@ -207,6 +218,7 @@ func (s *WatchSupervisor) Start(ctx context.Context) error {
 	s.absentSince.at = map[string]time.Time{}
 	s.pendingStart.kinds = map[string]bool{}
 	s.fanoutReq = make(chan struct{}, 1)
+	s.initDiscoveryHealth()
 	// Discovery is built before any goroutine starts: everything in it
 	// that can fail does so before it launches its own goroutines.
 	if err := s.startDiscovery(ctx); err != nil {
@@ -286,6 +298,7 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 	if s.rootCtx.Err() != nil {
 		return
 	}
+	s.applyDiscoveryHealth()
 	for i := range s.Watches {
 		w := s.Watches[i]
 		gk := schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}

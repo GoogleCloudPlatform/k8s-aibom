@@ -77,6 +77,19 @@ This needs read-only `get`/`list`/`watch` on
 ClusterRole grants; custom RBAC must add it, or no third-party kind
 starts.
 
+**Aggregate CRD discovery health (Design 004 amendment A6).**
+`CRDDiscovery` is one **pseudo-kind**, not a Kubernetes workload kind.
+Its `aibom_watch_healthy{kind="CRDDiscovery"}` gauge is 1 only when
+the metadata informer has synced, its watch is connected, and all six
+candidate CRDs have been read without outstanding errors. An informer
+LIST/WATCH/sync failure or any failed full-CRD GET (including a 403
+from custom RBAC) makes this one entry Degraded in
+`AIBOMControllerConfig`, identifying every outstanding failure.
+One `WatchUnhealthy` event fires per discovery outage and
+`WatchRecovered` fires when **all** failed sources recover. Confirmed
+NotFound is not an error. Existing watches, AIBOMs and manager
+readiness are unaffected; discovery of new CRDs may be delayed.
+
 **CRD lifecycle after a watch started (Design 004 amendment rows 5-9).**
 Only a full read of the CRD by name decides what happened to it:
 informer events, read failures, RESTMapper errors and a failing watch

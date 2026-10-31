@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,8 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/metadata"
-	"k8s.io/client-go/metadata/metadatainformer"
 	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,6 +68,9 @@ var (
 
 // crdReadTimeout bounds one full-CRD GET.
 const crdReadTimeout = 30 * time.Second
+
+// CRDDiscoveryKind is the aggregate, non-workload discovery pseudo-kind (A6).
+const CRDDiscoveryKind = "CRDDiscovery"
 
 // crdState is a candidate CRD's state per amendment A1.
 type crdState int
@@ -178,7 +184,36 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("CRD discovery client: %w", err)
 	}
-	inf := metadatainformer.NewFilteredMetadataInformer(mc, crdGVR, "", 0, toolscache.Indexers{}, nil).Informer()
+	// A watch-error handler cannot observe recovery if the CRD list is
+	// empty and no more events arrive. Successful watch establishment
+	// must clear informer errors even without a candidate event (A6).
+	list := func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		obj, err := mc.Resource(crdGVR).Namespace("").List(ctx, opts)
+		if err != nil && ctx.Err() == nil {
+			s.reportDiscoveryInformer(err)
+		}
+		return obj, err
+	}
+	watchCRDs := func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+		stream, err := mc.Resource(crdGVR).Namespace("").Watch(ctx, opts)
+		if ctx.Err() == nil {
+			s.reportDiscoveryInformer(err)
+		}
+		return stream, err
+	}
+	lw := &toolscache.ListWatch{
+		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
+			return list(ctx, opts)
+		},
+		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
+			return watchCRDs(ctx, opts)
+		},
+		ListWithContextFunc: list,
+		WatchFuncWithContext: watchCRDs,
+	}
+	inf := toolscache.NewSharedIndexInformer(
+		toolscache.ToListWatcherWithWatchListSemantics(lw, mc),
+		&metav1.PartialObjectMetadata{}, 0, toolscache.Indexers{})
 	if err := inf.SetTransform(stripCRDMetadata); err != nil {
 		return fmt.Errorf("CRD discovery transform: %w", err)
 	}
@@ -186,6 +221,7 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 		// Discovery-wide and never evidence of absence: running
 		// watches are untouched, the informer retries on its own.
 		if err != nil {
+			s.reportDiscoveryInformer(err)
 			log.Info("CRD informer list/watch failed; discovery of newly installed CRDs is paused until it recovers", "err", err.Error())
 		}
 	}); err != nil {
@@ -222,6 +258,7 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 	go func() {
 		defer s.wg.Done()
 		if toolscache.WaitForCacheSync(ctx.Done(), inf.HasSynced) {
+			s.reportDiscoverySynced()
 			for _, k := range workers {
 				k.poke()
 			}
@@ -276,6 +313,14 @@ func (s *WatchSupervisor) readCRD(ctx context.Context, k *crdWorker, log logr.Lo
 	rctx, cancel := context.WithTimeout(ctx, crdReadTimeout)
 	err := s.CRDReader.Get(rctx, client.ObjectKey{Name: w.CRD}, u)
 	cancel()
+	if ctx.Err() == nil {
+		if apierrors.IsNotFound(err) {
+			// Authoritative absence is a successful observation.
+			s.reportCandidateCRDRead(w.Name, nil)
+		} else {
+			s.reportCandidateCRDRead(w.Name, err)
+		}
+	}
 	switch {
 	case apierrors.IsNotFound(err):
 		k.sawAbsent = true
@@ -595,4 +640,119 @@ func (s *WatchSupervisor) takePendingStart(kind string) bool {
 	v := s.pendingStart.kinds[kind]
 	delete(s.pendingStart.kinds, kind)
 	return v
+}
+
+// initDiscoveryHealth registers one pseudo-kind; individual candidate
+// errors never create additional health entries.
+func (s *WatchSupervisor) initDiscoveryHealth() {
+	s.discovery.Lock()
+	defer s.discovery.Unlock()
+	s.discovery.enabled = true
+	s.discovery.synced = false
+	s.discovery.informerOnline = false
+	s.discovery.informerErr = ""
+	s.discovery.candidateErr = make(map[string]string)
+	s.discovery.seen = make(map[string]bool)
+	s.Health.Register(CRDDiscoveryKind)
+}
+
+// An informer error is cleared only by a successfully established watch,
+// not merely by an empty LIST. This works even with zero CRD events.
+func (s *WatchSupervisor) reportDiscoveryInformer(err error) {
+	s.discovery.Lock()
+	if !s.discovery.enabled {
+		s.discovery.Unlock()
+		return
+	}
+	oldErr, oldOnline := s.discovery.informerErr, s.discovery.informerOnline
+	if err == nil {
+		s.discovery.informerErr = ""
+		s.discovery.informerOnline = true
+	} else {
+		s.discovery.informerErr = err.Error()
+		s.discovery.informerOnline = false
+	}
+	changed := oldErr != s.discovery.informerErr || oldOnline != s.discovery.informerOnline
+	s.discovery.Unlock()
+	if changed {
+		s.wakeDiscoveryHealth()
+	}
+}
+
+func (s *WatchSupervisor) reportDiscoverySynced() {
+	s.discovery.Lock()
+	if !s.discovery.enabled || s.discovery.synced {
+		s.discovery.Unlock()
+		return
+	}
+	s.discovery.synced = true
+	s.discovery.Unlock()
+	s.wakeDiscoveryHealth()
+}
+
+// A successful GET or confirmed NotFound clears one candidate's error.
+// Failed reads are retried independently by the existing workers.
+func (s *WatchSupervisor) reportCandidateCRDRead(kind string, err error) {
+	s.discovery.Lock()
+	if !s.discovery.enabled {
+		s.discovery.Unlock()
+		return
+	}
+	old, seen := s.discovery.candidateErr[kind], s.discovery.seen[kind]
+	if err == nil {
+		delete(s.discovery.candidateErr, kind)
+	} else {
+		s.discovery.candidateErr[kind] = err.Error()
+	}
+	s.discovery.seen[kind] = true
+	changed := !seen || old != s.discovery.candidateErr[kind]
+	s.discovery.Unlock()
+	if changed {
+		s.wakeDiscoveryHealth()
+	}
+}
+
+func (s *WatchSupervisor) wakeDiscoveryHealth() {
+	select {
+	case s.kick <- struct{}{}:
+	default:
+	}
+}
+
+// Called only by the serialized supervisor apply loop (A5). Report one
+// aggregate failure for any informer or candidate error; recover only
+// after all failures clear and the informer is synced and connected.
+func (s *WatchSupervisor) applyDiscoveryHealth() {
+	s.discovery.Lock()
+	if !s.discovery.enabled {
+		s.discovery.Unlock()
+		return
+	}
+	var failures []string
+	if s.discovery.informerErr != "" {
+		failures = append(failures, "informer: "+s.discovery.informerErr)
+	}
+	kinds := make([]string, 0, len(s.discovery.candidateErr))
+	for kind := range s.discovery.candidateErr {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	for _, kind := range kinds {
+		failures = append(failures, kind+": "+s.discovery.candidateErr[kind])
+	}
+	ready := s.discovery.synced && s.discovery.informerOnline
+	for _, w := range s.Watches {
+		if !s.discovery.seen[w.Name] {
+			ready = false
+		}
+	}
+	s.discovery.Unlock()
+	if len(failures) != 0 {
+		msg := "CRD discovery failed: " + strings.Join(failures, "; ")
+		if st, ok := s.Health.Status(CRDDiscoveryKind); !ok || !st.Degraded() || st.LastError != msg {
+			s.Health.MarkUnhealthy(CRDDiscoveryKind, fmt.Errorf("%s", msg))
+		}
+	} else if ready && !s.Health.IsHealthy(CRDDiscoveryKind) {
+		s.Health.MarkHealthy(CRDDiscoveryKind)
+	}
 }

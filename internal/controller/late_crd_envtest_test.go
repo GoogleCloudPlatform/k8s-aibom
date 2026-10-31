@@ -690,3 +690,47 @@ func TestIntegration_LateCRD_PresentButNotEstablishedAtStartupKeepsWatchRecovere
 	}
 	requireManagerRunning(t, env)
 }
+
+// A6: two candidate errors share one Degraded health entry. Clearing
+// one failure must not hide the other, and running watches continue.
+func TestIntegration_CRDDiscovery_CandidateReadFailureRecovers(t *testing.T) {
+	opts := envTestOptions{events: true}
+	reads := observeCRDReads(&opts)
+	env := startEnvTestWith(t, opts)
+	events := &eventLog{rec: env.recorder}
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	waitHealthy(t, env.watchHealth, dgd)
+
+	reads.failNow.Store(dgdCRDName, apierrors.NewForbidden(
+		schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"},
+		dgdCRDName, fmt.Errorf("test access denied")))
+	touchCRDLabel(t, env.k8sClient, dgdCRDName, "a6-forbidden")
+	waitDegradedWith(t, env.watchHealth, CRDDiscoveryKind, "DynamoGraphDeployment")
+	if !env.watchHealth.IsHealthy(dgd) {
+		t.Fatal("failed CRD read must not stop an already running watch")
+	}
+	const nimName = "nimservices.apps.nvidia.com"
+	reads.failNow.Store(nimName, apierrors.NewTimeoutError("A6 injected timeout", 1))
+	touchCRDLabel(t, env.k8sClient, nimName, "a6-timeout")
+	waitDegradedWith(t, env.watchHealth, CRDDiscoveryKind, "NIMService")
+	reads.failNow.Delete(dgdCRDName)
+	touchCRDLabel(t, env.k8sClient, dgdCRDName, "a6-dgd-recovers")
+	eventually(t, 30*time.Second, 100*time.Millisecond, func() error {
+		st, _ := env.watchHealth.Status(CRDDiscoveryKind)
+		if !st.Degraded() || strings.Contains(st.LastError, "DynamoGraphDeployment") ||
+			!strings.Contains(st.LastError, "NIMService") {
+			return fmt.Errorf("first candidate not cleared while second remains: %+v", st)
+		}
+		return nil
+	})
+	reads.failNow.Delete(nimName)
+	touchCRDLabel(t, env.k8sClient, nimName, "a6-nim-recovers")
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	if n := events.count(EventReasonWatchUnhealthy, CRDDiscoveryKind); n != 1 {
+		t.Fatalf("one aggregate WatchUnhealthy expected, got %d: %q", n, events.all())
+	}
+	if n := events.count(EventReasonWatchRecovered, CRDDiscoveryKind); n != 2 {
+		t.Fatalf("initial sync and one aggregate recovery expected, got %d: %q", n, events.all())
+	}
+	requireManagerRunning(t, env)
+}

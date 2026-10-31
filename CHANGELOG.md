@@ -8,6 +8,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Aggregate CRD discovery health** (#226, Design 004 A6): one
+  `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
+  failures and candidate CRD read failures through Degraded status,
+  existing events and the `aibom_watch_healthy` gauge. It clears only
+  when every outstanding discovery failure recovers, without stopping
+  existing watches.
+
+
 - **Third-party CRDs installed after startup are watched without a
   restart** (#226, Design 004 amendment, phase A). The supervisor now
   runs on the leader whether or not any third-party CRD exists, watches
