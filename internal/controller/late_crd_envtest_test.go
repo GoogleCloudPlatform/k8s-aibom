@@ -424,6 +424,9 @@ type crdFaultReader struct {
 	block  map[string]bool // Get blocks until its context ends
 	calls  sync.Map        // name -> *atomic.Int64 read count
 	absent sync.Map        // name -> true once a read returned NotFound
+	// failNow, when set for a name, makes reads fail with the stored
+	// error from now on (toggled by a test while the manager runs).
+	failNow sync.Map // name -> error
 }
 
 // observeCRDReads routes the supervisor's CRD reads through a
@@ -467,6 +470,9 @@ func (r *crdFaultReader) Get(ctx context.Context, key client.ObjectKey, obj clie
 		if r.block[key.Name] {
 			<-ctx.Done()
 			return ctx.Err()
+		}
+		if v, ok := r.failNow.Load(key.Name); ok {
+			return v.(error)
 		}
 		err := r.Reader.Get(ctx, key, obj, opts...)
 		if apierrors.IsNotFound(err) {

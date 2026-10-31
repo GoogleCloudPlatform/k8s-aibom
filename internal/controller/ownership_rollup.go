@@ -91,6 +91,21 @@ func (t *TrackedKinds) Add(gk schema.GroupKind) bool {
 	return true
 }
 
+// Remove drops a kind from the set: its CRD was confirmed removed
+// (Design 004 amendment A2 rows 8-9). Workloads it owned are reported
+// as roots again on their next reconcile, through the ownerUnresolved
+// path, since their owner can no longer be read. It reports whether gk
+// was tracked.
+func (t *TrackedKinds) Remove(gk schema.GroupKind) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.kinds[gk]; !ok {
+		return false
+	}
+	delete(t.kinds, gk)
+	return true
+}
+
 // Has reports whether gk is tracked. A nil receiver tracks nothing,
 // which disables suppression (the pre-Design-005 behavior).
 func (t *TrackedKinds) Has(gk schema.GroupKind) bool {

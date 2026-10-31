@@ -75,10 +75,24 @@ A failed CRD read (a timeout, or `403` from RBAC without the
 This needs read-only `get`/`list`/`watch` on
 `apiextensions.k8s.io/customresourcedefinitions`, which the chart's
 ClusterRole grants; custom RBAC must add it, or no third-party kind
-starts. In this release a CRD that is deleted, stops serving its
-version, or is re-created after its watch started is only logged: the
-watch degrades through the probe as before, and its AIBOMs are kept.
-Stopping and cleanup for those cases follow in the next release.
+starts.
+
+**CRD lifecycle after a watch started (Design 004 amendment rows 5-9).**
+Only a full read of the CRD by name decides what happened to it:
+informer events, read failures, RESTMapper errors and a failing watch
+are never evidence of removal (a watch seeing `404` or NoMatch only asks
+discovery to re-read the CRD). A CRD that stops serving the version
+k8s-aibom reads, or loses `Established`, stops the watch; the kind is
+Degraded with the reason (one `WatchUnhealthy`), its AIBOMs are kept as
+last known and it stays a roll-up owner. Serving again restarts the
+watch with `WatchRecovered`. A deleted CRD (NotFound, or a
+`deletionTimestamp`) stops the watch and disables the kind with reason
+`crd-removed`: one Normal `WatchDisabled`, its AIBOMs deleted once, no
+Degraded, and it stops being a roll-up owner, so workloads it had
+absorbed are reported on their own again. A CRD re-created under a new
+UID is handled as that removal followed by a new install: the old
+generation's AIBOMs are swept before the new watch starts, which then
+announces `WatchStarted`.
 
 **Switched off by configuration (Design 006).** The supervisor also
 follows `spec.discovery.workloadKinds`: a present kind that is not in
