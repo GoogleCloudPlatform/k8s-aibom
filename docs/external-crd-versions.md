@@ -58,9 +58,27 @@ fails loudly. The probe takes the same conversion path and fails
 honestly. Cost with AICR's two kinds: about one request per minute on
 top of the measured sub-1-req/min steady state.
 
-Watching a third-party CRD installed *after* the controller starts
-still requires a restart; the presence check at startup decides which
-kinds the supervisor runs.
+**CRDs installed after startup (Design 004 amendment, #226).** No
+restart is needed. The leader's supervisor runs one metadata-only
+informer on `CustomResourceDefinition`s and, for each of the six
+candidate CRD names, reads the full CRD by name: a kind starts only
+once its CRD is `Established` and serves the version k8s-aibom reads
+(namespaced, matching kind), at startup or whenever that becomes true
+later. Its first sync is announced with a Normal `WatchStarted` event
+naming the CRD. A kind whose CRD already existed when the controller
+started keeps `WatchRecovered`, even if that CRD only became
+`Established` later. A
+candidate whose CRD is not installed has no informer, no
+`aibom_watch_healthy` series and no event, whatever the allowlist says.
+A failed CRD read (a timeout, or `403` from RBAC without the
+`customresourcedefinitions` rule) is retried and never read as absence.
+This needs read-only `get`/`list`/`watch` on
+`apiextensions.k8s.io/customresourcedefinitions`, which the chart's
+ClusterRole grants; custom RBAC must add it, or no third-party kind
+starts. In this release a CRD that is deleted, stops serving its
+version, or is re-created after its watch started is only logged: the
+watch degrades through the probe as before, and its AIBOMs are kept.
+Stopping and cleanup for those cases follow in the next release.
 
 **Switched off by configuration (Design 006).** The supervisor also
 follows `spec.discovery.workloadKinds`: a present kind that is not in
@@ -73,8 +91,9 @@ supervisor deletes that kind's AIBOMs on the transition into the
 disabled state. Adding the kind back starts it through the normal
 probe path; its informer's initial list re-inventories every object.
 Absence of a CRD and exclusion by configuration are the only two ways
-a present kind has no informer; both apply without a restart only for
-the configured case.
+a present kind has no informer; both follow changes without a restart.
+A CRD installed while its kind is excluded is disabled the same way,
+and starts when the kind is added back.
 
 ## Ownership roll-up (Design 005)
 

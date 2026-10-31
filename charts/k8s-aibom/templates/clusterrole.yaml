@@ -58,6 +58,13 @@ rules:
 - apiGroups: ["disaggregatedset.x-k8s.io"]
   resources: ["disaggregatedsets"]
   verbs: ["get", "list", "watch"]
+# CRD discovery (Design 004 amendment, #226): one metadata-only CRD
+# informer whose event handlers filter six candidate names; GET each
+# candidate on change,
+# to read Established and served versions. Read-only; never writes a CRD.
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
 # AIBOMs are controller-owned: full lifecycle including stale-report cleanup.
 - apiGroups: ["aibom.k8saibom.dev"]
   resources: ["aiboms"]

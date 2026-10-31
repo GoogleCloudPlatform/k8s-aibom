@@ -152,7 +152,7 @@ safe direction.
 | Situation | Result |
 |---|---|
 | Unknown `Group/Kind` in the list | `ConfigInvalid`, last-known-good retained, Event names the entry |
-| Kind listed but CRD absent | Logged at startup as today; the supervisor never starts it; no Degraded (absence is not failure) |
+| Kind listed but CRD absent | Logged; the supervisor does not start it until its CRD is installed and Ready, then starts it without a restart (Design 004 amendment, #226); no Degraded (absence is not failure) |
 | Kind removed while its watch is Degraded (Design 004) | Stopped and marked disabled; Degraded clears for that kind |
 | Field pruned by an old CRD | Served-schema skew reported; behavior falls back to all kinds |
 

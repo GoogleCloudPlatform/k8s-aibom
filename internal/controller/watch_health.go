@@ -64,7 +64,12 @@ type WatchTransition struct {
 	// Disabled marks the transition into the configured-off state;
 	// Healthy is false and no error is involved.
 	Disabled bool
-	Message  string
+	// Started marks the healthy transition of a kind's first sync after
+	// its CRD was installed post-startup (Design 004 amendment A4):
+	// announced as WatchStarted instead of WatchRecovered. Healthy is
+	// true.
+	Started bool
+	Message string
 }
 
 // WatchHealth is the concurrency-safe registry of third-party watch
@@ -104,6 +109,18 @@ func (h *WatchHealth) Subscribe(fn func(WatchTransition)) {
 // MarkHealthy records a successful sync or probe. Returns true on a
 // transition into the healthy state.
 func (h *WatchHealth) MarkHealthy(kind string) bool {
+	return h.markHealthy(kind, false)
+}
+
+// MarkStarted is MarkHealthy for the first sync of a kind discovered
+// after startup: same state change, but the transition is flagged
+// Started so it is announced as WatchStarted. Returns true on a
+// transition into the healthy state.
+func (h *WatchHealth) MarkStarted(kind string) bool {
+	return h.markHealthy(kind, true)
+}
+
+func (h *WatchHealth) markHealthy(kind string, started bool) bool {
 	h.mu.Lock()
 	s := h.get(kind)
 	transition := !s.Healthy
@@ -118,8 +135,11 @@ func (h *WatchHealth) MarkHealthy(kind string) bool {
 	h.mu.Unlock()
 	metrics.WatchHealthy.WithLabelValues(kind).Set(1)
 	if transition {
-		h.notify(subs, WatchTransition{Kind: kind, Healthy: true,
-			Message: fmt.Sprintf("%s watch is healthy", kind)})
+		msg := fmt.Sprintf("%s watch is healthy", kind)
+		if started {
+			msg = fmt.Sprintf("%s watch started", kind)
+		}
+		h.notify(subs, WatchTransition{Kind: kind, Healthy: true, Started: started, Message: msg})
 	}
 	return transition
 }

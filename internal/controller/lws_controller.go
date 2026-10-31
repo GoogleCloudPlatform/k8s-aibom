@@ -113,6 +113,7 @@ func (r *LeaderWorkerSetReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
 		Name:       "LeaderWorkerSet",
 		GVK:        leaderWorkerSetGVK,
+		CRD:        "leaderworkersets.leaderworkerset.x-k8s.io",
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}

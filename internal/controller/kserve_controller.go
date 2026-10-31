@@ -128,6 +128,7 @@ func (r *KServeInferenceServiceReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
 		Name:       "InferenceService",
 		GVK:        kserveInferenceServiceGVK,
+		CRD:        "inferenceservices.serving.kserve.io",
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}
