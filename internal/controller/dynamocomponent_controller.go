@@ -113,6 +113,7 @@ func (r *DynamoComponentDeploymentReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
 		Name:       "DynamoComponentDeployment",
 		GVK:        dynamoComponentDeploymentGVK,
+		CRD:        "dynamocomponentdeployments.nvidia.com",
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}

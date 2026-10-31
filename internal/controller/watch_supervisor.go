@@ -59,6 +59,11 @@ const (
 	// kind is switched off by spec.discovery.workloadKinds (Design 006
 	// §3). Not a Warning: nothing failed.
 	EventReasonWatchDisabled = "WatchDisabled"
+	// EventReasonWatchStarted fires (Normal) once, in place of
+	// WatchRecovered, on the first informer sync of a kind whose CRD was
+	// installed after the supervisor started (Design 004 amendment A4,
+	// #226).
+	EventReasonWatchStarted = "WatchStarted"
 )
 
 // ThirdPartyWatch describes one third-party kind run under the
@@ -68,8 +73,12 @@ const (
 type ThirdPartyWatch struct {
 	// Name is the stable kind label used in health, metrics, events and
 	// log lines (e.g. "DynamoGraphDeployment").
-	Name       string
-	GVK        schema.GroupVersionKind
+	Name string
+	GVK  schema.GroupVersionKind
+	// CRD is the compiled-in name of the CustomResourceDefinition that
+	// serves GVK (<plural>.<group>). Discovery (Design 004 amendment,
+	// #226) reads exactly this CRD to decide whether the kind is Ready.
+	CRD        string
 	Reconciler reconcile.Reconciler
 	Base       *WorkloadReconciler
 }
@@ -106,6 +115,13 @@ type WatchSupervisor struct {
 	// Fanout, when set, gives each kind's controller the channel source
 	// through which an allowlist change re-enqueues its workloads.
 	Fanout *AllowlistFanout
+	// Tracked receives a kind once its CRD is confirmed Ready, so
+	// workloads it owns are rolled up (Design 005; amendment A2). nil
+	// disables roll-up bookkeeping.
+	Tracked *TrackedKinds
+	// CRDReader reads full CRDs by name for readiness (amendment A3).
+	// Defaults to APIReader; tests substitute a failing reader.
+	CRDReader client.Reader
 
 	// Runtime state, owned by the Start goroutine.
 	rootCtx context.Context
@@ -116,6 +132,27 @@ type WatchSupervisor struct {
 		set config.WorkloadKindSet
 	}
 	kick chan struct{}
+
+	// Discovery state (amendment A1): what discovery last confirmed
+	// about each candidate's CRD. Written by discovery workers, read by
+	// apply(); only apply() acts on it.
+	crd struct {
+		sync.Mutex
+		obs map[string]crdObservation
+	}
+	// Owned by the Start goroutine: kinds whose health entry and
+	// TrackedKinds membership exist, and the last mapping-lag report
+	// acted on.
+	activated   map[string]bool
+	lagReported map[string]int
+	// pendingStart marks a late-discovered kind whose first informer
+	// sync must emit WatchStarted instead of WatchRecovered. Set by
+	// apply(), consumed by the kind's runner goroutine.
+	pendingStart struct {
+		sync.Mutex
+		kinds map[string]bool
+	}
+	fanoutReq chan struct{}
 
 	// Knobs with production defaults; tests shorten them.
 	InitialBackoff   time.Duration // default 5s
@@ -135,12 +172,39 @@ func (s *WatchSupervisor) NeedLeaderElection() bool { return true }
 // mistake in the supervisor's own wiring.
 func (s *WatchSupervisor) Start(ctx context.Context) error {
 	s.defaults()
-	s.Health.Subscribe(s.emitTransitionEvent)
+	// Every goroutine the supervisor starts runs under this context, and
+	// every return from Start cancels it before waiting, so an early
+	// return can never block on goroutines still waiting for the
+	// manager's context.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	s.rootCtx = ctx
 	s.runners = map[string]*watchRunner{}
 	s.kick = make(chan struct{}, 1)
-	for _, w := range s.Watches {
-		s.Health.Register(w.Name)
+	// No health entry yet: a kind is registered only once discovery has
+	// confirmed its CRD Ready (amendment A2 row 1), so a candidate whose
+	// CRD is never installed has no entry, no gauge series and no event.
+	s.crd.obs = map[string]crdObservation{}
+	s.activated = map[string]bool{}
+	s.lagReported = map[string]int{}
+	s.pendingStart.kinds = map[string]bool{}
+	s.fanoutReq = make(chan struct{}, 1)
+	// Discovery is built before any goroutine starts: everything in it
+	// that can fail does so before it launches its own goroutines.
+	if err := s.startDiscovery(ctx); err != nil {
+		// Only a wiring mistake (the CRD informer cannot be built at all)
+		// gets here; a list/watch failure is retried by the informer.
+		cancel()
+		s.wg.Wait()
+		return err
+	}
+	s.Health.Subscribe(s.emitTransitionEvent)
+	if s.Fanout != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.runFanout(ctx)
+		}()
 	}
 
 	// Desired set: the live allowlist, kept current by the store
@@ -190,10 +254,14 @@ func (s *WatchSupervisor) getDesired() config.WorkloadKindSet {
 	return s.desired.set
 }
 
-// apply reconciles the running kinds with the allowlist: starts allowed
-// kinds that are not running, stops running kinds that are no longer
-// allowed (then marks them disabled and sweeps their AIBOMs), and marks
-// excluded kinds disabled at startup. Idempotent.
+// apply reconciles the running kinds with the allowlist and with what
+// discovery has confirmed (amendment A1/A2): starts allowed kinds whose
+// CRD is Ready and that are not running, stops running kinds that are
+// no longer allowed (then marks them disabled and sweeps their AIBOMs),
+// and marks excluded Ready kinds disabled. A candidate whose CRD has
+// not been confirmed Ready is left alone entirely, whatever the
+// allowlist says: no runner, no health entry, no event, no sweep (row
+// 1). Idempotent.
 func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 	if s.rootCtx.Err() != nil {
 		return
@@ -201,9 +269,29 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 	for i := range s.Watches {
 		w := s.Watches[i]
 		gk := schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}
+		obs := s.observation(w.Name)
+		if !obs.ready {
+			// Ready CRD the RESTMapper still cannot resolve after
+			// CacheSyncTimeout (amendment A4): visible, not started.
+			if obs.lagSeq > s.lagReported[w.Name] {
+				s.lagReported[w.Name] = obs.lagSeq
+				s.Health.Register(w.Name)
+				s.Health.MarkUnhealthy(w.Name, obs.lagErr)
+			}
+			continue
+		}
+		first := s.activate(w, gk)
 		r, running := s.runners[w.Name]
 		switch {
 		case allowed.Allows(gk) && !running:
+			if first && obs.late {
+				// Row 2, late discovery: this runner's first sync
+				// announces WatchStarted (amendment A4). Only when the
+				// start comes with the transition to Ready: a kind
+				// installed while excluded (row 3) and allowed later is
+				// row 10 and keeps WatchRecovered.
+				s.setPendingStart(w.Name, true)
+			}
 			s.Health.MarkStarting(w.Name)
 			kctx, cancel := context.WithCancel(s.rootCtx)
 			r = &watchRunner{cancel: cancel, done: make(chan struct{})}
@@ -218,6 +306,9 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 			r.cancel()
 			<-r.done
 			delete(s.runners, w.Name)
+			// Stopped before its first sync: neither WatchStarted nor
+			// WatchRecovered fires for that start (amendment A4).
+			s.setPendingStart(w.Name, false)
 			s.disable(w)
 		case !allowed.Allows(gk):
 			s.disable(w)
@@ -446,7 +537,13 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 		select {
 		case <-synced:
 			synced = nil
-			if s.Health.MarkHealthy(w.Name) {
+			if s.takePendingStart(w.Name) {
+				// A kind discovered after startup: its first sync is
+				// announced as WatchStarted, in place of WatchRecovered.
+				if s.Health.MarkStarted(w.Name) {
+					log.Info("watch started")
+				}
+			} else if s.Health.MarkHealthy(w.Name) {
 				log.Info("watch healthy")
 			}
 		case err := <-errCh:
@@ -470,6 +567,9 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 				if s.Health.MarkUnhealthy(w.Name, perr) {
 					log.Info("watch degraded", "err", perr.Error())
 				}
+			} else if synced != nil && s.isPendingStart(w.Name) {
+				// Not synced yet and WatchStarted still owed: only the
+				// sync may mark this kind healthy (amendment A4).
 			} else if s.Health.MarkHealthy(w.Name) {
 				log.Info("watch recovered")
 			}
@@ -486,6 +586,16 @@ func (s *WatchSupervisor) emitTransitionEvent(t WatchTransition) {
 	switch {
 	case t.Disabled:
 		s.Recorder.Event(s.ControllerPod, corev1.EventTypeNormal, EventReasonWatchDisabled, t.Message)
+	case t.Started:
+		msg := t.Message
+		for _, w := range s.Watches {
+			if w.Name == t.Kind {
+				msg = fmt.Sprintf("%s watch started: CRD %s, installed after the controller started, serves %s",
+					w.Name, w.CRD, w.GVK.GroupVersion().String())
+				break
+			}
+		}
+		s.Recorder.Event(s.ControllerPod, corev1.EventTypeNormal, EventReasonWatchStarted, msg)
 	case t.Healthy:
 		s.Recorder.Event(s.ControllerPod, corev1.EventTypeNormal, EventReasonWatchRecovered, t.Message)
 	default:
@@ -537,31 +647,30 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// RegisterThirdPartyWatches wires every third-party kind whose CRD is
-// present into one WatchSupervisor and adds it to the manager. Kinds
-// whose CRD is absent are skipped with a log line, as before. store and
-// fanout carry the workload-kind allowlist (Design 006); both may be
-// nil. Shared by cmd/manager and the envtest harness so both exercise
-// the same path.
+// RegisterThirdPartyWatches hands every third-party candidate to one
+// WatchSupervisor and adds it to the manager, whether or not any
+// candidate's CRD is installed yet (Design 004 amendment A3, #226): the
+// supervisor discovers each CRD on the leader and starts its watch once
+// the CRD is confirmed Ready, at startup or later, without a restart.
+// No RESTMapping check happens here any more; it is not evidence of
+// readiness, and TrackedKinds is filled by the supervisor only after a
+// CRD is confirmed Ready. store and fanout carry the workload-kind
+// allowlist (Design 006); tracked, store and fanout may be nil. Shared
+// by cmd/manager and the envtest harness so both exercise the same
+// path.
 func RegisterThirdPartyWatches(mgr ctrl.Manager, health *WatchHealth, tracked *TrackedKinds, store *config.Store, fanout *AllowlistFanout, recorder record.EventRecorder, controllerPod *corev1.ObjectReference, candidates []ThirdPartyWatch, tune func(*WatchSupervisor)) error {
-	log := ctrl.Log.WithName("setup")
-	var present []ThirdPartyWatch
-	for _, w := range candidates {
-		_, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}, w.GVK.Version)
-		switch {
-		case err == nil:
-			present = append(present, w)
-			if tracked != nil {
-				tracked.Add(schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind})
-			}
-		case meta.IsNoMatchError(err):
-			log.Info("CRD not found; skipping watch", "kind", w.Name, "gvk", w.GVK.String())
-		default:
-			return fmt.Errorf("RESTMapper lookup for %s: %w", w.Name, err)
-		}
-	}
-	if len(present) == 0 {
+	if len(candidates) == 0 {
 		return nil
+	}
+	seen := map[string]bool{}
+	for _, w := range candidates {
+		if w.CRD == "" {
+			return fmt.Errorf("third-party watch %s: CRD name not set", w.Name)
+		}
+		if seen[w.CRD] {
+			return fmt.Errorf("third-party watch %s: CRD %s listed twice", w.Name, w.CRD)
+		}
+		seen[w.CRD] = true
 	}
 	s := &WatchSupervisor{
 		Config:        mgr.GetConfig(),
@@ -573,9 +682,10 @@ func RegisterThirdPartyWatches(mgr ctrl.Manager, health *WatchHealth, tracked *T
 		Health:        health,
 		Recorder:      recorder,
 		ControllerPod: controllerPod,
-		Watches:       present,
+		Watches:       candidates,
 		ConfigStore:   store,
 		Fanout:        fanout,
+		Tracked:       tracked,
 	}
 	if tune != nil {
 		tune(s)

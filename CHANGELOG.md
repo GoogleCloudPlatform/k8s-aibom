@@ -8,6 +8,30 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Third-party CRDs installed after startup are watched without a
+  restart** (#226, Design 004 amendment, phase A). The supervisor now
+  runs on the leader whether or not any third-party CRD exists, watches
+  `CustomResourceDefinition` metadata, and reads each of the six
+  candidate CRDs (KServe `InferenceService`, Dynamo
+  `DynamoGraphDeployment` and `DynamoComponentDeployment`, `NIMService`,
+  `LeaderWorkerSet`, `DisaggregatedSet`) by name. A kind starts once its
+  CRD is `Established` and serves the version k8s-aibom reads, so
+  installing an operator after k8s-aibom (Dynamo after the controller,
+  for example) no longer needs `kubectl rollout restart`. The first sync
+  of such a kind emits a new Normal `WatchStarted` event naming the CRD;
+  kinds whose CRD already existed at startup (even if it was still
+  establishing) and allowlist re-enables keep `WatchRecovered`. `spec.discovery.workloadKinds` still wins: a CRD
+  installed while its kind is excluded is disabled (`WatchDisabled`)
+  and not watched, and a kind whose CRD is not installed gets no health
+  entry, gauge series or event. **Upgrade note:** the ClusterRole gains
+  one read-only rule, `get`/`list`/`watch` on
+  `apiextensions.k8s.io/customresourcedefinitions`. Helm installs get it;
+  custom RBAC must add it, otherwise CRD reads are forbidden and no
+  third-party kind starts (the controller logs the 403 and keeps
+  retrying; apps/v1 and batch kinds are unaffected). Deletion,
+  unservability and re-creation of a CRD after its watch started are
+  logged only in this release; their cleanup follows (phase B).
+
 - **The vector-database scraper detects Vespa** (#286). Workloads running
   `vespaengine/vespa` (or `vespaengine/vespa-generic-intel-x86_64`, the
   same server built for older x86_64 hardware) get category

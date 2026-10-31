@@ -114,6 +114,7 @@ func (r *DisaggregatedSetReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
 		Name:       "DisaggregatedSet",
 		GVK:        disaggregatedSetGVK,
+		CRD:        "disaggregatedsets.disaggregatedset.x-k8s.io",
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}

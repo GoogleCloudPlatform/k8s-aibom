@@ -54,11 +54,12 @@ import (
 const rollupMaxDepth = 6
 
 // TrackedKinds is the set of workload kinds this process reports on:
-// the apps/v1 and batch kinds plus every third-party kind handed to the
-// WatchSupervisor at startup. Membership is fixed at startup and does
-// not follow watch health, so suppression stays stable through a
-// Design 004 outage (the owner's existing AIBOM is kept as last known;
-// un-suppressing its children would create duplicates that flip back).
+// the apps/v1 and batch kinds plus every third-party kind whose CRD the
+// WatchSupervisor has confirmed Ready, at startup or later (Design 004
+// amendment, #226). Membership follows CRD presence, never watch
+// health, so suppression stays stable through a Design 004 outage (the
+// owner's existing AIBOM is kept as last known; un-suppressing its
+// children would create duplicates that flip back).
 //
 // Whether a tracked kind may *absorb* its children does follow the
 // spec.discovery.workloadKinds allowlist (Design 006 §4, via Owns): a
@@ -78,11 +79,16 @@ func NewTrackedKinds() *TrackedKinds {
 	return &TrackedKinds{kinds: map[schema.GroupKind]struct{}{}}
 }
 
-// Add records a kind as tracked.
-func (t *TrackedKinds) Add(gk schema.GroupKind) {
+// Add records a kind as tracked. It reports whether gk was newly
+// added, so a caller re-enqueues workloads only on a real change.
+func (t *TrackedKinds) Add(gk schema.GroupKind) bool {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.kinds[gk]; ok {
+		return false
+	}
 	t.kinds[gk] = struct{}{}
-	t.mu.Unlock()
+	return true
 }
 
 // Has reports whether gk is tracked. A nil receiver tracks nothing,

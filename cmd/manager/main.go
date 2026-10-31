@@ -361,6 +361,10 @@ func main() {
 	// degrades that kind only — visible on AIBOMControllerConfig's
 	// Degraded condition, an event and aibom_watch_healthy — instead of
 	// failing every controller's cache sync and exiting the process.
+	// Every candidate is handed over whether or not its CRD exists yet:
+	// the supervisor starts a kind once its CRD is Established and
+	// serves the expected version, at startup or later, without a
+	// restart (Design 004 amendment, #226).
 	if err := controller.RegisterThirdPartyWatches(mgr, watchHealth, tracked, configStore, fanout,
 		mgr.GetEventRecorderFor("k8s-aibom"), controllerPod, //nolint:staticcheck
 		[]controller.ThirdPartyWatch{

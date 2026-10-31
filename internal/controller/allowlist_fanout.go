@@ -58,7 +58,10 @@ type AllowlistFanout struct {
 
 	mu    sync.Mutex
 	kinds []*fanoutKind
-	runMu sync.Mutex // one fan-out at a time
+	// slot admits one fan-out at a time. A channel rather than a mutex
+	// so a waiting TriggerContext can give up when its context ends.
+	slotOnce sync.Once
+	slot     chan struct{}
 }
 
 type fanoutKind struct {
@@ -115,13 +118,27 @@ func (f *AllowlistFanout) Bind(store *config.Store) {
 // allowed or managed. Exported for the envtest harness; production
 // callers go through Bind.
 func (f *AllowlistFanout) Trigger(allowed config.WorkloadKindSet) {
-	f.runMu.Lock()
-	defer f.runMu.Unlock()
+	f.TriggerContext(context.Background(), allowed)
+}
+
+// TriggerContext is Trigger bounded by ctx as well as Timeout: it waits
+// for its turn behind a running fan-out only while ctx is live, and a
+// cancelled ctx stops the fan-out in progress. The WatchSupervisor uses
+// it under its root context so shutdown never waits on a fan-out
+// (Design 004 amendment A5).
+func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.WorkloadKindSet) {
+	f.slotOnce.Do(func() { f.slot = make(chan struct{}, 1) })
+	select {
+	case f.slot <- struct{}{}:
+	case <-parent.Done():
+		return
+	}
+	defer func() { <-f.slot }()
 	timeout := f.Timeout
 	if timeout == 0 {
 		timeout = 2 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	log := ctrl.Log.WithName("allowlist-fanout").WithValues("workloadKinds", allowed.String())
 

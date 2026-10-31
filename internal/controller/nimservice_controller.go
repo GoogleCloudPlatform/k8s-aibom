@@ -114,6 +114,7 @@ func (r *NIMServiceReconciler) Watch() ThirdPartyWatch {
 	return ThirdPartyWatch{
 		Name:       "NIMService",
 		GVK:        nimServiceGVK,
+		CRD:        "nimservices.apps.nvidia.com",
 		Reconciler: r,
 		Base:       &r.WorkloadReconciler,
 	}

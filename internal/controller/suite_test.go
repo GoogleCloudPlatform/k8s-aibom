@@ -25,11 +25,13 @@ import (
 	"time"
 
 	"go.uber.org/goleak"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,6 +66,29 @@ type envTestEnv struct {
 	// reconciler, so tests can read its counts and fire its announcement
 	// without depending on the settle timer.
 	observer *NamespaceObserver
+	// tracked is the TrackedKinds shared by every reconciler and the
+	// supervisor.
+	tracked *TrackedKinds
+	// recorder receives the supervisor's controller-Pod events when
+	// envTestOptions.events is set; nil otherwise.
+	recorder *record.FakeRecorder
+}
+
+// envTestOptions varies startEnvTestWith for the late-CRD-discovery
+// tests (Design 004 amendment A7, #226).
+type envTestOptions struct {
+	// omitExternalCRDs names files under config/crd/external/ that are
+	// NOT installed at start; a test installs them later with
+	// installExternalCRD.
+	omitExternalCRDs []string
+	// events records the supervisor's Pod events in env.recorder.
+	events bool
+	// tune runs after testWatchKnobs on the WatchSupervisor.
+	tune func(*WatchSupervisor)
+	// beforeManager runs against the API server after the CRDs are
+	// installed and before the manager (and so the supervisor) starts,
+	// to set up cluster state the supervisor must find at startup.
+	beforeManager func(t *testing.T, c client.Client)
 }
 
 // startEnvTest starts an envtest API server, registers schemes, applies
@@ -73,6 +98,48 @@ type envTestEnv struct {
 // would lock all package tests behind a single shared envtest, which
 // makes the lighter-weight unit tests pay the envtest startup cost).
 func startEnvTest(t *testing.T) *envTestEnv {
+	t.Helper()
+	return startEnvTestWith(t, envTestOptions{})
+}
+
+// externalCRDDir returns the directory of external test CRDs to install
+// at start: config/crd/external itself, or a temporary copy without
+// the omitted files.
+func externalCRDDir(t *testing.T, omit []string) string {
+	t.Helper()
+	src := filepath.Join("..", "..", "config", "crd", "external")
+	if len(omit) == 0 {
+		return src
+	}
+	skip := map[string]bool{}
+	for _, f := range omit {
+		skip[f] = true
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	for _, e := range entries {
+		if e.IsDir() || skip[e.Name()] {
+			delete(skip, e.Name())
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f := range skip {
+		t.Fatalf("omitExternalCRDs: %s is not in %s", f, src)
+	}
+	return dst
+}
+
+func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 	t.Helper()
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	t.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "true")
@@ -96,7 +163,7 @@ func startEnvTest(t *testing.T) *envTestEnv {
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			// External (test-only) CRDs: minimal KServe InferenceService
 			// CRD. See config/crd/external/serving.kserve.io_inferenceservices.yaml.
-			filepath.Join("..", "..", "config", "crd", "external"),
+			externalCRDDir(t, opts.omitExternalCRDs),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -186,15 +253,35 @@ func startEnvTest(t *testing.T) *envTestEnv {
 	// Third-party kinds through the supervisor, exactly as cmd/manager
 	// wires them (Design 004), with test-speed knobs.
 	watchHealth := NewWatchHealth()
-	if err := RegisterThirdPartyWatches(mgr, watchHealth, tracked, configStore, fanout, nil, nil, []ThirdPartyWatch{
+	// An untyped nil recorder and pod unless events are asked for: a
+	// typed nil *FakeRecorder in the interface would not read as nil.
+	var recorder record.EventRecorder
+	var pod *corev1.ObjectReference
+	var fakeRecorder *record.FakeRecorder
+	if opts.events {
+		fakeRecorder = record.NewFakeRecorder(256)
+		recorder = fakeRecorder
+		pod = &corev1.ObjectReference{Kind: "Pod", Name: "k8s-aibom-0", Namespace: "k8s-aibom-system"}
+	}
+	tune := func(s *WatchSupervisor) {
+		testWatchKnobs(s)
+		if opts.tune != nil {
+			opts.tune(s)
+		}
+	}
+	if err := RegisterThirdPartyWatches(mgr, watchHealth, tracked, configStore, fanout, recorder, pod, []ThirdPartyWatch{
 		(&KServeInferenceServiceReconciler{WorkloadReconciler: kserveBase}).Watch(),
 		(&DynamoGraphDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 		(&DynamoComponentDeploymentReconciler{WorkloadReconciler: dynamoBase}).Watch(),
 		(&NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
 		(&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
 		(&DisaggregatedSetReconciler{WorkloadReconciler: dsetBase}).Watch(),
-	}, testWatchKnobs); err != nil {
+	}, tune); err != nil {
 		t.Fatalf("RegisterThirdPartyWatches: %v", err)
+	}
+
+	if opts.beforeManager != nil {
+		opts.beforeManager(t, k8sClient)
 	}
 
 	mgrCtx, mgrCancel := context.WithCancel(context.Background())
@@ -225,6 +312,8 @@ func startEnvTest(t *testing.T) *envTestEnv {
 		configStore: configStore,
 		watchHealth: watchHealth,
 		observer:    observer,
+		tracked:     tracked,
+		recorder:    fakeRecorder,
 	}
 }
 
