@@ -158,7 +158,9 @@ func newApplyTestSupervisor(t *testing.T) *WatchSupervisor {
 	s.kick = make(chan struct{}, 1)
 	s.crd.obs = map[string]crdObservation{}
 	s.activated = map[string]bool{}
+	s.life = map[string]kindLife{}
 	s.lagReported = map[string]int{}
+	s.absentSince.at = map[string]time.Time{}
 	s.pendingStart.kinds = map[string]bool{}
 	s.fanoutReq = make(chan struct{}, 1)
 	return s
@@ -183,7 +185,7 @@ func TestApply_ReadyAndExcludedIsDisabledOnce(t *testing.T) {
 	s := newApplyTestSupervisor(t)
 	var transitions []WatchTransition
 	s.Health.Subscribe(func(tr WatchTransition) { transitions = append(transitions, tr) })
-	s.crd.obs["DynamoGraphDeployment"] = crdObservation{ready: true, late: true}
+	s.crd.obs["DynamoGraphDeployment"] = crdObservation{state: crdStateReady, uid: "u1", late: true}
 	excluded := config.NewWorkloadKindSet(gkDeployment)
 	s.apply(excluded)
 	s.apply(excluded)
@@ -483,7 +485,7 @@ func TestReadCRD_LateClassification(t *testing.T) {
 				s.readCRD(context.Background(), k, logr.Discard())
 			}
 			obs := s.observation("DynamoGraphDeployment")
-			if !obs.ready {
+			if obs.state != crdStateReady {
 				t.Fatalf("want ready after the script, got %+v", obs)
 			}
 			if obs.late != tc.late {

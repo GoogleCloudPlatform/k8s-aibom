@@ -252,9 +252,10 @@ func TestIntegration_LateCRD_DynamoGraphDeploymentAfterStartup(t *testing.T) {
 	requireManagerRunning(t, env)
 }
 
-// No candidate CRD at startup: the supervisor is still registered (it
-// used not to be) and creates no health entries; CRDs installed later,
-// two of them in one group-version, all start without a restart.
+// No candidate CRD at startup: the supervisor is still registered and
+// reports healthy aggregate discovery, but no candidate watch health
+// entries or candidate-specific events exist. CRDs installed later,
+// two in one group-version, start without a restart.
 func TestIntegration_LateCRD_NoCandidateCRDsAtStartup(t *testing.T) {
 	opts := envTestOptions{
 		omitExternalCRDs: []string{dgdCRDFile, dcdCRDFile, lwsCRDFile, nimCRDFile, isvcCRDFile, dsetCRDFile},
@@ -274,8 +275,14 @@ func TestIntegration_LateCRD_NoCandidateCRDsAtStartup(t *testing.T) {
 	for _, k := range allCandidateKinds {
 		requireNoHealthEntry(t, env.watchHealth, k)
 	}
-	if got := events.all(); len(got) != 0 {
-		t.Fatalf("no events while every candidate is absent; got %q", got)
+	// A6 adds one healthy discovery pseudo-kind even when no candidate
+	// is installed. This must not announce any workload watch event.
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	events.wait(t, EventReasonWatchRecovered, CRDDiscoveryKind)
+	for _, event := range events.all() {
+		if !strings.Contains(event, " "+EventReasonWatchRecovered+" "+CRDDiscoveryKind+" ") {
+			t.Fatalf("no candidate watch events while all CRDs are absent; got %q", events.all())
+		}
 	}
 
 	for _, name := range []string{"dynamocomponentdeployments.nvidia.com", dgdCRDName, lwsCRDName} {
@@ -424,6 +431,9 @@ type crdFaultReader struct {
 	block  map[string]bool // Get blocks until its context ends
 	calls  sync.Map        // name -> *atomic.Int64 read count
 	absent sync.Map        // name -> true once a read returned NotFound
+	// failNow, when set for a name, makes reads fail with the stored
+	// error from now on (toggled by a test while the manager runs).
+	failNow sync.Map // name -> error
 }
 
 // observeCRDReads routes the supervisor's CRD reads through a
@@ -467,6 +477,9 @@ func (r *crdFaultReader) Get(ctx context.Context, key client.ObjectKey, obj clie
 		if r.block[key.Name] {
 			<-ctx.Done()
 			return ctx.Err()
+		}
+		if v, ok := r.failNow.Load(key.Name); ok {
+			return v.(error)
 		}
 		err := r.Reader.Get(ctx, key, obj, opts...)
 		if apierrors.IsNotFound(err) {
@@ -528,8 +541,12 @@ func TestIntegration_LateCRD_CandidateReadFailuresAreIsolated(t *testing.T) {
 			t.Errorf("a failing read is not evidence: %d WatchDisabled for %s", n, k)
 		}
 	}
-	if d := env.watchHealth.Degraded(); len(d) != 0 {
-		t.Errorf("no kind may be Degraded: %+v", d)
+	// A6 surfaces failed full-CRD GETs under one discovery pseudo-kind;
+	// individual workload watches must still remain unaffected.
+	d := env.watchHealth.Degraded()
+	if len(d) != 1 || d[0].Kind != CRDDiscoveryKind ||
+		!strings.Contains(d[0].LastError, "NIMService") {
+		t.Errorf("only aggregate CRDDiscovery may be Degraded by the forbidden candidate read: %+v", d)
 	}
 	requireManagerRunning(t, env)
 }
@@ -681,6 +698,50 @@ func TestIntegration_LateCRD_PresentButNotEstablishedAtStartupKeepsWatchRecovere
 	}
 	if n := events.count(EventReasonWatchRecovered, "DynamoGraphDeployment"); n != 1 {
 		t.Errorf("exactly one WatchRecovered, got %d; events %q", n, events.all())
+	}
+	requireManagerRunning(t, env)
+}
+
+// A6: two candidate errors share one Degraded health entry. Clearing
+// one failure must not hide the other, and running watches continue.
+func TestIntegration_CRDDiscovery_CandidateReadFailureRecovers(t *testing.T) {
+	opts := envTestOptions{events: true}
+	reads := observeCRDReads(&opts)
+	env := startEnvTestWith(t, opts)
+	events := &eventLog{rec: env.recorder}
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	waitHealthy(t, env.watchHealth, dgd)
+
+	reads.failNow.Store(dgdCRDName, apierrors.NewForbidden(
+		schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"},
+		dgdCRDName, fmt.Errorf("test access denied")))
+	touchCRDLabel(t, env.k8sClient, dgdCRDName, "a6-forbidden")
+	waitDegradedWith(t, env.watchHealth, CRDDiscoveryKind, "DynamoGraphDeployment")
+	if !env.watchHealth.IsHealthy(dgd) {
+		t.Fatal("failed CRD read must not stop an already running watch")
+	}
+	const nimName = "nimservices.apps.nvidia.com"
+	reads.failNow.Store(nimName, apierrors.NewTimeoutError("A6 injected timeout", 1))
+	touchCRDLabel(t, env.k8sClient, nimName, "a6-timeout")
+	waitDegradedWith(t, env.watchHealth, CRDDiscoveryKind, "NIMService")
+	reads.failNow.Delete(dgdCRDName)
+	touchCRDLabel(t, env.k8sClient, dgdCRDName, "a6-dgd-recovers")
+	eventually(t, 30*time.Second, 100*time.Millisecond, func() error {
+		st, _ := env.watchHealth.Status(CRDDiscoveryKind)
+		if !st.Degraded() || strings.Contains(st.LastError, "DynamoGraphDeployment") ||
+			!strings.Contains(st.LastError, "NIMService") {
+			return fmt.Errorf("first candidate not cleared while second remains: %+v", st)
+		}
+		return nil
+	})
+	reads.failNow.Delete(nimName)
+	touchCRDLabel(t, env.k8sClient, nimName, "a6-nim-recovers")
+	waitHealthy(t, env.watchHealth, CRDDiscoveryKind)
+	if n := events.count(EventReasonWatchUnhealthy, CRDDiscoveryKind); n != 1 {
+		t.Fatalf("one aggregate WatchUnhealthy expected, got %d: %q", n, events.all())
+	}
+	if n := events.count(EventReasonWatchRecovered, CRDDiscoveryKind); n != 2 {
+		t.Fatalf("initial sync and one aggregate recovery expected, got %d: %q", n, events.all())
 	}
 	requireManagerRunning(t, env)
 }

@@ -8,6 +8,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Aggregate CRD discovery health** (#226, Design 004 A6): one
+  `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
+  failures and candidate CRD read failures through Degraded status,
+  existing events and the `aibom_watch_healthy` gauge. It clears only
+  when every outstanding discovery failure recovers, without stopping
+  existing watches.
+
+
 - **Third-party CRDs installed after startup are watched without a
   restart** (#226, Design 004 amendment, phase A). The supervisor now
   runs on the leader whether or not any third-party CRD exists, watches
@@ -28,9 +36,24 @@ All notable changes to k8s-aibom are documented here. The format follows
   `apiextensions.k8s.io/customresourcedefinitions`. Helm installs get it;
   custom RBAC must add it, otherwise CRD reads are forbidden and no
   third-party kind starts (the controller logs the 403 and keeps
-  retrying; apps/v1 and batch kinds are unaffected). Deletion,
-  unservability and re-creation of a CRD after its watch started are
-  logged only in this release; their cleanup follows (phase B).
+  retrying; apps/v1 and batch kinds are unaffected).
+
+- **CRD lifecycle after a watch started** (#226, Design 004 amendment,
+  phase B: rows 5-9). Only a full read of the CRD by name decides; an
+  informer event, a read error, a RESTMapper error or a failing watch
+  never does. A CRD that stops serving the version k8s-aibom reads (or
+  loses `Established`) stops its watch and reports the kind Degraded
+  with the reason and one `WatchUnhealthy`; its AIBOMs are kept and its
+  children stay rolled up. When it serves again the watch restarts with
+  `WatchRecovered`. A deleted CRD stops the watch, drops the kind from
+  the roll-up owners and deletes its AIBOMs once, with one Normal
+  `WatchDisabled` event (message names `reason: crd-removed`; an
+  allowlist exclusion now names `reason: config`); workloads it had
+  absorbed are reported on their own again. A CRD re-created under a new
+  UID retires the old generation first (its sweep finishes before the
+  new watch starts), then starts the new one with `WatchStarted`.
+  `aibom_watch_healthy` stays 0 for a removed kind; nothing is Degraded.
+  No new RBAC: the phase A read-only CRD rule covers it.
 
 - **The vector-database scraper detects Vespa** (#286). Workloads running
   `vespaengine/vespa` (or `vespaengine/vespa-generic-intel-x86_64`, the

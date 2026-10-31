@@ -58,6 +58,10 @@ type AllowlistFanout struct {
 
 	mu    sync.Mutex
 	kinds []*fanoutKind
+	// inactive holds supervised kinds with no running controller (their
+	// CRD unservable or removed, Design 004 amendment A5): skipped by
+	// Trigger, like excluded ones.
+	inactive map[schema.GroupKind]bool
 	// slot admits one fan-out at a time. A channel rather than a mutex
 	// so a waiting TriggerContext can give up when its context ends.
 	slotOnce sync.Once
@@ -97,6 +101,25 @@ func (f *AllowlistFanout) Source(gk schema.GroupKind, supervised bool, list func
 	k := &fanoutKind{gk: gk, supervised: supervised, ch: make(chan event.GenericEvent, fanoutBuffer), list: list, items: items}
 	f.kinds = append(f.kinds, k)
 	return source.Channel(k.ch, &handler.EnqueueRequestForObject{})
+}
+
+// SetActive records whether a supervised kind's controller is running.
+// Trigger skips supervised kinds that are not (Design 004 amendment
+// A5): nothing listens on their channel, and their list may fail.
+func (f *AllowlistFanout) SetActive(gk schema.GroupKind, active bool) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if active {
+		delete(f.inactive, gk)
+		return
+	}
+	if f.inactive == nil {
+		f.inactive = map[schema.GroupKind]bool{}
+	}
+	f.inactive[gk] = true
 }
 
 // Bind subscribes to store so a workloadKinds change triggers a
@@ -144,10 +167,14 @@ func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.
 
 	f.mu.Lock()
 	kinds := append([]*fanoutKind{}, f.kinds...)
+	inactive := make(map[schema.GroupKind]bool, len(f.inactive))
+	for gk := range f.inactive {
+		inactive[gk] = true
+	}
 	f.mu.Unlock()
 
 	for _, k := range kinds {
-		if k.supervised && !allowed.Allows(k.gk) {
+		if k.supervised && (!allowed.Allows(k.gk) || inactive[k.gk]) {
 			continue
 		}
 		sent, err := f.fanOutKind(ctx, k)

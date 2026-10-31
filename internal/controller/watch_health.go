@@ -42,12 +42,24 @@ type WatchStatus struct {
 	// Failures counts errors recorded since the last healthy
 	// transition.
 	Failures int
-	// Disabled is true while the kind is excluded by
-	// spec.discovery.workloadKinds (Design 006 §3): its informer does
-	// not exist, by configuration rather than by failure. Never
-	// Degraded.
+	// Disabled is true while the kind has no informer by decision
+	// rather than by failure: excluded by spec.discovery.workloadKinds
+	// (Design 006 §3), or its CRD was removed (Design 004 amendment A2
+	// row 8). Never Degraded.
 	Disabled bool
+	// DisabledReason says why the kind is Disabled; empty otherwise.
+	DisabledReason DisabledReason
 }
+
+// DisabledReason is why a kind is disabled (Design 004 amendment A2).
+type DisabledReason string
+
+const (
+	// DisabledByConfig: excluded by spec.discovery.workloadKinds.
+	DisabledByConfig DisabledReason = "config"
+	// DisabledCRDRemoved: a full read confirmed the kind's CRD is gone.
+	DisabledCRDRemoved DisabledReason = "crd-removed"
+)
 
 // Degraded reports whether this status should surface as a Degraded
 // reason: a kind that has recorded an error and has not recovered. A
@@ -126,6 +138,7 @@ func (h *WatchHealth) markHealthy(kind string, started bool) bool {
 	transition := !s.Healthy
 	s.Healthy = true
 	s.Disabled = false
+	s.DisabledReason = ""
 	s.LastError = ""
 	s.Failures = 0
 	if transition {
@@ -155,6 +168,7 @@ func (h *WatchHealth) MarkUnhealthy(kind string, err error) bool {
 	transition := s.Healthy || s.LastError == ""
 	s.Healthy = false
 	s.Disabled = false
+	s.DisabledReason = ""
 	s.LastError = err.Error()
 	s.Failures++
 	if transition {
@@ -171,15 +185,18 @@ func (h *WatchHealth) MarkUnhealthy(kind string, err error) bool {
 	return transition
 }
 
-// MarkDisabled records that the kind is excluded by configuration
-// (Design 006 §3). Clears any error so the kind leaves the Degraded
-// set. Returns true on the transition into the disabled state; the
-// supervisor sweeps the kind's AIBOMs on that transition only.
-func (h *WatchHealth) MarkDisabled(kind string) bool {
+// MarkDisabled records that the kind is disabled for reason: excluded
+// by configuration (Design 006 §3) or its CRD removed (Design 004
+// amendment A2 row 8). Clears any error so the kind leaves the
+// Degraded set. Returns true on the transition into the disabled state
+// only; the supervisor sweeps the kind's AIBOMs on that transition, and
+// a kind already disabled just has its reason updated, with no event.
+func (h *WatchHealth) MarkDisabled(kind string, reason DisabledReason) bool {
 	h.mu.Lock()
 	s := h.get(kind)
 	transition := !s.Disabled
 	s.Disabled = true
+	s.DisabledReason = reason
 	s.Healthy = false
 	s.LastError = ""
 	s.Failures = 0
@@ -190,8 +207,11 @@ func (h *WatchHealth) MarkDisabled(kind string) bool {
 	h.mu.Unlock()
 	metrics.WatchHealthy.WithLabelValues(kind).Set(0)
 	if transition {
-		h.notify(subs, WatchTransition{Kind: kind, Disabled: true,
-			Message: fmt.Sprintf("%s watch disabled by spec.discovery.workloadKinds", kind)})
+		msg := fmt.Sprintf("%s watch disabled by spec.discovery.workloadKinds (reason: %s)", kind, reason)
+		if reason == DisabledCRDRemoved {
+			msg = fmt.Sprintf("%s watch disabled: its CRD was removed (reason: %s)", kind, reason)
+		}
+		h.notify(subs, WatchTransition{Kind: kind, Disabled: true, Message: msg})
 	}
 	return transition
 }
@@ -203,6 +223,7 @@ func (h *WatchHealth) MarkStarting(kind string) {
 	h.mu.Lock()
 	s := h.get(kind)
 	s.Disabled = false
+	s.DisabledReason = ""
 	s.Healthy = false
 	s.LastError = ""
 	s.Failures = 0

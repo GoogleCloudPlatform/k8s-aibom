@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
@@ -141,10 +142,34 @@ type WatchSupervisor struct {
 		obs map[string]crdObservation
 	}
 	// Owned by the Start goroutine: kinds whose health entry and
-	// TrackedKinds membership exist, and the last mapping-lag report
+	// TrackedKinds membership exist for the current CRD generation, the
+	// generation apply() last acted on, and the last mapping-lag report
 	// acted on.
 	activated   map[string]bool
+	life        map[string]kindLife
 	lagReported map[string]int
+	// crdWorkers by kind name, so a runner seeing an absence-shaped
+	// error can ask discovery to re-read its CRD. Read-only after
+	// startDiscovery.
+	crdWorkers map[string]*crdWorker
+	// Workers publish informer and candidate read failures here; only
+	// the serialized apply loop mutates the aggregate WatchHealth entry.
+	discovery struct {
+		sync.Mutex
+		enabled        bool
+		synced         bool
+		informerOnline bool
+		informerErr    string
+		syncErr        string
+		candidateErr   map[string]string
+		seen           map[string]bool
+	}
+	// absentSince: when a kind's runner first saw an absence-shaped
+	// error (NotFound, NoMatch) in the current streak.
+	absentSince struct {
+		sync.Mutex
+		at map[string]time.Time
+	}
 	// pendingStart marks a late-discovered kind whose first informer
 	// sync must emit WatchStarted instead of WatchRecovered. Set by
 	// apply(), consumed by the kind's runner goroutine.
@@ -153,6 +178,9 @@ type WatchSupervisor struct {
 		kinds map[string]bool
 	}
 	fanoutReq chan struct{}
+	// runFn runs one kind's watch until its context ends; s.run unless a
+	// unit test substitutes a fake runner.
+	runFn func(context.Context, ThirdPartyWatch)
 
 	// Knobs with production defaults; tests shorten them.
 	InitialBackoff   time.Duration // default 5s
@@ -186,9 +214,12 @@ func (s *WatchSupervisor) Start(ctx context.Context) error {
 	// CRD is never installed has no entry, no gauge series and no event.
 	s.crd.obs = map[string]crdObservation{}
 	s.activated = map[string]bool{}
+	s.life = map[string]kindLife{}
 	s.lagReported = map[string]int{}
+	s.absentSince.at = map[string]time.Time{}
 	s.pendingStart.kinds = map[string]bool{}
 	s.fanoutReq = make(chan struct{}, 1)
+	s.initDiscoveryHealth()
 	// Discovery is built before any goroutine starts: everything in it
 	// that can fail does so before it launches its own goroutines.
 	if err := s.startDiscovery(ctx); err != nil {
@@ -255,36 +286,58 @@ func (s *WatchSupervisor) getDesired() config.WorkloadKindSet {
 }
 
 // apply reconciles the running kinds with the allowlist and with what
-// discovery has confirmed (amendment A1/A2): starts allowed kinds whose
-// CRD is Ready and that are not running, stops running kinds that are
-// no longer allowed (then marks them disabled and sweeps their AIBOMs),
-// and marks excluded Ready kinds disabled. A candidate whose CRD has
-// not been confirmed Ready is left alone entirely, whatever the
-// allowlist says: no runner, no health entry, no event, no sweep (row
-// 1). Idempotent.
+// discovery has confirmed about each candidate's CRD (Design 004
+// amendment A1/A2). It is the only place runners, health, TrackedKinds
+// membership and sweeps change, one kind at a time, and it acts on CRD
+// state and on the allowlist separately: the destructive path (disable
+// and sweep) is reached only from a confirmed removal (rows 8-9) or
+// from exclusion of a kind whose CRD is Ready or Unservable (rows 3,
+// 7). A candidate whose CRD has never been confirmed Ready is left
+// alone entirely, whatever the allowlist says: no runner, no health
+// entry, no event, no sweep (row 1). Idempotent.
 func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 	if s.rootCtx.Err() != nil {
 		return
 	}
+	s.applyDiscoveryHealth()
 	for i := range s.Watches {
 		w := s.Watches[i]
 		gk := schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}
 		obs := s.observation(w.Name)
-		if !obs.ready {
+		if s.rootCtx.Err() != nil {
+			return
+		}
+		if obs.lagSeq > s.lagReported[w.Name] && obs.lagErr != nil {
 			// Ready CRD the RESTMapper still cannot resolve after
 			// CacheSyncTimeout (amendment A4): visible, not started.
-			if obs.lagSeq > s.lagReported[w.Name] {
-				s.lagReported[w.Name] = obs.lagSeq
-				s.Health.Register(w.Name)
-				s.Health.MarkUnhealthy(w.Name, obs.lagErr)
-			}
+			s.lagReported[w.Name] = obs.lagSeq
+			s.Health.Register(w.Name)
+			s.Health.MarkUnhealthy(w.Name, obs.lagErr)
+		}
+		cur := s.life[w.Name]
+		if obs.state == crdStateUnknown && cur.state == crdStateUnknown {
+			// Row 1: nothing confirmed, nothing acted on.
 			continue
 		}
-		first := s.activate(w, gk)
-		r, running := s.runners[w.Name]
+		present := cur.state == crdStateReady || cur.state == crdStateUnservable
+
+		// The generation apply acts on changes first: a removal, or a
+		// new UID, retires the current generation before anything else
+		// (rows 8-9), so its sweep finishes before a new runner starts.
+		if present && (obs.state == crdStateRemoved && obs.uid == cur.uid ||
+			obs.state == crdStateReady && obs.uid != cur.uid) {
+			s.retire(w, gk)
+			cur = kindLife{state: crdStateRemoved}
+			present = false
+		}
+
 		switch {
-		case allowed.Allows(gk) && !running:
-			if first && obs.late {
+		case obs.state == crdStateReady && !present:
+			// Rows 2-3: a generation newly Ready.
+			cur = kindLife{state: crdStateReady, uid: obs.uid}
+			s.life[w.Name] = cur
+			first := s.activate(w, gk)
+			if allowed.Allows(gk) && first && obs.late {
 				// Row 2, late discovery: this runner's first sync
 				// announces WatchStarted (amendment A4). Only when the
 				// start comes with the transition to Ready: a kind
@@ -292,41 +345,128 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 				// row 10 and keeps WatchRecovered.
 				s.setPendingStart(w.Name, true)
 			}
-			s.Health.MarkStarting(w.Name)
-			kctx, cancel := context.WithCancel(s.rootCtx)
-			r = &watchRunner{cancel: cancel, done: make(chan struct{})}
-			s.runners[w.Name] = r
-			s.wg.Add(1)
-			go func() {
-				defer s.wg.Done()
-				defer close(r.done)
-				s.run(kctx, w)
-			}()
-		case !allowed.Allows(gk) && running:
-			r.cancel()
-			<-r.done
-			delete(s.runners, w.Name)
-			// Stopped before its first sync: neither WatchStarted nor
-			// WatchRecovered fires for that start (amendment A4).
-			s.setPendingStart(w.Name, false)
-			s.disable(w)
-		case !allowed.Allows(gk):
-			s.disable(w)
+		case obs.state == crdStateReady && cur.state == crdStateUnservable:
+			// Row 6: the same generation is Ready again; the runner is
+			// started below and recovers with WatchRecovered.
+			cur.state, cur.reason = crdStateReady, ""
+			s.life[w.Name] = cur
+		case obs.state == crdStateUnservable && cur.state == crdStateReady && obs.uid == cur.uid:
+			// Row 5: stop the watch, keep AIBOMs and membership.
+			cur.state, cur.reason = crdStateUnservable, obs.reason
+			s.life[w.Name] = cur
+			s.stopRunner(w)
+			if allowed.Allows(gk) {
+				s.markUnservable(w, cur.reason)
+			}
+		}
+
+		switch cur.state {
+		case crdStateReady:
+			s.applyAllowlist(w, gk, allowed)
+		case crdStateUnservable:
+			// No runner while unservable. Exclusion still disables and
+			// sweeps (row 7); an allowed kind is Degraded, including one
+			// allowed again after being excluded.
+			if !allowed.Allows(gk) {
+				s.disable(w, DisabledByConfig)
+			} else if st, _ := s.Health.Status(w.Name); st.Disabled {
+				s.markUnservable(w, cur.reason)
+			}
 		}
 	}
 }
 
-// disable records the configured-off state and, on the transition into
-// it, deletes the kind's AIBOMs: with its controller stopped there is
-// no reconcile left to do it (Design 006 §2 reaches this kind through
-// the supervisor, not the reconcile path).
-func (s *WatchSupervisor) disable(w ThirdPartyWatch) {
-	if !s.Health.MarkDisabled(w.Name) {
+// kindLife is the CRD generation apply() last acted on for a kind.
+// Owned by the Start goroutine.
+type kindLife struct {
+	state  crdState
+	uid    types.UID
+	reason string
+}
+
+// applyAllowlist is the Ready kind's allowlist step, unchanged from
+// Design 006: start an allowed kind that is not running (rows 2, 6,
+// 10), stop and disable one no longer allowed (row 7), and disable an
+// excluded one (row 3).
+func (s *WatchSupervisor) applyAllowlist(w ThirdPartyWatch, gk schema.GroupKind, allowed config.WorkloadKindSet) {
+	_, running := s.runners[w.Name]
+	switch {
+	case allowed.Allows(gk) && !running:
+		s.Health.MarkStarting(w.Name)
+		kctx, cancel := context.WithCancel(s.rootCtx)
+		r := &watchRunner{cancel: cancel, done: make(chan struct{})}
+		s.runners[w.Name] = r
+		s.setRunnerActive(w.Name, true)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer close(r.done)
+			s.runFn(kctx, w)
+		}()
+	case !allowed.Allows(gk) && running:
+		s.stopRunner(w)
+		s.disable(w, DisabledByConfig)
+	case !allowed.Allows(gk):
+		s.disable(w, DisabledByConfig)
+	}
+}
+
+// stopRunner cancels a kind's runner and waits for it to return. A
+// runner stopped before its first sync announces nothing (amendment
+// A4).
+func (s *WatchSupervisor) stopRunner(w ThirdPartyWatch) {
+	r, ok := s.runners[w.Name]
+	if !ok {
 		return
 	}
-	log := ctrl.Log.WithName("watch-supervisor").WithValues("kind", w.Name)
-	log.Info("watch disabled by spec.discovery.workloadKinds")
-	if s.Client == nil {
+	r.cancel()
+	<-r.done
+	delete(s.runners, w.Name)
+	s.setRunnerActive(w.Name, false)
+	s.setPendingStart(w.Name, false)
+}
+
+// markUnservable reports a kind whose CRD is present but fails A1 as
+// Degraded with the reason (row 5): one WatchUnhealthy per outage, and
+// its AIBOMs are kept as last known (§4).
+func (s *WatchSupervisor) markUnservable(w ThirdPartyWatch, reason string) {
+	if s.Health.MarkUnhealthy(w.Name, fmt.Errorf("CRD %s no longer serves %s: %s; watch stopped, existing AIBOMs kept",
+		w.CRD, w.GVK.String(), reason)) {
+		ctrl.Log.WithName("watch-supervisor").WithValues("kind", w.Name).Info("watch stopped: CRD unservable", "reason", reason)
+	}
+}
+
+// retire ends the current CRD generation of a kind (rows 8, and the
+// first half of 9): stop and await its runner, drop it from
+// TrackedKinds, disable it with reason crd-removed and, on entry into
+// the disabled state only, sweep its AIBOMs. It then forgets the
+// activation so a later generation is registered, tracked and
+// announced afresh. Everything happens before apply() moves on, so a
+// new generation's runner can only start after this sweep returned.
+func (s *WatchSupervisor) retire(w ThirdPartyWatch, gk schema.GroupKind) {
+	s.stopRunner(w)
+	if s.Tracked != nil && s.Tracked.Remove(gk) {
+		// Children it absorbed are re-rooted on their next reconcile
+		// (their owner can no longer be read: ownerUnresolved).
+		s.requestFanout()
+	}
+	s.disable(w, DisabledCRDRemoved)
+	delete(s.activated, w.Name)
+	s.life[w.Name] = kindLife{state: crdStateRemoved}
+}
+
+// disable records the disabled state with its reason and, on the
+// transition into it only, deletes the kind's AIBOMs: with its
+// controller stopped there is no reconcile left to do it (Design 006
+// §2 reaches this kind through the supervisor, not the reconcile
+// path). A kind already disabled only has its reason updated.
+func (s *WatchSupervisor) disable(w ThirdPartyWatch, reason DisabledReason) {
+	if !s.Health.MarkDisabled(w.Name, reason) {
+		return
+	}
+	log := ctrl.Log.WithName("watch-supervisor").WithValues("kind", w.Name, "reason", string(reason))
+	log.Info("watch disabled")
+	if s.Client == nil || s.rootCtx.Err() != nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(s.rootCtx, 2*time.Minute)
@@ -364,6 +504,9 @@ func (s *WatchSupervisor) sweepAIBOMs(ctx context.Context, gvk schema.GroupVersi
 }
 
 func (s *WatchSupervisor) defaults() {
+	if s.runFn == nil {
+		s.runFn = s.run
+	}
 	if s.InitialBackoff == 0 {
 		s.InitialBackoff = 5 * time.Second
 	}
@@ -388,7 +531,7 @@ func (s *WatchSupervisor) run(ctx context.Context, w ThirdPartyWatch) {
 	backoff := s.InitialBackoff
 	for {
 		if err := s.probe(ctx, w); err != nil {
-			s.Health.MarkUnhealthy(w.Name, err)
+			s.runnerError(w, err)
 			log.Info("probe failed; will retry", "err", err.Error(), "retryIn", backoff.String())
 			if !sleepCtx(ctx, backoff) {
 				return
@@ -405,7 +548,7 @@ func (s *WatchSupervisor) run(ctx context.Context, w ThirdPartyWatch) {
 		// already (e.g. the conversion-webhook message); do not
 		// overwrite it with the generic sync-timeout error.
 		if st, ok := s.Health.Status(w.Name); !ok || !st.Degraded() {
-			s.Health.MarkUnhealthy(w.Name, err)
+			s.runnerError(w, err)
 		}
 		log.Info("watch stopped; will rebuild", "err", err.Error(), "retryIn", backoff.String())
 		if !sleepCtx(ctx, backoff) {
@@ -460,7 +603,7 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 		Mapper: s.Mapper,
 		DefaultWatchErrorHandler: func(_ context.Context, _ *toolscache.Reflector, err error) {
 			if err != nil {
-				s.Health.MarkUnhealthy(w.Name, err)
+				s.runnerError(w, err)
 			}
 		},
 	})
@@ -537,6 +680,7 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 		select {
 		case <-synced:
 			synced = nil
+			s.clearAbsent(w.Name)
 			if s.takePendingStart(w.Name) {
 				// A kind discovered after startup: its first sync is
 				// announced as WatchStarted, in place of WatchRecovered.
@@ -563,8 +707,12 @@ func (s *WatchSupervisor) runOnce(ctx context.Context, w ThirdPartyWatch, log lo
 			// honestly even when the API server still serves lists from
 			// its per-version cache (#216). A clean probe also clears a
 			// degraded kind once the operator is back.
-			if perr := s.probe(ctx, w); perr != nil {
-				if s.Health.MarkUnhealthy(w.Name, perr) {
+			perr := s.probe(ctx, w)
+			if perr == nil {
+				s.clearAbsent(w.Name)
+			}
+			if perr != nil {
+				if s.runnerError(w, perr) {
 					log.Info("watch degraded", "err", perr.Error())
 				}
 			} else if synced != nil && s.isPendingStart(w.Name) {

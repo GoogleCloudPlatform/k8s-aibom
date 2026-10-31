@@ -40,10 +40,10 @@ func TestWatchHealth_Disabled(t *testing.T) {
 	if len(h.Degraded()) != 1 {
 		t.Fatal("precondition: kind is degraded")
 	}
-	if !h.MarkDisabled("LeaderWorkerSet") {
+	if !h.MarkDisabled("LeaderWorkerSet", DisabledByConfig) {
 		t.Error("first MarkDisabled must transition")
 	}
-	if h.MarkDisabled("LeaderWorkerSet") {
+	if h.MarkDisabled("LeaderWorkerSet", DisabledByConfig) {
 		t.Error("repeated MarkDisabled must not transition again")
 	}
 	st, _ := h.Status("LeaderWorkerSet")
@@ -81,7 +81,7 @@ func TestWatchHealth_Disabled(t *testing.T) {
 	}
 	// And an error on a disabled kind clears Disabled too (it cannot
 	// happen while stopped, but the state must stay consistent).
-	h.MarkDisabled("LeaderWorkerSet")
+	h.MarkDisabled("LeaderWorkerSet", DisabledByConfig)
 	h.MarkUnhealthy("LeaderWorkerSet", errors.New("x"))
 	if st, _ = h.Status("LeaderWorkerSet"); st.Disabled || !st.Degraded() {
 		t.Errorf("unhealthy must clear Disabled: %+v", st)
