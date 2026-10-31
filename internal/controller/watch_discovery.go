@@ -28,9 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/metadata"
 	toolscache "k8s.io/client-go/tools/cache"
@@ -202,7 +202,7 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 		return stream, err
 	}
 	lw := &toolscache.ListWatch{
-		ListWithContextFunc: list,
+		ListWithContextFunc:  list,
 		WatchFuncWithContext: watchCRDs,
 	}
 	inf := toolscache.NewSharedIndexInformer(
