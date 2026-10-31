@@ -202,12 +202,6 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 		return stream, err
 	}
 	lw := &toolscache.ListWatch{
-		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return list(ctx, opts)
-		},
-		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return watchCRDs(ctx, opts)
-		},
 		ListWithContextFunc: list,
 		WatchFuncWithContext: watchCRDs,
 	}
