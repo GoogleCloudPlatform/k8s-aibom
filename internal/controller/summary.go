@@ -37,6 +37,7 @@ import (
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
 
 // buildSummary translates a finished BOM document plus per-workload
@@ -76,10 +77,19 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 				}
 			}
 		case cdx.ComponentTypeMachineLearningModel:
+			confidence := readProperty(c, "aibom.confidence")
+			if confidence == string(scraper.ConfidenceUnresolved) {
+				// ModelSummary.Confidence is never "unresolved":
+				// unresolved attributes are not summarized. agent.spec
+				// emits one for an API-key variable set with valueFrom.
+				// The component stays in the document, with its
+				// locator, for auditors.
+				continue
+			}
 			summary.Models = append(summary.Models, aibomv1beta1.ModelSummary{
 				Identity:   c.Name,
 				Source:     readProperty(c, "aibom.evidence.source"),
-				Confidence: readProperty(c, "aibom.confidence"),
+				Confidence: confidence,
 				// Signed: populated by Phase 8+ signature plumbing.
 				// v1 NoopVerifier-derived value is encoded in the BOM's
 				// component properties as "identity.confidence=claimed";

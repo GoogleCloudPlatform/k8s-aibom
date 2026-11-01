@@ -131,6 +131,19 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`status.summary.models` no longer lists unresolved models** (#259).
+  `ModelSummary` says its confidence is never `unresolved`, but
+  `buildSummary` copied every `machine-learning-model` component, so an
+  agent Deployment that passes `OPENAI_API_KEY` (or another API-key
+  variable) through `valueFrom` got an `openai-api` entry with
+  confidence `unresolved`, which `kubectl aibom summary`, `find` and
+  `find --model` then showed. Unresolved models are now left out of the
+  summary; the component stays in the document with its locator. An
+  API key with a literal value is `inferred` and is still summarized.
+  The document and input hash are unchanged, so an existing AIBOM keeps
+  its stored summary until the workload's inputs next change (the dedup
+  fast path does not rebuild the status).
+
 - **KServe InferenceService BOMs are capped at 256 components** (#288).
   The KServe scraper is called without `MultiScraper` and was the only
   CR scraper that did not apply `MaxComponentsPerDocument`, so each
