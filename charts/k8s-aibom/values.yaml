@@ -46,13 +46,15 @@ rbac:
 # post-install CR mutation needed. Field shapes mirror the CR spec
 # (aibom.k8saibom.dev/v1beta1 AIBOMControllerConfig).
 config:
-  # Discovery scoping, e.g. a namespace selector applied IN ADDITION to
-  # the aibom.k8saibom.dev/enabled=true namespace label opt-in, and the
-  # workload-kind allowlist (Group/Kind; absent or empty = every known
-  # kind; an unknown entry is a config error, not a no-op):
+  # Discovery scoping, e.g. a namespace selector and the workload-kind
+  # allowlist (Group/Kind; absent or empty = every known kind; an
+  # unknown entry is a config error, not a no-op). A namespaceSelector
+  # REPLACES the default aibom.k8saibom.dev/enabled=true label opt-in;
+  # keep the label in matchLabels to still require it, as here:
   #   discovery:
   #     namespaceSelector:
   #       matchLabels:
+  #         aibom.k8saibom.dev/enabled: "true"
   #         environment: production
   #     workloadKinds:
   #       - apps/Deployment
@@ -113,7 +115,7 @@ readiness:
 # When enabled, the endpoint binds on all interfaces on metrics.port, a
 # ClusterIP Service exposes it, and (optionally) a ServiceMonitor for the
 # Prometheus Operator is rendered. Series include workload reconcile
-# outcomes by kind (not_opted_in / unmatched / matched / rolled_up / rollup_unresolved) — the signal that
+# outcomes by kind (not_opted_in / kind_not_allowed / unmatched / matched / rolled_up / rollup_unresolved) — the signal that
 # separates "opted in, nothing recognized" from a broken controller —
 # plus tracked-workload gauge, sink failures, extraction errors, status
 # persist failures, and config reloads.

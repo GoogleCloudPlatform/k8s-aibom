@@ -131,6 +131,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The chart's `config.discovery` comment describes `namespaceSelector`
+  correctly** (#299). It said the selector applies in addition to the
+  `aibom.k8saibom.dev/enabled=true` label opt-in; a selector replaces the
+  label, so its `environment: production` example inventoried every
+  production namespace, labelled or not, and dropped labelled
+  namespaces outside production. The comment now says the selector
+  replaces the opt-in, and the example keeps the label in
+  `matchLabels`. The `metrics` comment's list of reconcile outcomes also
+  gains `kind_not_allowed`. Comments only.
+
 - **KServe InferenceService BOMs are capped at 256 components** (#288).
   The KServe scraper is called without `MultiScraper` and was the only
   CR scraper that did not apply `MaxComponentsPerDocument`, so each
