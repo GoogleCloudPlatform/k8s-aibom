@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"time"
 
@@ -757,6 +758,18 @@ func (r *AIBOMControllerConfigReconciler) configName() string {
 // default. A future contributor adding > 1 anywhere in the controller
 // options would silently interleave observations and break the
 // emit-on-transition invariant.
+// configChangeReloads reports whether an update to the config CR
+// should reload it. A spec change bumps metadata.generation. An
+// annotation change does not (the CRD has a status subresource), but
+// touching an annotation is the documented way to make the controller
+// re-read referenced Secrets after a rotation (see SecretKeyRef), so
+// it reloads too. Status-only updates, including the controller's own
+// Status().Update, change neither and are ignored.
+func configChangeReloads(oldObj, newObj client.Object) bool {
+	return oldObj.GetGeneration() != newObj.GetGeneration() ||
+		!maps.Equal(oldObj.GetAnnotations(), newObj.GetAnnotations())
+}
+
 func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	configName := r.configName()
 	nameIsSingleton := func(obj client.Object) bool {
@@ -770,10 +783,7 @@ func (r *AIBOMControllerConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 			if !nameIsSingleton(e.ObjectNew) {
 				return false
 			}
-			// Ignore status-only updates (our own Status().Update
-			// comes back as an event). spec changes bump
-			// metadata.generation; status-only does not.
-			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+			return configChangeReloads(e.ObjectOld, e.ObjectNew)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return nameIsSingleton(e.Object)
