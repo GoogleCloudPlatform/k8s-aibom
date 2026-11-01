@@ -15,7 +15,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   when every outstanding discovery failure recovers, without stopping
   existing watches.
 
-
 - **Third-party CRDs installed after startup are watched without a
   restart** (#226, Design 004 amendment, phase A). The supervisor now
   runs on the leader whether or not any third-party CRD exists, watches
@@ -130,6 +129,19 @@ All notable changes to k8s-aibom are documented here. The format follows
   unmatched.
 
 ### Fixed
+
+- **`status.summary.models` no longer lists unresolved models** (#259).
+  `ModelSummary` says its confidence is never `unresolved`, but
+  `buildSummary` copied every `machine-learning-model` component, so an
+  agent Deployment that passes `OPENAI_API_KEY` (or another API-key
+  variable) through `valueFrom` got an `openai-api` entry with
+  confidence `unresolved`, which `kubectl aibom summary`, `find` and
+  `find --model` then showed. Unresolved models are now left out of the
+  summary; the component stays in the document with its locator. An
+  API key with a literal value is `inferred` and is still summarized.
+  The document and input hash are unchanged, so an existing AIBOM keeps
+  its stored summary until the workload's inputs next change (the dedup
+  fast path does not rebuild the status).
 
 - **The README's confidence examples match what the scrapers emit**
   (#296). "The confidence model" listed an `HF_MODEL_ID` env var as
