@@ -43,6 +43,7 @@ import (
 // lifecycleRig is a supervisor with a fake runner and a log of what
 // happened, in order.
 type lifecycleRig struct {
+	t   *testing.T
 	s   *WatchSupervisor
 	mu  sync.Mutex
 	log []string
@@ -62,7 +63,7 @@ func (r *lifecycleRig) events() []string {
 
 func newLifecycleRig(t *testing.T) *lifecycleRig {
 	t.Helper()
-	r := &lifecycleRig{s: newApplyTestSupervisor(t)}
+	r := &lifecycleRig{t: t, s: newApplyTestSupervisor(t)}
 	r.s.runFn = func(ctx context.Context, w ThirdPartyWatch) {
 		r.record("start " + w.Name)
 		<-ctx.Done()
@@ -97,6 +98,36 @@ func (r *lifecycleRig) observe(obs crdObservation, allowed config.WorkloadKindSe
 	r.s.crd.obs[dgd] = obs
 	r.s.crd.Unlock()
 	r.s.apply(allowed)
+	r.awaitRunnerStart()
+}
+
+// awaitRunnerStart waits until the runner apply() may just have started
+// has recorded its "start". apply launches the runner on a goroutine
+// and does not wait for it, so without this a test reading the event
+// log right after observe races the fake runner's first record (seen in
+// CI as a "start" attributed to a later step). Stops are already
+// ordered: stopRunner waits for the runner to return, and the fake
+// records "stop" before returning. So once every runner that has ever
+// started has recorded it, starts == stops + (1 if a runner is live).
+func (r *lifecycleRig) awaitRunnerStart() {
+	r.t.Helper()
+	want := func() int {
+		if r.running() {
+			return 1
+		}
+		return 0
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ev := r.events()
+		if countPrefix(ev, "start ") == countPrefix(ev, "stop ")+want() {
+			return
+		}
+		if time.Now().After(deadline) {
+			r.t.Fatalf("runner never recorded its start: %v", ev)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func (r *lifecycleRig) running() bool {
