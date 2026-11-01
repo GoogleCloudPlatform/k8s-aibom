@@ -173,8 +173,11 @@ type WorkloadSummary struct {
 	Name       string `json:"name"`
 	Namespace  string `json:"namespace"`
 	// Category is the high-level AI lifecycle role assigned by the
-	// discovery layer. v1 always emits "inference"; v2+ may emit
-	// "training", "agent", "evaluation", "pipeline", "notebook".
+	// scrapers: "inference", "agent", "training", "evaluation" or
+	// "vector-database". A workload no scraper categorizes is
+	// "inference" (see docs/scraper-heuristics.md, "Workload
+	// Categorization"). "pipeline" and "notebook" are defined but no
+	// scraper emits them yet.
 	Category string `json:"category,omitempty"`
 }
 

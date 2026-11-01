@@ -68,7 +68,8 @@ var (
 	)
 
 	// WatchHealthy is 1 while a third-party kind's watch (Dynamo,
-	// NIMService, LeaderWorkerSet, KServe) is synced and error-free, 0
+	// NIMService, LeaderWorkerSet, DisaggregatedSet, KServe) or the
+	// CRDDiscovery pseudo-kind is synced and error-free, 0
 	// while it is starting or degraded (Design 004). A down Dynamo
 	// operator shows here as dynamographdeployment=0 while every other
 	// series stays 1.

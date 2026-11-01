@@ -106,7 +106,8 @@ type BOMGenerationConfig struct {
 	// InlineThresholdBytes is the size threshold below which generated
 	// BOMs are stored inline in AIBOM.status.bomDocument.inline.
 	// BOMs above this size are offloaded to an external sink (or
-	// truncated if no external sink is configured).
+	// truncated if no external sink accepted them: none is configured,
+	// or every configured sink failed that cycle).
 	//
 	// Default: 262144 (256 KiB). Hard ceiling 1 MiB to stay safely
 	// under K8s' etcd object size limit.
