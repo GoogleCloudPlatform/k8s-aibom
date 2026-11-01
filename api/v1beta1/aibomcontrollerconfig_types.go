@@ -267,10 +267,14 @@ type MTLSAuth struct {
 // (k8s-aibom-system per PRD FR4.4); namespace cross-references are
 // rejected.
 //
-// Secret-rotation semantics: the controller re-reads the Secret only
-// when the AIBOMControllerConfig CR is changed (re-apply, annotation
-// touch, or any spec edit). Direct Secret content changes do NOT
-// trigger reload in v1.0; v1.1+ may add Secret watching.
+// Secret-rotation semantics: the controller re-reads the Secret when
+// the AIBOMControllerConfig CR's spec or annotations change, so after
+// rotating a credential, touch an annotation (for example
+// `kubectl annotate aibomcontrollerconfig default
+// aibom.k8saibom.dev/reloaded-at="$(date +%s)" --overwrite`) or edit
+// the spec. Re-applying an unchanged manifest is not a change and does
+// not reload. Direct Secret content changes do NOT trigger reload in
+// v1.0; v1.1+ may add Secret watching.
 type SecretKeyRef struct {
 	// Name is the Secret's metadata.name.
 	// +kubebuilder:validation:Required

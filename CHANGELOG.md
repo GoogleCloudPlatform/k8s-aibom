@@ -130,6 +130,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Touching an annotation on `AIBOMControllerConfig` reloads it**
+  (#304). `SecretKeyRef` documents an annotation touch as the way to make
+  the controller re-read a rotated sink credential, but the config
+  controller reacted only to `metadata.generation` changes, which
+  annotations do not cause. A rotated token or key was picked up only by
+  an unrelated reconcile (a namespace change, a restart). Annotation
+  changes now reload the config; status-only updates are still ignored.
+  The `SecretKeyRef` doc also says that re-applying an unchanged
+  manifest is not a change.
+
 - **Three CRD field descriptions match current behaviour** (#306).
   `status.summary.workload.category` said v1 always emits `inference`;
   the scrapers also emit `agent`, `training`, `evaluation` and
