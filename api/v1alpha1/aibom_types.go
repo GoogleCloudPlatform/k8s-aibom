@@ -211,8 +211,9 @@ type ModelSummary struct {
 
 // BOMDocumentRef identifies where the full BOM lives. Exactly one of
 // Inline, External, or Truncated is the "active" form. When Truncated is
-// true, neither Inline nor External carries the full BOM; auditors must
-// configure an external sink to retrieve it.
+// true, neither Inline nor External carries the full BOM; auditors need
+// an external sink that accepts it to retrieve it (TruncationReason says
+// whether none is configured or the configured ones failed).
 type BOMDocumentRef struct {
 	// Format is the BOM encoding identifier; v1 always "CycloneDX".
 	Format string `json:"format"`
@@ -234,19 +235,22 @@ type BOMDocumentRef struct {
 
 	// External points at the BOM in a configured external sink.
 	// Set when Size exceeds the inline threshold AND at least one
-	// external sink is configured.
+	// external sink accepted the BOM this cycle.
 	External *ExternalBOMRef `json:"external,omitempty"`
 
 	// Truncated is true when Size exceeds the inline threshold AND no
-	// external sink is configured. In this state, neither Inline nor
-	// External is set; Summary remains populated. This is honest
-	// degradation: the customer is told what to do to recover the
-	// full BOM (configure an external sink).
+	// external sink accepted the BOM this cycle: none is configured, or
+	// every configured sink failed (see the SinkFailed condition). In
+	// this state, neither Inline nor External is set; Summary remains
+	// populated. This is honest degradation: TruncationReason tells the
+	// customer what to do to recover the full BOM (configure an external
+	// sink, or fix the failing one).
 	Truncated bool `json:"truncated,omitempty"`
 
 	// TruncationReason is a human-readable explanation when Truncated
 	// is true (e.g., "BOM size 384KB exceeds inline threshold 256KB and
-	// no external sink is configured").
+	// no external sink is configured", or that no configured external
+	// sink succeeded this cycle).
 	TruncationReason string `json:"truncationReason,omitempty"`
 }
 
