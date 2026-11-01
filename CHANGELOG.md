@@ -131,6 +131,18 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The README's confidence examples match what the scrapers emit**
+  (#296). "The confidence model" listed an `HF_MODEL_ID` env var as
+  `declared`; env-var model claims are `inferred`, as
+  `docs/scraper-heuristics.md` says and the scraper emits. It said the
+  agent framework comes from "a `langchain` import pattern in container
+  args"; `agent.spec` does not read args, and finds LangChain through
+  env vars such as `LANGCHAIN_TRACING_V2`. And it gave `^vllm/.*` as the
+  vLLM image pattern; the pattern is anchored at `vllm/vllm-openai` and
+  its siblings, so `vllm/vllm-router`, for one, is not matched. The
+  heuristics doc's deferred-cases table quoted the same old pattern and
+  is corrected too. Documentation only.
+
 - **KServe InferenceService BOMs are capped at 256 components** (#288).
   The KServe scraper is called without `MultiScraper` and was the only
   CR scraper that did not apply `MaxComponentsPerDocument`, so each
