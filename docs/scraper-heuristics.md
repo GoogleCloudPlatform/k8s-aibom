@@ -258,7 +258,7 @@ auditor-facing output makes speculative pattern broadening dangerous.
 |---|---|---|
 | ~~**TGI in GHCR registry form.**~~ | **RESOLVED in v1.4.0** — real deployment signal arrived and `^ghcr\.io/huggingface/text-generation-inference.*` shipped (the publisher's own namespace, not a mirror pattern). Kept here as the worked example of the fix process below. | — |
 | ~~**TGI / TEI registry asymmetry.**~~ | **RESOLVED in v1.4.0** by the row above — both now cover the publisher's GHCR namespace. | — |
-| **Image mirrors with embedded vendor names.** `<some-private-mirror>/<some-namespace>/vllm-toolkit:tag` or similar | No match (current `^vllm/.*` requires the image to START with `vllm/`) | Anchored matching deliberately rejects mirrored / repackaged images. Broadening risks false positives (e.g., `customer-mirror/not-vllm/vllm-toolkit:tag` contains "vllm" but isn't vLLM). Deferred pending mirroring-pattern survey. |
+| **Image mirrors with embedded vendor names.** `<some-private-mirror>/<some-namespace>/vllm-toolkit:tag` or similar | No match (the vLLM pattern requires the image to START with `vllm/vllm-`) | Anchored matching deliberately rejects mirrored / repackaged images. Broadening risks false positives (e.g., `customer-mirror/not-vllm/vllm-toolkit:tag` contains "vllm" but isn't vLLM). Deferred pending mirroring-pattern survey. |
 | **TensorRT-LLM standalone images.** | Production-shipping form `nvcr.io/nvidia/tritonserver:*-trtllm-*` is covered by the Triton pattern. A separate TensorRT-LLM pattern is NOT added. | Adding TensorRT-LLM separately would double-count the same workload. If a future shipping form is genuinely distinct, add it then. |
 
 **Fix process when a deferred case has real customer signal:**

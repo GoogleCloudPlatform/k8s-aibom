@@ -76,9 +76,9 @@ For each tracked workload, the controller scrapes the workload spec and current 
 
 Every attribute in a k8s-aibom BOM carries a confidence flag and an evidence locator. This is the difference between a useful BOM and a misleading one.
 
-- **`declared`** — the customer wrote this into their workload spec. A `--model` container arg is declared. An `HF_MODEL_ID` set on the container is declared. A model name in a `model.k8saibom.dev/name` annotation is declared.
+- **`declared`** — the customer wrote this into their workload spec. A `--model` container arg is declared. A model name in a `model.k8saibom.dev/name` annotation is declared.
 - **`verified`** — a declared claim the controller cryptographically verified (since v1.5.0). A model identity whose workload-referenced [Sigstore][sigstore] / OMS signature verifies against the operator's trust roots — transparency-log inclusion checked, signer identity matching an operator-configured constraint and recorded as evidence — is verified. A claim can never upgrade itself; the binding rules are in [Design 002](docs/design/002-sigstore-rekor-verifier.md).
-- **`inferred`** — the controller derived this from a heuristic. The runtime name `vllm` derived from matching the image against `^vllm/.*` is inferred. The agent framework identified from a `langchain` import pattern in container args is inferred.
+- **`inferred`** — the controller derived this from a heuristic. The runtime name `vllm` derived from matching a `vllm/vllm-openai` image against the vLLM runtime pattern is inferred. A model identity read from an `HF_MODEL_ID` env var is inferred: the variable is a community convention, not a Kubernetes-native declaration. The agent framework `langchain` identified from a `LANGCHAIN_TRACING_V2` env var is inferred.
 - **`unresolved`** — the controller could not determine the value with confidence. The image digest of a pod that has not pulled yet is unresolved.
 
 For compliance reviewers, this distinction is the entire point: a BOM that says "this workload runs vLLM and serves Phi-3-mini" is dramatically more useful when the reviewer can tell at a glance which parts of that claim are the customer's own declaration versus the controller's pattern-matching inference.
