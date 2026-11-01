@@ -15,7 +15,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   when every outstanding discovery failure recovers, without stopping
   existing watches.
 
-
 - **Third-party CRDs installed after startup are watched without a
   restart** (#226, Design 004 amendment, phase A). The supervisor now
   runs on the leader whether or not any third-party CRD exists, watches
@@ -130,6 +129,41 @@ All notable changes to k8s-aibom are documented here. The format follows
   unmatched.
 
 ### Fixed
+
+- **`status.summary.models` no longer lists unresolved models** (#259).
+  `ModelSummary` says its confidence is never `unresolved`, but
+  `buildSummary` copied every `machine-learning-model` component, so an
+  agent Deployment that passes `OPENAI_API_KEY` (or another API-key
+  variable) through `valueFrom` got an `openai-api` entry with
+  confidence `unresolved`, which `kubectl aibom summary`, `find` and
+  `find --model` then showed. Unresolved models are now left out of the
+  summary; the component stays in the document with its locator. An
+  API key with a literal value is `inferred` and is still summarized.
+  The document and input hash are unchanged, so an existing AIBOM keeps
+  its stored summary until the workload's inputs next change (the dedup
+  fast path does not rebuild the status).
+
+- **The README's confidence examples match what the scrapers emit**
+  (#296). "The confidence model" listed an `HF_MODEL_ID` env var as
+  `declared`; env-var model claims are `inferred`, as
+  `docs/scraper-heuristics.md` says and the scraper emits. It said the
+  agent framework comes from "a `langchain` import pattern in container
+  args"; `agent.spec` does not read args, and finds LangChain through
+  env vars such as `LANGCHAIN_TRACING_V2`. And it gave `^vllm/.*` as the
+  vLLM image pattern; the pattern is anchored at `vllm/vllm-openai` and
+  its siblings, so `vllm/vllm-router`, for one, is not matched. The
+  heuristics doc's deferred-cases table quoted the same old pattern and
+  is corrected too. Documentation only.
+
+- **The chart's `config.discovery` comment describes `namespaceSelector`
+  correctly** (#299). It said the selector applies in addition to the
+  `aibom.k8saibom.dev/enabled=true` label opt-in; a selector replaces the
+  label, so its `environment: production` example inventoried every
+  production namespace, labelled or not, and dropped labelled
+  namespaces outside production. The comment now says the selector
+  replaces the opt-in, and the example keeps the label in
+  `matchLabels`. The `metrics` comment's list of reconcile outcomes also
+  gains `kind_not_allowed`. Comments only.
 
 - **`status.bomDocument` field docs match when a BOM is truncated**
   (#301). The `external` and `truncated` descriptions (API godoc and the

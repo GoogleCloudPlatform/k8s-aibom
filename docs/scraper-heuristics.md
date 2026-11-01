@@ -29,7 +29,7 @@ Each pattern is anchored at the image name, so a project's build, development an
 
 ## Agent & Remote API Heuristics
 Agent workloads (unlike inference workloads) usually do not bundle local model weights; instead, they act as clients to remote Foundation Model APIs.
-**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). The actual value of the key is **never** extracted or logged.
+**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). An `unresolved` dependency stays in the document but is not listed in `status.summary.models`, which never carries unresolved attributes. The actual value of the key is **never** extracted or logged.
 
 An API key alone does not categorize a workload as `agent`: that takes a framework image (e.g., Langflow) or a framework environment signature (e.g., `LANGCHAIN_TRACING_V2`). A workload with only an API key keeps the category another scraper gives it, `inference` by default.
 
@@ -258,7 +258,7 @@ auditor-facing output makes speculative pattern broadening dangerous.
 |---|---|---|
 | ~~**TGI in GHCR registry form.**~~ | **RESOLVED in v1.4.0** — real deployment signal arrived and `^ghcr\.io/huggingface/text-generation-inference.*` shipped (the publisher's own namespace, not a mirror pattern). Kept here as the worked example of the fix process below. | — |
 | ~~**TGI / TEI registry asymmetry.**~~ | **RESOLVED in v1.4.0** by the row above — both now cover the publisher's GHCR namespace. | — |
-| **Image mirrors with embedded vendor names.** `<some-private-mirror>/<some-namespace>/vllm-toolkit:tag` or similar | No match (current `^vllm/.*` requires the image to START with `vllm/`) | Anchored matching deliberately rejects mirrored / repackaged images. Broadening risks false positives (e.g., `customer-mirror/not-vllm/vllm-toolkit:tag` contains "vllm" but isn't vLLM). Deferred pending mirroring-pattern survey. |
+| **Image mirrors with embedded vendor names.** `<some-private-mirror>/<some-namespace>/vllm-toolkit:tag` or similar | No match (the vLLM pattern requires the image to START with `vllm/vllm-`) | Anchored matching deliberately rejects mirrored / repackaged images. Broadening risks false positives (e.g., `customer-mirror/not-vllm/vllm-toolkit:tag` contains "vllm" but isn't vLLM). Deferred pending mirroring-pattern survey. |
 | **TensorRT-LLM standalone images.** | Production-shipping form `nvcr.io/nvidia/tritonserver:*-trtllm-*` is covered by the Triton pattern. A separate TensorRT-LLM pattern is NOT added. | Adding TensorRT-LLM separately would double-count the same workload. If a future shipping form is genuinely distinct, add it then. |
 
 **Fix process when a deferred case has real customer signal:**
