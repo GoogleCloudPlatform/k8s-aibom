@@ -130,6 +130,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Three CRD field descriptions match current behaviour** (#306).
+  `status.summary.workload.category` said v1 always emits `inference`;
+  the scrapers also emit `agent`, `training`, `evaluation` and
+  `vector-database`. `spec.bomGeneration.inlineThresholdBytes` said an
+  oversized BOM is truncated only when no external sink is configured;
+  it is also truncated when every configured sink failed (as #301 fixed
+  for `status.bomDocument`). `spec.discovery.workloadKinds` left
+  DisaggregatedSet out of the third-party kinds whose watch stops when
+  unlisted. Regenerated CRDs; no schema change.
+
 - **`status.summary.models` no longer lists unresolved models** (#259).
   `ModelSummary` says its confidence is never `unresolved`, but
   `buildSummary` copied every `machine-learning-model` component, so an
