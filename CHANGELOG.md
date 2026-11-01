@@ -165,6 +165,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   `matchLabels`. The `metrics` comment's list of reconcile outcomes also
   gains `kind_not_allowed`. Comments only.
 
+- **`status.bomDocument` field docs match when a BOM is truncated**
+  (#301). The `external` and `truncated` descriptions (API godoc and the
+  CRD schema `kubectl explain` reads) said `truncated` means no external
+  sink is configured. The controller also truncates when sinks are
+  configured but none accepted the BOM this cycle, and says so in
+  `truncationReason`. The descriptions now say `external` is set when a
+  sink accepted the BOM and `truncated` when none did, naming both
+  causes. Regenerated CRDs; no schema change.
+
 - **KServe InferenceService BOMs are capped at 256 components** (#288).
   The KServe scraper is called without `MultiScraper` and was the only
   CR scraper that did not apply `MaxComponentsPerDocument`, so each
