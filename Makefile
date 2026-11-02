@@ -22,6 +22,8 @@ SHELL := /usr/bin/env bash -o pipefail
 CONTROLLER_GEN_VERSION ?= v0.22.0
 ENVTEST_VERSION         ?= release-0.24
 ENVTEST_K8S_VERSION     ?= 1.34.0
+# Same Helm as CI (docs/release-checklist.md, "Before tagging").
+HELM_VERSION            ?= v3.22.1
 IMG                     ?= k8s-aibom:latest
 
 # VERSION is stamped into the binary (main.controllerVersion) and image OCI
@@ -171,8 +173,15 @@ help:
 # ---------------------------------------------------------------------------
 HELM := $(LOCALBIN)/helm
 .PHONY: helm
+# get-helm-3 installs into HELM_INSTALL_DIR (default /usr/local/bin) and
+# then requires helm on PATH, so both point at $(LOCALBIN). A failed
+# install fails the target, and the script is removed either way.
 helm: $(LOCALBIN)
-	@test -x $(HELM) || (curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && chmod 700 get_helm.sh && ./get_helm.sh --version v3.13.0 --no-sudo && mv $(CURDIR)/bin/helm $(HELM) || rm -f get_helm.sh)
+	@test -x $(HELM) || { \
+		curl -fsSL -o $(LOCALBIN)/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && \
+		chmod 700 $(LOCALBIN)/get_helm.sh && \
+		PATH="$(LOCALBIN):$$PATH" HELM_INSTALL_DIR="$(LOCALBIN)" $(LOCALBIN)/get_helm.sh --version $(HELM_VERSION) --no-sudo; \
+		rc=$$?; rm -f $(LOCALBIN)/get_helm.sh; exit $$rc; }
 
 .PHONY: install.yaml
 install.yaml: helm

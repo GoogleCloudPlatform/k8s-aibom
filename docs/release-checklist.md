@@ -19,7 +19,8 @@ the tag step with a new version.
 5. Helm version: every workflow pins Helm (`azure/setup-helm` `version:`),
    currently v3.22.1, and the weekly version matrix runs one kind leg on
    Helm 4 on purpose (#260). A release is never packaged or attested with
-   an unpinned Helm; bump the pin in all six workflow files together.
+   an unpinned Helm; bump the pin in all six workflow files and the
+   Makefile's `HELM_VERSION` (what `make helm` installs) together.
 6. README version strings: the Quickstart's chart `--version` and
    install.yaml release URL updated to the new version (they are
    hardcoded by design so installs are reproducible). Merge all
