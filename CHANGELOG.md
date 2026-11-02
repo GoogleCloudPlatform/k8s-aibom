@@ -130,6 +130,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The Terraform README shows the `cluster_location` default** (#310).
+  Its Variables table listed `cluster_name` and `cluster_location`
+  together with no default; `cluster_location` defaults to
+  `us-central1-c` in `variables.tf`, so leaving it out looks the cluster
+  up there. The row is split and shows the default. Documentation only.
+
 - **Touching an annotation on `AIBOMControllerConfig` reloads it**
   (#304). `SecretKeyRef` documents an annotation touch as the way to make
   the controller re-read a rotated sink credential, but the config

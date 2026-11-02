@@ -70,7 +70,8 @@ module "k8s_aibom" {
 | Name | Default | Purpose |
 |---|---|---|
 | `project_id` | — | GCP project |
-| `cluster_name` / `cluster_location` | — | Target GKE cluster |
+| `cluster_name` | — | Target GKE cluster name |
+| `cluster_location` | `us-central1-c` | Target GKE cluster's region or zone |
 | `namespace` | `k8s-aibom-system` | Install namespace |
 | `chart_version` | current release | Published chart version (default path) |
 | `build_from_source` | `false` | Opt into the source path |
