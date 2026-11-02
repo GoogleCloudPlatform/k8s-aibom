@@ -130,6 +130,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`make helm` installs Helm into `./bin`, at the CI version** (#308).
+  The target ran `get-helm-3` without `HELM_INSTALL_DIR`, so it installed
+  to `/usr/local/bin` (or failed there without root), then moved
+  `./bin/helm` onto itself and exited 0 when either step failed, leaving
+  no `./bin/helm` for `make install.yaml`. It now installs into `./bin`,
+  fails when the install fails, and installs `HELM_VERSION` (v3.22.1,
+  the version every workflow pins) instead of v3.13.0. Build tooling
+  only.
+
 - **Touching an annotation on `AIBOMControllerConfig` reloads it**
   (#304). `SecretKeyRef` documents an annotation touch as the way to make
   the controller re-read a rotated sink credential, but the config
