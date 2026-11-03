@@ -36,7 +36,8 @@ before investing time:
 For anything larger than a focused fix — a new scraper, a schema
 change, a new sink — open an issue first, or a design doc under
 `docs/design/` for substantial work. `VERSIONING.md` describes the
-release train and the design-doc review window. This costs a little
+release train and the design-doc review window. `docs/merge-criteria.md` says which changes are merged on review
+and which wait for a maintainer discussion. This costs a little
 time up front and saves a lot of it on review.
 
 ## Development setup
