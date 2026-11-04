@@ -12,7 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Workloads for the vector-database, agent, training and evaluation
+# scrapers. Each one should get an AIBOM:
+#
+#   kubectl apply -f hack/full-smoke-test.yaml
+#   kubectl aibom summary -n inference-test
+#
+# The controller only reports on opted-in namespaces, so the namespace
+# carries the opt-in label.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference-test
+  labels:
+    aibom.k8saibom.dev/enabled: "true"
+
 # --- VECTOR DATABASES ---
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -245,7 +261,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: eval
-        image: ragas/ragas-eval:latest
+        image: explodinggradients/ragas:latest
         command: ["sleep", "infinity"]
         env:
         - name: RAGAS_DO_NOT_TRACK
