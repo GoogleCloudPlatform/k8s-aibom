@@ -13,18 +13,30 @@ cd k8s-aibom
 
 export IMG=my-registry.example.com/k8s-aibom:dev
 
-# Cross-compiles linux/amd64 + linux/arm64
-make image-multiarch
-make docker-push
+# Cross-compiles linux/amd64 + linux/arm64 and pushes the image index
+docker buildx build --build-arg VERSION=dev \
+  --platform linux/amd64,linux/arm64 -t "$IMG" --push .
 ```
 
 > [!WARNING]
 > **Platform architecture:** plain `make image` builds only your host's
 > native architecture — an Apple Silicon build will CrashLoop on an AMD64
-> cluster with `exec format error`. Prefer `make image-multiarch`.
+> cluster with `exec format error`. Build both platforms as above.
+
+`make image-multiarch` runs the same build without `--push`, so where the
+result goes depends on your Docker setup. With the containerd image store
+(the default for new Docker Desktop installs, and for new Docker Engine
+installs since 29.0) the image is kept locally and `make docker-push`
+pushes it. With the classic image store, the default `docker` builder
+refuses a multi-platform build, and a `docker-container` builder keeps
+the result only in its build cache, so `make docker-push` has nothing to
+push, or pushes an older image under the same tag. For a single-platform
+image that matches your cluster, `make image` followed by
+`make docker-push` works everywhere.
 
 The build stamps a version into the binary and image labels; pass
-`VERSION=<value>` to `make` to override the default (`dev`).
+`VERSION=<value>` to `make`, or `--build-arg VERSION=<value>` to
+`docker buildx build`, to override the default (`dev`).
 
 ## Deploy the local chart
 

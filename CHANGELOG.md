@@ -130,6 +130,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Building from source shows a multi-platform build that pushes**
+  (#317). The guide said `make image-multiarch` then `make docker-push`,
+  but `image-multiarch` has no output flag. With the classic image store,
+  the default builder refuses a multi-platform build, and a
+  `docker-container` builder leaves the result in its build cache, so
+  `make docker-push` had nothing to push or pushed an older image. Only
+  the containerd image store keeps the image for `docker push`. The guide
+  now runs `docker buildx build ... --push`, and says when the make
+  targets work. Documentation only.
+
 - **`make helm` installs Helm into `./bin`, at the CI version** (#308).
   The target ran `get-helm-3` without `HELM_INSTALL_DIR`, so it installed
   to `/usr/local/bin` (or failed there without root), then moved
