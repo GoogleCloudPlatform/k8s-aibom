@@ -130,6 +130,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`hack/full-smoke-test.yaml` works on a fresh cluster again**
+  (#316). It put every workload in `inference-test` without creating
+  that namespace or opting it in, so `kubectl apply` failed, and a
+  namespace created by hand without the opt-in label got no AIBOMs. Its
+  ragas Job ran `ragas/ragas-eval`, which the anchored ragas pattern no
+  longer matches. The file now creates the namespace with
+  `aibom.k8saibom.dev/enabled: "true"` and runs
+  `explodinggradients/ragas`, so all 15 workloads get an AIBOM. Test
+  manifest only.
+
 - **Building from source shows a multi-platform build that pushes**
   (#317). The guide said `make image-multiarch` then `make docker-push`,
   but `image-multiarch` has no output flag. With the classic image store,
