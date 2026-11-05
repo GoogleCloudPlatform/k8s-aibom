@@ -115,7 +115,9 @@ func TestFind_FiltersAreANDed(t *testing.T) {
 }
 
 func TestFind_ZeroMatchesIsASuccessfulRun(t *testing.T) {
-	out, errOut := runFindCapture(t, findItems(t), findFilter{runtime: "triton"})
+	// The two rows with a readable document; the truncated one gets a
+	// warning under --runtime (TestFind_RuntimeWithoutDocumentWarns).
+	out, errOut := runFindCapture(t, findItems(t)[:2], findFilter{runtime: "triton"})
 	if strings.TrimSpace(out) != "0 matches" {
 		t.Fatalf("zero matches must print exactly '0 matches' on stdout, got %q", out)
 	}
@@ -303,9 +305,21 @@ func TestFind_UnreadableDocumentDoesNotFailTheRun(t *testing.T) {
 
 	// A summary filter still evaluates the rows: the summary is readable
 	// even when the document is not.
-	out, errOut = runFindCapture(t, items, findFilter{runtime: "litellm"})
+	out, errOut = runFindCapture(t, items, findFilter{model: "openai/"})
 	if !strings.Contains(out, "gateway") || strings.Contains(out, "not-json") || errOut != "" {
-		t.Fatalf("runtime filter wrong with unreadable rows:\n%s\nstderr: %q", out, errOut)
+		t.Fatalf("model filter wrong with unreadable rows:\n%s\nstderr: %q", out, errOut)
+	}
+
+	// --runtime is matched against their summary runtime only; they are
+	// excluded and named in a warning.
+	out, errOut = runFindCapture(t, items, findFilter{runtime: "litellm"})
+	if !strings.Contains(out, "gateway") || strings.Contains(out, "not-json") {
+		t.Fatalf("runtime filter wrong with unreadable rows:\n%s", out)
+	}
+	for _, want := range []string{"prod-jobs/not-base64", "prod-jobs/not-json", "prod-jobs/not-a-string", "summary runtime only"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("runtime warning missing %q: %q", want, errOut)
+		}
 	}
 
 	// An image filter cannot be evaluated for them: shown, not excluded,
@@ -318,5 +332,82 @@ func TestFind_UnreadableDocumentDoesNotFailTheRun(t *testing.T) {
 		if !strings.Contains(errOut, want) {
 			t.Fatalf("warning missing %q: %q", want, errOut)
 		}
+	}
+}
+
+// runtimesDoc is the document inference.spec and the builder emit for a
+// Deployment running vLLM with a LiteLLM proxy beside it: one runtime
+// application component per matched image, sorted by name, so
+// status.summary.runtime (the first one) is litellm.
+func runtimesDoc() []byte {
+	return []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
+	 {"type":"application","name":"litellm","properties":[{"name":"runtime.name","value":"litellm"}]},
+	 {"type":"application","name":"vllm","version":"v0.6.3","properties":[{"name":"runtime.name","value":"vllm"}]},
+	 {"type":"container","name":"ghcr.io/berriai/litellm","properties":[{"name":"image.reference","value":"ghcr.io/berriai/litellm:main-v1.81.0"}]},
+	 {"type":"container","name":"vllm/vllm-openai","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
+	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"}]}
+	]}`)
+}
+
+// status.summary.runtime names only the first runtime in the document.
+// --runtime matches any runtime the document attributes, so a workload
+// whose summary names another runtime is still found.
+func TestFind_RuntimeMatchesEveryAttributedRuntime(t *testing.T) {
+	u := fixtureAIBOM(t, runtimesDoc(), false)
+	u.SetName("apps-deployment-chat")
+	_ = unstructured.SetNestedField(u.Object, "litellm", "status", "summary", "runtime", "name")
+	items := []unstructured.Unstructured{*u}
+
+	for _, rt := range []string{"vllm", "litellm"} {
+		out, _ := runFindCapture(t, items, findFilter{runtime: rt})
+		if !strings.Contains(out, "apps-deployment-chat") {
+			t.Fatalf("--runtime %s missed a workload that runs it:\n%s", rt, out)
+		}
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		if got := strings.Fields(lines[1])[3]; got != "litellm,vllm" {
+			t.Errorf("--runtime %s: RUNTIME = %q, want both runtimes", rt, got)
+		}
+	}
+	out, _ := runFindCapture(t, items, findFilter{runtime: "triton"})
+	if !strings.Contains(out, "0 matches") {
+		t.Fatalf("--runtime triton matched a workload that does not run it:\n%s", out)
+	}
+	// Exact, like the summary match: a runtime name is not a substring.
+	out, _ = runFindCapture(t, items, findFilter{runtime: "llm"})
+	if !strings.Contains(out, "0 matches") {
+		t.Fatalf("--runtime llm matched as a substring:\n%s", out)
+	}
+}
+
+// Without a readable document only the summary runtime can be matched.
+// A row whose summary names another runtime is left out, but named in a
+// warning, also after "0 matches": a second runtime may be in the
+// document that could not be read.
+func TestFind_RuntimeWithoutDocumentWarns(t *testing.T) {
+	big := fixtureTruncated()
+	_ = unstructured.SetNestedField(big.Object, "litellm", "status", "summary", "runtime", "name")
+	items := []unstructured.Unstructured{*big}
+
+	out, errOut := runFindCapture(t, items, findFilter{runtime: "vllm"})
+	if strings.TrimSpace(out) != "0 matches" {
+		t.Fatalf("want 0 matches on stdout, got %q", out)
+	}
+	for _, want := range []string{"1 row(s)", "prod-jobs/big", "summary runtime only", "excluded"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("warning missing %q: %q", want, errOut)
+		}
+	}
+
+	// The summary runtime still matches without the document, and a
+	// row that matched needs no warning.
+	out, errOut = runFindCapture(t, items, findFilter{runtime: "litellm"})
+	if !strings.Contains(out, "big") || errOut != "" {
+		t.Fatalf("summary runtime match wrong:\n%s\nstderr: %q", out, errOut)
+	}
+
+	// A row another filter already excludes is not named.
+	_, errOut = runFindCapture(t, items, findFilter{runtime: "vllm", signed: "verified"})
+	if errOut != "" {
+		t.Fatalf("row excluded by --signed must not be named: %q", errOut)
 	}
 }

@@ -112,11 +112,17 @@ spec:
           some p
           contains(img, patterns[p])
         }
+        # A missing label (or no labels at all) is undefined in Rego,
+        # so "label != true" would never fire for a namespace that was
+        # never opted in. Test for opt-in and negate it instead.
+        opted_in(ns) {
+          ns.metadata.labels["aibom.k8saibom.dev/enabled"] == "true"
+        }
         violation[{"msg": msg}] {
           some c
           ai_image(input.review.object.spec.template.spec.containers[c].image)
           ns := data.inventory.cluster.v1.Namespace[input.review.object.metadata.namespace]
-          ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"
+          not opted_in(ns)
           msg := sprintf("namespace %v runs an AI runtime without inventory opt-in", [input.review.object.metadata.namespace])
         }
 ---

@@ -513,17 +513,47 @@ func recordExtractionErrors(status *aibomv1beta1.AIBOMStatus, prev int32, errs [
 	}
 	transition(metav1.ConditionTrue)
 	stale.Reason = reasonExtractionErrorsPersistent
-	var sources []string
+	stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles; errors: %s", status.ConsecutiveErrors, extractionErrorList(errs))
+}
+
+// maxStaleMessageErrors bounds how many distinct extraction errors the
+// Stale message lists, and maxStaleMessageErrorRunes how long each one
+// may be, so a pathological spec cannot bloat status: the listed part of
+// the message stays under 400 characters.
+const (
+	maxStaleMessageErrors     = 3
+	maxStaleMessageErrorRunes = 120
+)
+
+// extractionErrorList joins the distinct messages of errs, in scraper
+// order, for the Stale message: the errors are not logged or kept
+// anywhere else, so it is where an operator finds which field was
+// skipped. The first maxStaleMessageErrors are listed, each cut to
+// maxStaleMessageErrorRunes, and the rest counted. The scrapers walk
+// spec lists in order, so the text is deterministic and an unchanged
+// workload does not rewrite its status. Any error type is listed; the
+// CRD scrapers return plain errors, and an *scraper.ExtractionError's
+// text names its evidence source.
+func extractionErrorList(errs []error) string {
+	seen := make(map[string]bool, len(errs))
+	var msgs []string
 	for _, e := range errs {
-		if extErr, ok := e.(*scraper.ExtractionError); ok {
-			sources = append(sources, string(extErr.EvidenceSource))
+		if m := e.Error(); !seen[m] {
+			seen[m] = true
+			msgs = append(msgs, m)
 		}
 	}
-	if len(sources) > 0 {
-		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles; sources: %s", status.ConsecutiveErrors, strings.Join(sources, ", "))
-	} else {
-		stale.Message = fmt.Sprintf("workload produced extraction errors on %d consecutive reconciles", status.ConsecutiveErrors)
+	extra := len(msgs) - maxStaleMessageErrors
+	if extra > 0 {
+		msgs = msgs[:maxStaleMessageErrors]
 	}
+	for i, m := range msgs {
+		msgs[i] = scraper.TruncateString(m, maxStaleMessageErrorRunes)
+	}
+	if extra > 0 {
+		return fmt.Sprintf("%s; and %d more", strings.Join(msgs, "; "), extra)
+	}
+	return strings.Join(msgs, "; ")
 }
 
 // keepTransitionTimes carries each condition's LastTransitionTime over

@@ -43,12 +43,15 @@ import (
 //     reading external/truncated/no-document/unreadable and a one-line
 //     stderr warning. Silently dropping it would turn "cannot evaluate"
 //     into "not present", which is the one lie this command must not
-//     tell. Zero matches is never proof of absence: namespaces that are
+//     tell. Under --runtime, such a row is matched against its summary
+//     runtime, which names only one; if that does not match, the row is
+//     left out and named in a stderr warning, even after "0 matches".
+//     Zero matches is never proof of absence: namespaces that are
 //     not opted in, unattributed images, and unresolved digests are all
 //     invisible here by design.
 
 type findFilter struct {
-	runtime string // exact match on status.summary.runtime.name
+	runtime string // exact match on status.summary.runtime.name or any runtime in the inline document
 	model   string // case-sensitive substring on status.summary.models[].identity
 	image   string // substring on container image.reference (inline document)
 	digest  string // sha256 hex, bare or sha256:-prefixed; exact if 64 chars, else prefix (inline document)
@@ -58,10 +61,13 @@ type findFilter struct {
 func (f findFilter) needsDocument() bool { return f.image != "" || f.digest != "" }
 
 // containerFacts is what find needs from the inline CycloneDX document:
-// the container image references and their SHA-256 digests.
+// the container image references and their SHA-256 digests, and the
+// runtime names the document attributes (status.summary.runtime holds
+// only the first of them).
 type containerFacts struct {
-	images  []string
-	digests []string
+	images   []string
+	digests  []string
+	runtimes []string
 }
 
 // inlineContainers decodes the inline document and collects container
@@ -109,6 +115,14 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 		return containerFacts{}, "unreadable"
 	}
 	for _, c := range parsed.Components {
+		if c.Type == "application" {
+			for _, p := range c.Properties {
+				if p.Name == "runtime.name" && p.Value != "" {
+					facts.runtimes = append(facts.runtimes, p.Value)
+				}
+			}
+			continue
+		}
 		if c.Type != "container" {
 			continue
 		}
@@ -189,14 +203,27 @@ func summaryModels(u *unstructured.Unstructured) (identities []string, signedSta
 // findMatch evaluates the filter against one AIBOM. matched reports the
 // verdict; unavailable is non-empty when an image/digest filter could
 // not be evaluated because the document is not inline or unreadable (the
-// row is then treated as matched and the caller warns).
+// row is then treated as matched and the caller warns). A row that is
+// not matched but has unavailable set passed every other filter, and
+// --runtime could only be checked against its summary runtime: the
+// caller leaves it out and names it in a warning.
 func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts containerFacts, unavailable string) {
 	get := func(fields ...string) string {
 		v, _, _ := unstructured.NestedString(u.Object, fields...)
 		return v
 	}
-	if f.runtime != "" && get("status", "summary", "runtime", "name") != f.runtime {
-		return false, containerFacts{}, ""
+	// Image/digest criteria and the runtime list need the document.
+	// Always collect facts (IMAGES and RUNTIME columns) even when no
+	// such filter is set.
+	facts, unavailable = inlineContainers(u)
+	runtimeUnchecked := false
+	if f.runtime != "" && !hasRuntime(get("status", "summary", "runtime", "name"), facts.runtimes, f.runtime) {
+		if unavailable == "" {
+			return false, containerFacts{}, ""
+		}
+		// The summary names one runtime, and the document that lists
+		// the others cannot be read: excluded, but not silently.
+		runtimeUnchecked = true
 	}
 	identities, states := summaryModels(u)
 	if f.model != "" {
@@ -223,9 +250,9 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 			return false, containerFacts{}, ""
 		}
 	}
-	// Image/digest criteria need the document. Always collect facts
-	// (IMAGES column) even when no such filter is set.
-	facts, unavailable = inlineContainers(u)
+	if runtimeUnchecked {
+		return false, facts, unavailable
+	}
 	if f.needsDocument() && unavailable != "" {
 		// Cannot evaluate: show, never exclude.
 		return true, facts, unavailable
@@ -246,6 +273,33 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 		return false, facts, ""
 	}
 	return true, facts, unavailable
+}
+
+// hasRuntime reports whether want is the summary runtime or one of the
+// runtimes in the document. The summary names one runtime, the first in
+// the document, so a pod that runs vLLM next to a LiteLLM proxy has
+// summary runtime litellm; --runtime vllm must still find it. A
+// document that is not inline leaves only the summary to match.
+func hasRuntime(summary string, inDocument []string, want string) bool {
+	if summary == want {
+		return true
+	}
+	for _, rt := range inDocument {
+		if rt == want {
+			return true
+		}
+	}
+	return false
+}
+
+// rowRuntimes is the RUNTIME column: the summary runtime first, then
+// the document's other runtimes, each once.
+func rowRuntimes(summary string, inDocument []string) []string {
+	var all []string
+	if summary != "" {
+		all = append(all, summary)
+	}
+	return uniqueStrings(append(all, inDocument...))
 }
 
 // uniqueStrings returns items without repeats, in first-seen order.
@@ -282,11 +336,14 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAMESPACE\tKIND\tNAME\tRUNTIME\tMODELS\tIMAGES\tSIGNED\tCONFIDENCE")
 	matches := 0
-	var unavailableRows []string
+	var unavailableRows, summaryOnlyRows []string
 	for i := range items {
 		u := &items[i]
 		matched, facts, unavailable := findMatch(u, f)
 		if !matched {
+			if unavailable != "" {
+				summaryOnlyRows = append(summaryOnlyRows, u.GetNamespace()+"/"+u.GetName())
+			}
 			continue
 		}
 		matches++
@@ -306,7 +363,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 			u.GetNamespace(),
 			orDash(get("status", "summary", "workload", "kind")),
 			u.GetName(),
-			orDash(get("status", "summary", "runtime", "name")),
+			joinTruncated(rowRuntimes(get("status", "summary", "runtime", "name"), facts.runtimes), 2),
 			joinTruncated(uniqueStrings(identities), 2),
 			images,
 			joinTruncated(uniqueStrings(states), 3),
@@ -315,14 +372,20 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 	}
 	if matches == 0 {
 		fmt.Fprintln(w, "0 matches")
-		return nil
+	} else {
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+		if len(unavailableRows) > 0 && f.needsDocument() {
+			fmt.Fprintf(errw, "warning: %d row(s) have no readable inline document (external sink, truncated, not written yet, or unreadable), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
+				len(unavailableRows), strings.Join(unavailableRows, ", "))
+		}
 	}
-	if err := tw.Flush(); err != nil {
-		return err
-	}
-	if len(unavailableRows) > 0 && f.needsDocument() {
-		fmt.Fprintf(errw, "warning: %d row(s) have no readable inline document (external sink, truncated, not written yet, or unreadable), so the image/digest filter could not be evaluated for them; they are shown, not excluded: %s\n",
-			len(unavailableRows), strings.Join(unavailableRows, ", "))
+	// Printed after "0 matches" too: that answer must not read as
+	// "runtime R runs nowhere" when some documents were not checked.
+	if len(summaryOnlyRows) > 0 {
+		fmt.Fprintf(errw, "warning: %d row(s) have no readable inline document (external sink, truncated, not written yet, or unreadable), so --runtime was matched against their summary runtime only, which names one runtime; they are excluded: %s\n",
+			len(summaryOnlyRows), strings.Join(summaryOnlyRows, ", "))
 	}
 	return nil
 }
