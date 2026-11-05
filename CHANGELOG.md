@@ -130,6 +130,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **An API key set from a Secret is marked as a remote API dependency**
+  (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
+  component `dependency.type: remote-api` only when the key was a
+  literal value. A key set through `valueFrom`, which is how keys are
+  normally loaded, got the component with no properties. Both forms now
+  carry `dependency.type`; the `valueFrom` component stays `unresolved`.
+  Documents for workloads that load an API key from a Secret or
+  ConfigMap change once after upgrade.
+
 - **The property taxonomy matches what the controller emits** (#321).
   `docs/cyclonedx-property-taxonomy.md` listed the workload category
   `vectordb` (it is `vector-database`) and the signing status `none`
