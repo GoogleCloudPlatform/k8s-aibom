@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -31,6 +32,7 @@ import (
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	configpkg "github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/metrics"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
 
@@ -63,52 +65,12 @@ func (s *erroringScraper) Scrape(_ context.Context, _ scraper.Workload, _ *scrap
 // 1 and Stale never reaches staleThresholdReconciles. Once the errors
 // are gone, the fast path must clear the Stale it set.
 func TestReconcile_ExtractionErrorsCountedOnFastPath(t *testing.T) {
-	ctx := context.Background()
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name:   "ai-team",
-		Labels: map[string]string{configpkg.DefaultNamespaceOptInLabel: "true"},
-	}}
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ai-team", UID: "uid-app", Generation: 1},
-		Spec: appsv1.DeploymentSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "vllm/vllm-openai:v0.6.3"}}},
-			},
-		},
-	}
-	c := fake.NewClientBuilder().
-		WithScheme(newConfigFakeScheme(t)).
-		WithObjects(ns, dep).
-		WithStatusSubresource(&aibomv1beta1.AIBOM{}).
-		Build()
-
 	sc := &erroringScraper{errs: []error{&scraper.ExtractionError{
 		EvidenceSource: scraper.SourceCRDField,
 		Message:        "spec.roles[0]: not an object; skipped",
 	}}}
-	snap := configpkg.DefaultSnapshot()
+	reconcile := newErroringReconcile(t, sc)
 	threshold := int(configpkg.DefaultStaleThresholdReconciles)
-	r := &DeploymentReconciler{WorkloadReconciler: WorkloadReconciler{
-		Client:            c,
-		Scheme:            c.Scheme(),
-		Scraper:           sc,
-		BOMBuilder:        bom.NewBuilder(),
-		StatusBuilder:     NewStatusBuilder(),
-		ConfigStore:       configpkg.NewStore(snap),
-		ControllerName:    "k8s-aibom",
-		ControllerVersion: "0.1.0-test",
-	}}
-	reconcile := func() aibomv1beta1.AIBOMStatus {
-		t.Helper()
-		if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ai-team", Name: "app"}}); err != nil {
-			t.Fatalf("Reconcile: %v", err)
-		}
-		var got aibomv1beta1.AIBOM
-		if err := c.Get(ctx, types.NamespacedName{Namespace: "ai-team", Name: AIBOMNameForDeployment(dep)}, &got); err != nil {
-			t.Fatalf("get AIBOM: %v", err)
-		}
-		return got.Status
-	}
 
 	var st aibomv1beta1.AIBOMStatus
 	for i := 1; i <= threshold; i++ {
@@ -132,5 +94,74 @@ func TestReconcile_ExtractionErrorsCountedOnFastPath(t *testing.T) {
 	stale = apimeta.FindStatusCondition(st.Conditions, aibomv1beta1.ConditionStale)
 	if stale == nil || stale.Status != metav1.ConditionFalse {
 		t.Errorf("after the errors cleared: Stale = %+v, want False", stale)
+	}
+}
+
+// newErroringReconcile returns a function that reconciles one opted-in
+// Deployment with sc as the scraper and returns its AIBOM's status.
+func newErroringReconcile(t *testing.T, sc *erroringScraper) func() aibomv1beta1.AIBOMStatus {
+	t.Helper()
+	ctx := context.Background()
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name:   "ai-team",
+		Labels: map[string]string{configpkg.DefaultNamespaceOptInLabel: "true"},
+	}}
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ai-team", UID: "uid-app", Generation: 1},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "vllm/vllm-openai:v0.6.3"}}},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(newConfigFakeScheme(t)).
+		WithObjects(ns, dep).
+		WithStatusSubresource(&aibomv1beta1.AIBOM{}).
+		Build()
+
+	r := &DeploymentReconciler{WorkloadReconciler: WorkloadReconciler{
+		Client:            c,
+		Scheme:            c.Scheme(),
+		Scraper:           sc,
+		BOMBuilder:        bom.NewBuilder(),
+		StatusBuilder:     NewStatusBuilder(),
+		ConfigStore:       configpkg.NewStore(configpkg.DefaultSnapshot()),
+		ControllerName:    "k8s-aibom",
+		ControllerVersion: "0.1.0-test",
+	}}
+	return func() aibomv1beta1.AIBOMStatus {
+		t.Helper()
+		if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ai-team", Name: "app"}}); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		var got aibomv1beta1.AIBOM
+		if err := c.Get(ctx, types.NamespacedName{Namespace: "ai-team", Name: AIBOMNameForDeployment(dep)}, &got); err != nil {
+			t.Fatalf("get AIBOM: %v", err)
+		}
+		return got.Status
+	}
+}
+
+// aibom_scraper_extraction_errors_total counts the errors of every
+// scrape. The fast path scrapes too, so an unchanged workload that
+// keeps producing errors must keep raising the counter; otherwise it
+// rises on the first reconcile only, and rate() reads zero while the
+// same errors drive Stale to True.
+func TestReconcile_ExtractionErrorsMetricCountedOnFastPath(t *testing.T) {
+	sc := &erroringScraper{errs: []error{
+		&scraper.ExtractionError{EvidenceSource: scraper.SourceCRDField, Message: "spec.roles[0]: not an object; skipped"},
+		&scraper.ExtractionError{EvidenceSource: scraper.SourceCRDField, Message: "spec.roles[1]: not an object; skipped"},
+	}}
+	reconcile := newErroringReconcile(t, sc)
+	counter := metrics.ScraperExtractionErrors.WithLabelValues(sc.Name(), string(scraper.SourceCRDField))
+	before := testutil.ToFloat64(counter)
+
+	const reconciles = 3
+	for i := 1; i <= reconciles; i++ {
+		reconcile()
+		if got, want := testutil.ToFloat64(counter)-before, float64(i*len(sc.errs)); got != want {
+			t.Fatalf("reconcile %d: aibom_scraper_extraction_errors_total rose by %v, want %v", i, got, want)
+		}
 	}
 }

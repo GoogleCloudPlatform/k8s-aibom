@@ -314,6 +314,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				"workload_name", req.Workload.Name,
 				"input_hash", inputHash[:12],
 			)
+			r.countExtractionErrors(inputs.Errors)
 			prevErrors := existing.Status.ConsecutiveErrors
 			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
 			recordExtractionErrors(&existing.Status, prevErrors, inputs.Errors, snap.StaleThresholdReconciles)
@@ -406,13 +407,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 
 	// Phase 14: extraction errors and Stale wiring
-	for _, e := range inputs.Errors {
-		source := "unknown"
-		if extErr, ok := e.(*scraper.ExtractionError); ok {
-			source = string(extErr.EvidenceSource)
-		}
-		metrics.ScraperExtractionErrors.WithLabelValues(r.Scraper.Name(), source).Inc()
-	}
+	r.countExtractionErrors(inputs.Errors)
 	recordExtractionErrors(&status, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
 	keepTransitionTimes(status.Conditions, existing.Status.Conditions)
 
@@ -461,6 +456,22 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{RequeueAfter: SinkRetryRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// countExtractionErrors adds this scrape's extraction errors to
+// aibom_scraper_extraction_errors_total. It runs on the full path and
+// on the dedup fast path: both scrape, and an unchanged workload that
+// keeps producing errors takes the fast path from its second reconcile
+// on, so counting only on the full path would stop the counter while
+// recordExtractionErrors keeps counting the same errors toward Stale.
+func (r *WorkloadReconciler) countExtractionErrors(errs []error) {
+	for _, e := range errs {
+		source := "unknown"
+		if extErr, ok := e.(*scraper.ExtractionError); ok {
+			source = string(extErr.EvidenceSource)
+		}
+		metrics.ScraperExtractionErrors.WithLabelValues(r.Scraper.Name(), source).Inc()
+	}
 }
 
 // reasonExtractionErrorsPersistent is the Stale reason
