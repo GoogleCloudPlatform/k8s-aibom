@@ -139,6 +139,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   Documents for workloads that load an API key from a Secret or
   ConfigMap change once after upgrade.
 
+- **The property taxonomy matches what the controller emits** (#321).
+  `docs/cyclonedx-property-taxonomy.md` listed the workload category
+  `vectordb` (it is `vector-database`) and the signing status `none`
+  (no status is written without a signature reference, and absence reads
+  as unsigned). It also gave no v1.7 name to `dependency.type`,
+  `dataset.path`, `disaggregatedset.role` or `disaggregatedset.slices`,
+  and its mapping table did not cover the kind-specific names. It now has
+  `k8s-aibom:dependency`, `k8s-aibom:dataset` and
+  `k8s-aibom:disaggregatedset`, and mapping rows for them and for
+  `kserve.*`, `dynamo.*`, `nim.*` and `lws.*`. Documentation only.
+
 - **`hack/full-smoke-test.yaml` works on a fresh cluster again**
   (#316). It put every workload in `inference-test` without creating
   that namespace or opting it in, so `kubectl apply` failed, and a
