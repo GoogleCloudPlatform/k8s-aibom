@@ -234,6 +234,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   `us-central1-c` in `variables.tf`, so leaving it out looks the cluster
   up there. The row is split and shows the default. Documentation only.
 
+- **The README's config example uses `v1beta1`** (#340). The external
+  sinks example wrote the `AIBOMControllerConfig` through `v1alpha1`,
+  whose schema has no `spec.discovery.workloadKinds`, so adding an
+  allowlist to it failed strict validation or dropped the field, and
+  applying it removed an allowlist already set. The example now uses
+  `v1beta1`, and the README and the migration guide say the field is
+  `v1beta1`-only. The migration guide and roadmap no longer say the
+  chart renders the default config at `v1alpha1` (it renders `v1beta1`
+  since v1.4.0). Documentation only.
+
 - **Touching an annotation on `AIBOMControllerConfig` reloads it**
   (#304). `SecretKeyRef` documents an annotation touch as the way to make
   the controller re-read a rotated sink credential, but the config

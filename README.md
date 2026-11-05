@@ -252,7 +252,7 @@ By default, BOMs are stored only in the AIBOM CR's status — no data leaves the
 > Sinks that read credential Secrets (webhook auth, GCS service-account keys) require installing the chart with `--set rbac.sinkSecretAccess=true`. It is **off by default**: with no sinks configured, the controller holds no Secret permissions at all.
 
 ```yaml
-apiVersion: aibom.k8saibom.dev/v1alpha1
+apiVersion: aibom.k8saibom.dev/v1beta1
 kind: AIBOMControllerConfig
 metadata:
   name: default
@@ -280,7 +280,7 @@ spec:
 
 Configuration changes take effect on the next reconcile, without restarting the controller. Invalid configuration is rejected; the previous good configuration remains in effect, and the failure is surfaced as a condition on the `AIBOMControllerConfig` CR. This is the *last-known-good* property: an operator mistake in the configuration does not break the pipeline.
 
-**Workload-kind allowlist:** `spec.discovery.workloadKinds` lists the kinds the controller inventories, as `Group/Kind` strings (`apps/Deployment`, `nvidia.com/DynamoGraphDeployment`, `leaderworkerset.x-k8s.io/LeaderWorkerSet`, `disaggregatedset.x-k8s.io/DisaggregatedSet`, ...). Absent or empty means every known kind. An entry that is not a known kind is a configuration error (last-known-good retained, the entry named in the condition), never a silent no-op. A kind not in the list gets no documents and its existing ones are deleted; for the third-party kinds the controller also stops watching it. A kind that is switched off stops absorbing the workloads it owns, which are reported on their own again. Changes apply without a restart.
+**Workload-kind allowlist:** `spec.discovery.workloadKinds` lists the kinds the controller inventories, as `Group/Kind` strings (`apps/Deployment`, `nvidia.com/DynamoGraphDeployment`, `leaderworkerset.x-k8s.io/LeaderWorkerSet`, `disaggregatedset.x-k8s.io/DisaggregatedSet`, ...). Absent or empty means every known kind. An entry that is not a known kind is a configuration error (last-known-good retained, the entry named in the condition), never a silent no-op. A kind not in the list gets no documents and its existing ones are deleted; for the third-party kinds the controller also stops watching it. A kind that is switched off stops absorbing the workloads it owns, which are reported on their own again. Changes apply without a restart. The field exists only in `v1beta1`, so write the config through `aibom.k8saibom.dev/v1beta1` as in the example above. `v1alpha1` is still served, but its schema has no `workloadKinds`: a `v1alpha1` manifest that sets it fails `kubectl`'s strict field validation, or loses the field with only a warning in clients that don't validate strictly, and an apply or patch through `v1alpha1` removes an allowlist the config already has, with no warning.
 
 ## Security model
 
