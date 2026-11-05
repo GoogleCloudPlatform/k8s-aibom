@@ -138,6 +138,19 @@ All notable changes to k8s-aibom are documented here. The format follows
   labelled with another value. It now tests for opt-in in a helper rule
   and negates it. Documentation only.
 
+- **`kubectl aibom find --runtime` finds every runtime a workload runs**
+  (#335). The filter compared only `status.summary.runtime.name`, which
+  names the first runtime in the document. A pod running vLLM with a
+  LiteLLM proxy beside it has summary runtime `litellm`, so
+  `find --runtime vllm` printed `0 matches` for it. `--runtime` now also
+  matches the runtime components of the inline document, and the
+  RUNTIME column lists them, summary runtime first. When the document is
+  not inline, only the summary runtime can be matched; a row whose
+  summary names another runtime is left out and named in a stderr
+  warning, printed after `0 matches` too. Plugin only; the controller and
+  its documents are unchanged. `status.summary.runtime` itself stays a
+  single runtime until #336.
+
 - **An API key set from a Secret is marked as a remote API dependency**
   (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
   component `dependency.type: remote-api` only when the key was a
