@@ -391,6 +391,7 @@ k8s-aibom complements, rather than replaces, the broader AI supply-chain transpa
 - **[OpenSSF GUAC][guac]** aggregates and graphs supply-chain metadata. The webhook sink can be pointed at a GUAC blob-storage collector today; a native GUAC sink sits in the demand-gated backlog ([roadmap](docs/roadmap.md)).
 - **[Sigstore][sigstore]** provides the signing and verification infrastructure behind the `verified` confidence tier (shipped in v1.5.0).
 - **Build-time AIBOM tools** (AIBoMGen, OWASP AIBOM Generator, vendor tools) describe what was built. k8s-aibom describes what is running. Both are needed for full supply-chain visibility.
+- **[Project AIBOM](https://gavinsan33.github.io/project-aibom/)** (Red Hat Research / Mass Open Cloud) records each training or inference run's hardware, software, and performance metrics in one signed place, for reproducing and comparing runs. It is the training-side record to k8s-aibom's serving-side inventory; a CycloneDX export and cross-links between the two are being worked out together (its short name is moving to `aibomrun` so both can run on one cluster).
 
 ## Contributing
 

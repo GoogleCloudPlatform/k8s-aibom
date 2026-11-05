@@ -8,6 +8,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **README names Project AIBOM as the training-side counterpart** (Red Hat
+  Research / Mass Open Cloud): reproducibility records for training and
+  inference runs, next to k8s-aibom's serving-side inventory; interop
+  (CycloneDX export, distinct short name, cross-links) agreed on their
+  tracker. Documentation only.
+
 - **Aggregate CRD discovery health** (#226, Design 004 A6): one
   `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
   failures and candidate CRD read failures through Degraded status,
