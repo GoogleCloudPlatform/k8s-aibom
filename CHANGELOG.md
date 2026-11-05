@@ -130,6 +130,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **`aibom_scraper_extraction_errors_total` keeps counting on the dedup
+  fast path** (#325). The counter was raised only when a BOM was rebuilt.
+  Extraction errors are not part of the input hash, so an unchanged
+  workload that keeps producing the same errors takes the fast path from
+  its second reconcile on: the counter rose once and then stayed flat,
+  and the dashboard's `rate()` panel read zero while the same errors
+  drove `Stale` to `True` (#223 fixed the `Stale` count, not the
+  metric). The fast path now counts the errors too.
+
 - **`hack/full-smoke-test.yaml` works on a fresh cluster again**
   (#316). It put every workload in `inference-test` without creating
   that namespace or opting it in, so `kubectl apply` failed, and a
