@@ -160,6 +160,15 @@ All notable changes to k8s-aibom are documented here. The format follows
   Documents for workloads that load an API key from a Secret or
   ConfigMap change once after upgrade.
 
+- **The README's workload-type paragraphs describe what is recorded**
+  (#337). Since the initial commit they said the controller extracts
+  agent framework versions, vector-database collections and RAG
+  relationships, a Hugging Face Hub signal and framework versions for
+  training jobs, and benchmark suites for evaluation jobs. None of these
+  is extracted. The paragraphs now list the frameworks each scraper
+  recognizes and what it records, and name what it does not read.
+  Documentation only.
+
 - **The property taxonomy matches what the controller emits** (#321).
   `docs/cyclonedx-property-taxonomy.md` listed the workload category
   `vectordb` (it is `vector-database`) and the signing status `none`
