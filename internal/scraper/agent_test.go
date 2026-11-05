@@ -299,3 +299,70 @@ func TestAgentSpecScraper_Scrape(t *testing.T) {
 		})
 	}
 }
+
+// TestAgentSpecScraper_RemoteAPIDependencyType pins dependency.type on
+// both forms of an API key. A key set through valueFrom (the usual
+// Secret reference) is unresolved because its value is not read, but the
+// variable name still says the workload calls a remote API.
+func TestAgentSpecScraper_RemoteAPIDependencyType(t *testing.T) {
+	w := Workload{
+		Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		Object: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: "test-ns"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:  "agent",
+							Image: "langflowai/langflow:1.0.0",
+							Env: []corev1.EnvVar{
+								{Name: "OPENAI_API_KEY", Value: "sk-proj-12345"},
+								{Name: "ANTHROPIC_API_KEY", ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "llm-keys"},
+										Key:                  "anthropic",
+									},
+								}},
+							},
+						}},
+					},
+				},
+			},
+		},
+	}
+	got, err := NewAgentSpecScraper().Scrape(context.Background(), w, nil)
+	if err != nil {
+		t.Fatalf("Scrape failed: %v", err)
+	}
+	want := map[string]struct {
+		confidence Confidence
+		locator    string
+	}{
+		"openai-api":    {ConfidenceInferred, "spec.template.spec.containers[0].env[OPENAI_API_KEY]"},
+		"anthropic-api": {ConfidenceUnresolved, "spec.template.spec.containers[0].env[ANTHROPIC_API_KEY].valueFrom"},
+	}
+	seen := 0
+	for _, c := range got.Components {
+		if c.Type != ComponentMLModel {
+			continue
+		}
+		exp, ok := want[c.Name]
+		if !ok {
+			t.Errorf("unexpected model component %q", c.Name)
+			continue
+		}
+		seen++
+		if c.Confidence != exp.confidence {
+			t.Errorf("%s confidence = %q, want %q", c.Name, c.Confidence, exp.confidence)
+		}
+		if c.Evidence.Locator != exp.locator {
+			t.Errorf("%s locator = %q, want %q", c.Name, c.Evidence.Locator, exp.locator)
+		}
+		if v := c.Properties["dependency.type"]; v != "remote-api" {
+			t.Errorf("%s dependency.type = %q, want %q", c.Name, v, "remote-api")
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("found %d API dependency components, want %d", seen, len(want))
+	}
+}

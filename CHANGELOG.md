@@ -130,6 +130,26 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **An API key set from a Secret is marked as a remote API dependency**
+  (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
+  component `dependency.type: remote-api` only when the key was a
+  literal value. A key set through `valueFrom`, which is how keys are
+  normally loaded, got the component with no properties. Both forms now
+  carry `dependency.type`; the `valueFrom` component stays `unresolved`.
+  Documents for workloads that load an API key from a Secret or
+  ConfigMap change once after upgrade.
+
+- **The property taxonomy matches what the controller emits** (#321).
+  `docs/cyclonedx-property-taxonomy.md` listed the workload category
+  `vectordb` (it is `vector-database`) and the signing status `none`
+  (no status is written without a signature reference, and absence reads
+  as unsigned). It also gave no v1.7 name to `dependency.type`,
+  `dataset.path`, `disaggregatedset.role` or `disaggregatedset.slices`,
+  and its mapping table did not cover the kind-specific names. It now has
+  `k8s-aibom:dependency`, `k8s-aibom:dataset` and
+  `k8s-aibom:disaggregatedset`, and mapping rows for them and for
+  `kserve.*`, `dynamo.*`, `nim.*` and `lws.*`. Documentation only.
+
 - **`aibom_scraper_extraction_errors_total` keeps counting on the dedup
   fast path** (#325). The counter was raised only when a BOM was rebuilt.
   Extraction errors are not part of the input hash, so an unchanged
