@@ -39,9 +39,11 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:identity` | How a model identity claim was obtained | `machine-learning-model` components |
 | `k8s-aibom:image` / `k8s-aibom:container` | Container image reference and container identity | `container` components |
 | `k8s-aibom:volume` | Model storage mounted into a container | `data` components |
+| `k8s-aibom:dataset` | A volume a training or evaluation job reads as a dataset | `data` components |
+| `k8s-aibom:dependency` | A remote model API the workload calls | `machine-learning-model` components |
 | `k8s-aibom:security:signing` | Model signature claim and verification outcome, relative to the project's published verification process | `machine-learning-model` components |
 | `k8s-aibom:rollup` | Workloads absorbed into this document under the ownership roll-up | `metadata.properties` |
-| `k8s-aibom:kserve`, `k8s-aibom:dynamo`, `k8s-aibom:nim`, `k8s-aibom:lws` | Facts specific to a watched third-party kind | components |
+| `k8s-aibom:kserve`, `k8s-aibom:dynamo`, `k8s-aibom:nim`, `k8s-aibom:lws`, `k8s-aibom:disaggregatedset` | Facts specific to a watched third-party kind | components |
 
 ## `k8s-aibom:workload`
 
@@ -53,7 +55,7 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:workload:namespace` | Kubernetes namespace. |
 | `k8s-aibom:workload:name` | Object name. |
 | `k8s-aibom:workload:uid` | Object UID; the stable identity across renames. |
-| `k8s-aibom:workload:category` | Workload category: `inference`, `agent`, `training`, `evaluation`, `vectordb`, `pipeline`, `notebook`. |
+| `k8s-aibom:workload:category` | Workload category: `inference`, `agent`, `training`, `evaluation`, `vector-database`, `pipeline`, `notebook`. |
 
 ## `k8s-aibom:controller` and `k8s-aibom:scrape`
 
@@ -76,7 +78,7 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:redaction:applied` | Present when a field of this component was redacted at emission; value names the redaction class. Redaction is recorded, never silent. |
 | `k8s-aibom:truncation:applied` | On `metadata.properties`, present when the per-document component cap dropped components; value `components-dropped:<n>`. |
 
-## `k8s-aibom:runtime`, `k8s-aibom:identity`, `k8s-aibom:image`, `k8s-aibom:container`, `k8s-aibom:volume`, `k8s-aibom:model`
+## `k8s-aibom:runtime`, `k8s-aibom:identity`, `k8s-aibom:image`, `k8s-aibom:container`, `k8s-aibom:volume`, `k8s-aibom:dataset`, `k8s-aibom:dependency`, `k8s-aibom:model`
 
 | Property | Description |
 |----------|-------------|
@@ -91,6 +93,8 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:container:name` | Container name within the pod template. |
 | `k8s-aibom:container:init` | `true` for an init container. |
 | `k8s-aibom:volume:name` / `k8s-aibom:volume:mountPath` / `k8s-aibom:volume:source` | Volume name, mount path and backing source kind for a model-storage mount. |
+| `k8s-aibom:dataset:path` | Mount path of a volume a training or evaluation job reads as a dataset (a mount named `dataset` or `training-data`, or one at `/data`). |
+| `k8s-aibom:dependency:type` | `remote-api` on a model component that stands for an external model API (`openai-api`, `anthropic-api`, …), found from an API-key environment variable. |
 | `k8s-aibom:model:revision` | Model revision when the source API declares one. |
 
 ## `k8s-aibom:security:signing`
@@ -103,7 +107,7 @@ of a model in isolation.
 
 | Property | Description |
 |----------|-------------|
-| `k8s-aibom:security:signing:status` | `none`, `claimed` (a signature reference exists), `verified`. |
+| `k8s-aibom:security:signing:status` | `claimed` (a signature reference exists but was not verified), `verified`. Absent when the workload declares no signature reference; readers treat absence as unsigned. |
 | `k8s-aibom:security:signing:outcome` | Verification outcome, distinguishing a signature valid against an operator trust root with a signer-identity constraint from one that is merely well-formed. |
 | `k8s-aibom:security:signing:identity` | Verified signer identity. |
 | `k8s-aibom:security:signing:rekorEntry` | Transparency-log entry reference. |
@@ -124,6 +128,7 @@ of a model in isolation.
 | `k8s-aibom:dynamo:backendFramework`, `k8s-aibom:dynamo:component:name`, `k8s-aibom:dynamo:component:type`, `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:dynamo:role:name` | Dynamo graph topology and attribution. `<name>` is the graph component name as written by the owner. |
 | `k8s-aibom:nim:storage:kind`, `k8s-aibom:nim:storage:nimCache:name`, `k8s-aibom:nim:storage:nimCache:profile`, `k8s-aibom:nim:storage:pvc:name`, `k8s-aibom:nim:storage:hostPath`, `k8s-aibom:nim:multiNode`, `k8s-aibom:nim:multiNode:backendType`, `k8s-aibom:nim:multiNode:parallelism:tensor`, `k8s-aibom:nim:multiNode:parallelism:pipeline`, `k8s-aibom:nim:inferencePlatform` | NIMService declared facts. |
 | `k8s-aibom:lws:role`, `k8s-aibom:lws:size`, `k8s-aibom:lws:replicas` | LeaderWorkerSet role and group shape. |
+| `k8s-aibom:disaggregatedset:role`, `k8s-aibom:disaggregatedset:slices` | llm-d `DisaggregatedSet` role name and `spec.slices`. |
 
 ## Mapping from pre-v1.7 names
 
@@ -137,6 +142,8 @@ of a model in isolation.
 | `aibom.redaction.applied`, `aibom.truncation.applied` | `k8s-aibom:redaction:applied`, `k8s-aibom:truncation:applied` |
 | `aibom.rollup.owned.<i>` | `k8s-aibom:rollup:owned:<i>` |
 | `runtime.*`, `identity.*`, `image.*`, `container.*`, `volume.*`, `model.revision` | `k8s-aibom:runtime:*`, `k8s-aibom:identity:*`, `k8s-aibom:image:*`, `k8s-aibom:container:*`, `k8s-aibom:volume:*`, `k8s-aibom:model:revision` |
+| `dataset.path`, `dependency.type` | `k8s-aibom:dataset:path`, `k8s-aibom:dependency:type` |
+| `kserve.*`, `dynamo.*`, `nim.*`, `lws.*`, `disaggregatedset.*` | `k8s-aibom:kserve:*`, `k8s-aibom:dynamo:*`, `k8s-aibom:nim:*`, `k8s-aibom:lws:*`, `k8s-aibom:disaggregatedset:*` |
 | `signature.*` | `k8s-aibom:security:signing:*` |
 | `kserve.*`, `dynamo.*`, `nim.*`, `lws.*` | `k8s-aibom:kserve:*`, `k8s-aibom:dynamo:*`, `k8s-aibom:nim:*`, `k8s-aibom:lws:*` |
 
