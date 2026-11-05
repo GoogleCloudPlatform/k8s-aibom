@@ -130,6 +130,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The Gatekeeper recipe in the policy cookbook flags namespaces that
+  were never opted in** (#333). It checked
+  `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in
+  Rego a missing label is undefined, so the rule never fired for a
+  namespace without the label (or without any labels), only for one
+  labelled with another value. It now tests for opt-in in a helper rule
+  and negates it. Documentation only.
+
 - **An API key set from a Secret is marked as a remote API dependency**
   (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
   component `dependency.type: remote-api` only when the key was a
