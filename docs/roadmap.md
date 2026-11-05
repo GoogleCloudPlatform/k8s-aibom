@@ -101,10 +101,10 @@ serving — now, last week, across clusters." In flight:
 ## API lifecycle
 
 `v1beta1` shipped in v1.3.0 (dual-served, storage on `v1beta1`; see the
-[migration guide](migration-v1beta1.md)). Remaining lifecycle work:
-the chart's default `AIBOMControllerConfig` template moves to `v1beta1`
-in the next MINOR release, and `v1alpha1` removal is a separate,
-announced release outside 1.x (VERSIONING.md).
+[migration guide](migration-v1beta1.md)); the chart's default
+`AIBOMControllerConfig` template moved to `v1beta1` in v1.4.0.
+Remaining lifecycle work: `v1alpha1` removal is a separate, announced
+release outside 1.x (VERSIONING.md).
 
 ## v2 — Phase 2 capability tier
 

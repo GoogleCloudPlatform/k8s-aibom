@@ -3,7 +3,9 @@
 The graduation release serves both `aibom.k8saibom.dev/v1alpha1` and
 `v1beta1` (schema-identical; conversion strategy `None`) with **storage
 on `v1beta1`**. Design and rationale:
-[Design 001](design/001-api-graduation-v1beta1.md).
+[Design 001](design/001-api-graduation-v1beta1.md). Since v1.6.0 one
+`AIBOMControllerConfig` field, `spec.discovery.workloadKinds`, exists
+only in `v1beta1`; see [Clients and manifests](#clients-and-manifests-no-action-required).
 
 ## What you must do at upgrade (everyone)
 
@@ -62,16 +64,15 @@ that anyone writing checks against a graduated cluster should know:
 1. **Rendered RBAC is byte-identical between v1.2.0 and v1.3.0.** "API
    graduation" reasonably makes adopters re-review permissions; there is
    nothing to find — the API version change touches no RBAC.
-2. **The chart intentionally still renders the default
-   `AIBOMControllerConfig` at `v1alpha1`** while CRD storage is
-   `v1beta1`. This is coherent under dual serving (the object is stored
-   as `v1beta1` regardless), but it means a blanket "replace v1alpha1
-   with v1beta1" assertion fails against a perfectly correct cluster.
+2. **The v1.3.0 chart still rendered the default
+   `AIBOMControllerConfig` at `v1alpha1`** while CRD storage was
+   `v1beta1`; the template moved to `v1beta1` in v1.4.0. This is
+   coherent under dual serving (the object is stored as `v1beta1`
+   regardless), but it means a blanket "replace v1alpha1 with v1beta1"
+   assertion fails against a perfectly correct cluster.
    **Write assertions against the CRD storage version**
    (`spec.versions[?storage].name`), not against the apiVersion of
-   rendered or stored objects. The template moves to `v1beta1` in the
-   next MINOR release (deferred deliberately: a cosmetic chart change
-   would re-trigger downstream qualification for zero behavioral gain).
+   rendered or stored objects.
 3. **The readiness fixes ship in the controller image, not the chart.**
    Probe configuration renders identically across chart versions; a
    chart-version bump with an image override delivers none of the fix.
@@ -82,7 +83,22 @@ that anyone writing checks against a graduated cluster should know:
 
 `v1alpha1` clients, manifests, and GitOps pipelines keep working
 unchanged for all of 1.x. Adopt `v1beta1` in your manifests at your own
-pace; the fields are identical.
+pace; the fields are identical, with one exception.
+
+`spec.discovery.workloadKinds` on `AIBOMControllerConfig` (v1.6.0) is
+declared only in `v1beta1`. The API server drops fields that the
+request's version does not declare, so:
+
+- a `v1alpha1` manifest that sets it fails `kubectl`'s strict field
+  validation, and in clients that don't validate strictly the field is
+  dropped with only a warning;
+- an apply or patch through `v1alpha1` removes an allowlist the config
+  already has, with no warning, and the controller goes back to
+  inventorying every kind.
+
+Before you set `workloadKinds`, move every manifest or pipeline that
+writes the config to `v1beta1`. The chart renders `v1beta1` since
+v1.4.0.
 
 ## The eventual removal of `v1alpha1` (future, announced)
 
