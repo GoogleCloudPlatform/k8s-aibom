@@ -130,6 +130,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The Gatekeeper recipe in the policy cookbook flags namespaces that
+  were never opted in** (#333). It checked
+  `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in
+  Rego a missing label is undefined, so the rule never fired for a
+  namespace without the label (or without any labels), only for one
+  labelled with another value. It now tests for opt-in in a helper rule
+  and negates it. Documentation only.
+
 - **`kubectl aibom find --runtime` finds every runtime a workload runs**
   (#335). The filter compared only `status.summary.runtime.name`, which
   names the first runtime in the document. A pod running vLLM with a
@@ -171,6 +179,16 @@ All notable changes to k8s-aibom are documented here. The format follows
   and the dashboard's `rate()` panel read zero while the same errors
   drove `Stale` to `True` (#223 fixed the `Stale` count, not the
   metric). The fast path now counts the errors too.
+
+- **The `Stale` message for persistent extraction errors names the
+  errors** (#327). `ExtractionErrorsPersistent` listed evidence sources
+  only for `*scraper.ExtractionError`, which no scraper returns, so the
+  message was always just `workload produced extraction errors on N
+  consecutive reconciles`. The errors (for example `spec.env[0]: not an
+  object (string); skipped`) are not logged or stored anywhere else.
+  The message now lists the distinct error texts in scraper order, the
+  first three (each cut to 120 characters) and then `and N more`. The
+  reason, threshold and clearing are unchanged.
 
 - **`hack/full-smoke-test.yaml` works on a fresh cluster again**
   (#316). It put every workload in `inference-test` without creating
