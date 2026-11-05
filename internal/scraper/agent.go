@@ -167,6 +167,10 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 		for _, env := range c.Env {
 			if apiName, ok := ExternalAPISignatures[env.Name]; ok {
 				hasComponents = true
+				// The variable name says the workload calls a remote API
+				// whether the key is a literal or a Secret reference, so
+				// both forms carry dependency.type. A valueFrom key is
+				// unresolved only because its value is not read.
 				if env.ValueFrom != nil {
 					comp := Component{
 						Type:       ComponentMLModel,
@@ -175,6 +179,9 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 						Evidence: Evidence{
 							Source:  SourceEnvVarNamePresent,
 							Locator: fmt.Sprintf("spec.template.spec.containers[%d].env[%s].valueFrom", i, env.Name),
+						},
+						Properties: map[string]string{
+							"dependency.type": "remote-api",
 						},
 					}
 					inputs.Components = append(inputs.Components, comp)

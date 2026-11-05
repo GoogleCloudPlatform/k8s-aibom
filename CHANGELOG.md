@@ -130,6 +130,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **An API key set from a Secret is marked as a remote API dependency**
+  (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
+  component `dependency.type: remote-api` only when the key was a
+  literal value. A key set through `valueFrom`, which is how keys are
+  normally loaded, got the component with no properties. Both forms now
+  carry `dependency.type`; the `valueFrom` component stays `unresolved`.
+  Documents for workloads that load an API key from a Secret or
+  ConfigMap change once after upgrade.
+
 - **`hack/full-smoke-test.yaml` works on a fresh cluster again**
   (#316). It put every workload in `inference-test` without creating
   that namespace or opting it in, so `kubectl apply` failed, and a
