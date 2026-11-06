@@ -378,7 +378,7 @@ See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and sup
 
 ## Roadmap
 
-Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.6.0**, the coverage release — NVIDIA Dynamo, NIM Operator, LeaderWorkerSet, llm-d `DisaggregatedSet` and CronJob as reported kinds, ownership roll-up (one workload, one AIBOM), a workload-kind allowlist, the companion CRDs chart, and third-party CRD outages that degrade one kind instead of the controller. Next: **v1.7** aligns the document with CycloneDX 2.0 conventions (one byte-shape transition), adds `InferencePool` membership as a routing fact, and closes the "opted in, nothing matched" observability gap.
+Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.6.2**, the coverage release — NVIDIA Dynamo, NIM Operator, LeaderWorkerSet, llm-d `DisaggregatedSet` and CronJob as reported kinds, ownership roll-up (one workload, one AIBOM), a workload-kind allowlist, the companion CRDs chart, and third-party CRD outages that degrade one kind instead of the controller. Next: **v1.7, the interoperability release (24 November 2026)** — one byte-shape transition to CycloneDX conventions (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:` property namespace), proven by Dependency-Track and GUAC ingestion, plus `InferencePool` membership as a routing fact. Then **v1.8, the agent-platform release (January 2027)** — kagent and agent-sandbox lenses, `status.summary.runtimes`, OperatorHub.
 
 Full detail in [docs/roadmap.md](docs/roadmap.md).
 

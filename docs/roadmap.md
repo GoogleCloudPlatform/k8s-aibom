@@ -29,61 +29,83 @@ tier, [Design 002](design/002-sigstore-rekor-verifier.md), two rounds
 of external review), the output sanitization guarantee, the
 `kubectl aibom` plugin, and the non-default-configuration e2e matrix.
 
-## v1.6 — the coverage release (October 2026)
+## v1.6 — the coverage release (shipped 2026-10-19; patches 10-21, 10-22)
 
-- **CRD workload scrapers: Dynamo, NIMService, LeaderWorkerSet** —
-  [Design 003](design/003-nimservice-lws-scrapers.md) merged
-  2026-10-01 after the open review window. Implementation order
-  follows the AICR-review ranking: the `DynamoGraphDeployment`,
-  `NIMService` and `LeaderWorkerSet` scrapers are on main, and the §3
-  ownership roll-up (Design 005) with them.
-- **llm-d lens, Part 1** (Design 007) — `DisaggregatedSet` (lws ≥ 0.11,
-  llm-d's wide-EP and P/D guides) as a reported kind, one document per
-  set with per-role evidence, its LeaderWorkerSets rolled up. Part 2,
-  `InferencePool` membership as a routing fact, is v1.7.
-- **Complete CronJob coverage** — landed with the ownership roll-up
-  (Design 005): one AIBOM per CronJob, spawned Jobs absorbed.
-- **Configurable workload-kind allowlist** via the
-  `AIBOMControllerConfig` CR — landed as `spec.discovery.workloadKinds`
-  (Design 006): a reporting filter for every kind, and for the
-  third-party kinds also the watch itself (a kind not listed has no
-  informer). Narrowing the apps/v1 and batch watches the same way is
-  the v1.7 follow-up; it means moving those controllers under the
-  Design 004 supervisor.
-- **Separate `k8s-aibom-crds` chart** (#77) — the CRD-lifecycle
-  packaging requested by an AICR operator; externally contributed.
-- **Sink reliability** (landed on main post-v1.5.0, ships in v1.6):
-  transiently failed sinks now retry until the archive heals, and the
-  bootstrap-race deferral requeues explicitly (#91, #95).
-- **Document-size caps** — bound container-component name/version and
-  component count, with recorded (never silent) truncation.
-- **Remaining CI hardening** — `golangci-lint` (with `gosec`) and
-  `govulncheck` landed as required jobs after v1.5.0; remaining: image
-  scanning as a required job and grouped Dependabot updates.
+NVIDIA Dynamo, NIM Operator, LeaderWorkerSet, llm-d `DisaggregatedSet`
+and CronJob as reported kinds ([Design 003](design/003-nimservice-lws-scrapers.md),
+[Design 007](design/007-llm-d-lens.md) Part 1); ownership roll-up, one
+workload one AIBOM ([Design 005](design/005-ownership-rollup.md)); the
+workload-kind allowlist ([Design 006](design/006-workload-kind-allowlist.md));
+the companion `k8s-aibom-crds` chart; third-party CRD outages that
+degrade one kind instead of the controller ([Design 004](design/004-watch-isolation.md)).
+NVIDIA AICR requalified each of the three tags within a day of release.
 
-## October–November — from artifact to an answer
+## v1.7 — the interoperability release (target 2026-11-24)
 
-Direction (per the preamble: not commitment): the BOM is evidence; the
-product's job is answering "where is this model, runtime, or digest
-serving — now, last week, across clusters." In flight:
+**Focus.** The document becomes the one other tools read, not only the
+one we write. Three changes to the document shape land together so
+downstream consumers see a single transition, and the two main
+consumers prove the result by ingesting it. Tracking: [#315](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/315)
+(go/no-go Fri 2026-11-14, rc.1 Mon 11-17, tag Mon 11-24).
 
-- **`kubectl aibom find`** — the summary table, filtered: runtime,
-  model, image, digest, signature state. Zero matches exits 0 and is
-  documented as "not attributed", never "confirmed absent".
-- **`kubectl aibom discover`** — the pre-opt-in candidate pass:
-  which workloads *would* be inventoried if their namespace were
-  labelled. Client-side, the caller's own RBAC, nothing recorded —
-  the opt-in contract for what the controller *records* is unchanged.
-- **Coverage-gap instrumentation** — an `unresolved` attribution
-  becomes an invitation to report (issue template, a gap count in
-  `summary`), because conservative detection should surface its own
-  false negatives rather than silently absorb them.
-- **v1.7 candidates:** a queryable per-workload answer record beside
-  each archived BOM plus a `{cluster}` path token (the fleet/history
-  dimension); `pkg:oci` purls for container images (ends the
-  byte-identity-to-v1.4.0 property — will be a documented,
-  changelog-led change); a CA option for bearer-auth webhook sinks
-  (#96).
+**In scope (decides the theme).**
+
+- **CycloneDX alignment, one byte-shape transition** (#132):
+  `metadata.lifecycles` with phase `operations`, the honest statement
+  that every document is an as-deployed inventory (the CycloneDX
+  maintainers' guidance on spec#990); `pkg:oci` purls on container
+  components; the `k8s-aibom:` property namespace registered in the
+  CycloneDX Property Taxonomy replacing the dotted names (#144). Ends
+  byte-identity to v1.4.0; determinism within a version, the summary
+  CRD fields and the API schema are unchanged. CHANGELOG-led, with a
+  heads-up to AICR, production-stack and KubeAI before merge.
+- **Proof by ingestion** (#313): Dependency-Track and GUAC consume the
+  v1.7 document, documented and tested. This is the acceptance test
+  for the shape change.
+- **`verified` is a confidence tier in the code, not only the docs**
+  (#328): a verified model signature raises the model component's
+  confidence, as Design 002 §4 says.
+- **Both API versions carry the allowlist** (#343): a `v1alpha1` write
+  can no longer drop `spec.discovery.workloadKinds`.
+- **llm-d lens, Part 2a** (#137, Design 007 amendment): `InferencePool`
+  membership as a routing fact, discovery and updates. Part 2b
+  (endpoint-picker evidence) follows in 1.8.
+
+**Small, any time:** webhook sink CA bundle for bearer auth over a
+private CA (#96).
+
+**Stretch, moves to 1.8 if not on main by rc.1:** the detection-coverage
+corpus scored per release (#314); a CycloneDX 2.0 sample document now
+that the 2.0 AI/ML module is merged (#145); narrowing the apps/v1 and
+batch watches under the Design 004 supervisor (#136); the KubeAI lens
+(#172, needs its Design 008 note first).
+
+**Not in this release:** anything that changes the API schema beyond
+#343 (that is 1.8), new workload kinds, new platforms.
+
+## v1.8 — the agent-platform release (target 2027-01-26)
+
+**Focus.** The inventory follows AI workloads onto the platforms that
+run agents, and the project becomes installable where those platforms
+live. Each new lens is a published design with a review window before
+code.
+
+- **kagent lens** ([#329](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/329),
+  Design 010): the declared agent graph (Agent, ModelConfig,
+  RemoteMCPServer, Harness) as declared-tier evidence.
+- **agent-sandbox lens** ([#330](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/330),
+  Design 009): Agent Sandbox on GKE, NVIDIA OpenShell and Red Hat's
+  OpenShell distribution, one lens.
+- **KubeAI lens** (#172, Design 008) if it did not catch 1.7, and
+  llm-d Part 2b.
+- **`status.summary.runtimes`** (#336): the summary names every
+  runtime, not one; the API change that waits for a minor.
+- **OperatorHub** (#345): an OLM bundle and submission to operatorhub.io
+  and the OpenShift catalog, with an OpenShift install page.
+- **Carry-overs from the 1.7 stretch list** in the order above.
+
+**Not in this release:** `v1alpha1` removal (a separate, announced
+release outside 1.x), SPDX emission (v2 tier below).
 
 ## Later
 
