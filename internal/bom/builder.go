@@ -95,6 +95,13 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 		Version:     1,
 		Metadata: &cdx.Metadata{
 			Timestamp: ts,
+			// Every document is an as-deployed inventory observed from
+			// the Kubernetes API. CycloneDX expresses that context as a
+			// lifecycle phase on the metadata (the maintainers' guidance
+			// on spec#990), not as a perspective or a property; a
+			// training-side record of the same model would be a separate
+			// document with a different phase.
+			Lifecycles: &[]cdx.Lifecycle{{Phase: cdx.LifecyclePhaseOperations}},
 			Tools: &cdx.ToolsChoice{
 				Components: &[]cdx.Component{{
 					Type:    cdx.ComponentTypeApplication,
