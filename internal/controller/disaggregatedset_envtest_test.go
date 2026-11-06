@@ -60,7 +60,7 @@ func disaggregatedSetCR(namespace, name string, roles map[string]map[string]inte
 
 // A wide-EP-shaped DisaggregatedSet in an opted-in namespace produces
 // one AIBOM with per-role evidence; the LeaderWorkerSet it owns produces
-// none and appears in aibom.rollup.owned; a pod two hops down (LWS →
+// none and appears in k8s-aibom:rollup:owned; a pod two hops down (LWS →
 // StatefulSet → Pod) resolves its digest onto the set's document.
 func TestIntegration_DisaggregatedSet_OneDocument_RollsUpLWS(t *testing.T) {
 	env := startEnvTest(t)
@@ -76,7 +76,7 @@ func TestIntegration_DisaggregatedSet_OneDocument_RollsUpLWS(t *testing.T) {
 		`"deepseek-ai/DeepSeek-R1-0528"`,
 		`spec.roles[0].spec.leaderWorkerTemplate.workerTemplate.spec.containers[0]`,
 		`spec.roles[1].spec.leaderWorkerTemplate.workerTemplate.spec.containers[0]`)
-	for _, want := range []string{`"disaggregatedset.role"`, `"prefill"`, `"decode"`, `"lws.size"`} {
+	for _, want := range []string{`"k8s-aibom:disaggregatedset:role"`, `"prefill"`, `"decode"`, `"k8s-aibom:lws:size"`} {
 		if !strings.Contains(bom, want) {
 			t.Errorf("document lacks %s", want)
 		}
@@ -102,7 +102,7 @@ func TestIntegration_DisaggregatedSet_OneDocument_RollsUpLWS(t *testing.T) {
 		ownerRefTo("apps/v1", "StatefulSet", sts.Name, sts.UID), rollupDigest)
 	bom = waitInlineContains(t, env.k8sClient, ctx, setKey, rollupDigest,
 		`"LeaderWorkerSet/wide-ep-nvidia-gpu-vllm-decode"`, `"StatefulSet/wide-ep-nvidia-gpu-vllm-decode-0"`)
-	if strings.Contains(bom, "aibom.rollup.owned.2") {
+	if strings.Contains(bom, "k8s-aibom:rollup:owned:2") {
 		t.Errorf("exactly two absorbed workloads expected: %s", bom)
 	}
 	stsKey := types.NamespacedName{Name: AIBOMNameForWorkload("apps", "StatefulSet", sts.Name), Namespace: ns}

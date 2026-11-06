@@ -206,7 +206,7 @@ func TestBuild_EvidenceAndConfidence_AppearOnEveryComponent(t *testing.T) {
 				got[p.Name] = true
 			}
 		}
-		for _, required := range []string{"aibom.confidence", "aibom.evidence.source", "aibom.evidence.locator"} {
+		for _, required := range []string{PropConfidence, PropEvidenceSource, PropEvidenceLocator} {
 			if !got[required] {
 				t.Errorf("component[%d] (%s/%s) missing required property %q", i, c.Type, c.Name, required)
 			}
@@ -282,11 +282,11 @@ func TestBuild_WorkloadMetadataPropertiesPresent(t *testing.T) {
 		}
 	}
 	cases := map[string]string{
-		"aibom.workload.kind":      "Deployment",
-		"aibom.workload.group":     "apps",
-		"aibom.workload.namespace": "prod-inference",
-		"aibom.workload.name":      "vllm-llama3",
-		"aibom.workload.category":  "inference",
+		"k8s-aibom:workload:kind":      "Deployment",
+		"k8s-aibom:workload:group":     "apps",
+		"k8s-aibom:workload:namespace": "prod-inference",
+		"k8s-aibom:workload:name":      "vllm-llama3",
+		"k8s-aibom:workload:category":  "inference",
 	}
 	for k, want := range cases {
 		if got := props[k]; got != want {
@@ -305,13 +305,13 @@ func TestBuild_AggregateConfidenceInMetadataProperties(t *testing.T) {
 	found := ""
 	if doc.CDX.Metadata.Properties != nil {
 		for _, p := range *doc.CDX.Metadata.Properties {
-			if p.Name == "aibom.confidence" {
+			if p.Name == PropConfidence {
 				found = p.Value
 			}
 		}
 	}
 	if found != string(scraper.ConfidenceInferred) {
-		t.Errorf("metadata aibom.confidence = %q, want %q", found, scraper.ConfidenceInferred)
+		t.Errorf("metadata %s = %q, want %q", PropConfidence, found, scraper.ConfidenceInferred)
 	}
 }
 

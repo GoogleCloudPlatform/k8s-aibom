@@ -40,6 +40,8 @@ import (
 // pure function of the input, so identical inputs still produce
 // byte-identical documents.
 
+// redactionPropertyKey is the scraper-layer key of the redaction marker;
+// it is emitted as k8s-aibom:redaction:applied (PropRedactionApplied).
 const redactionPropertyKey = "aibom.redaction.applied"
 
 // Redaction classes, stable strings recorded in the property.

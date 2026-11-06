@@ -23,18 +23,20 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 )
 
 const testDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // containerDoc is a minimal emitted-shape CycloneDX document: one
-// container component with image.reference and a SHA-256 hash, plus a
+// container component with k8s-aibom:image:reference and a SHA-256 hash, plus a
 // model component that find must ignore for image/digest purposes.
 func containerDoc(image, digest string) []byte {
 	return []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
 	 {"type":"container","name":"x","hashes":[{"alg":"SHA-256","content":"` + digest + `"}],
-	  "properties":[{"name":"image.reference","value":"` + image + `"},{"name":"container.name","value":"vllm"}]},
-	 {"type":"machine-learning-model","name":"m","properties":[{"name":"identity.confidence","value":"claimed"}]}
+	  "properties":[{"name":"k8s-aibom:image:reference","value":"` + image + `"},{"name":"k8s-aibom:container:name","value":"vllm"}]},
+	 {"type":"machine-learning-model","name":"m","properties":[{"name":"k8s-aibom:identity:confidence","value":"claimed"}]}
 	]}`)
 }
 
@@ -159,10 +161,10 @@ func TestFind_NoFilterListsEverythingWithImages(t *testing.T) {
 func TestFind_ColumnsListEachValueOnce(t *testing.T) {
 	doc := []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
 	 {"type":"container","name":"vllm","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
-	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"lws.role","value":"leader"}]},
+	  "properties":[{"name":"k8s-aibom:image:reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"k8s-aibom:lws:role","value":"leader"}]},
 	 {"type":"container","name":"vllm","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
-	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"lws.role","value":"worker"}]},
-	 {"type":"container","name":"envoy","properties":[{"name":"image.reference","value":"envoyproxy/envoy:v1.31.0"}]}
+	  "properties":[{"name":"k8s-aibom:image:reference","value":"vllm/vllm-openai:v0.6.3"},{"name":"k8s-aibom:lws:role","value":"worker"}]},
+	 {"type":"container","name":"envoy","properties":[{"name":"k8s-aibom:image:reference","value":"envoyproxy/envoy:v1.31.0"}]}
 	]}`)
 	// fixtureAIBOM lists Qwen/Qwen2.5-0.5B-Instruct twice in
 	// status.summary.models (container_arg and env_var).
@@ -341,11 +343,11 @@ func TestFind_UnreadableDocumentDoesNotFailTheRun(t *testing.T) {
 // status.summary.runtime (the first one) is litellm.
 func runtimesDoc() []byte {
 	return []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
-	 {"type":"application","name":"litellm","properties":[{"name":"runtime.name","value":"litellm"}]},
-	 {"type":"application","name":"vllm","version":"v0.6.3","properties":[{"name":"runtime.name","value":"vllm"}]},
-	 {"type":"container","name":"ghcr.io/berriai/litellm","properties":[{"name":"image.reference","value":"ghcr.io/berriai/litellm:main-v1.81.0"}]},
+	 {"type":"application","name":"litellm","properties":[{"name":"k8s-aibom:runtime:name","value":"litellm"}]},
+	 {"type":"application","name":"vllm","version":"v0.6.3","properties":[{"name":"k8s-aibom:runtime:name","value":"vllm"}]},
+	 {"type":"container","name":"ghcr.io/berriai/litellm","properties":[{"name":"k8s-aibom:image:reference","value":"ghcr.io/berriai/litellm:main-v1.81.0"}]},
 	 {"type":"container","name":"vllm/vllm-openai","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
-	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"}]}
+	  "properties":[{"name":"k8s-aibom:image:reference","value":"vllm/vllm-openai:v0.6.3"}]}
 	]}`)
 }
 
@@ -409,5 +411,43 @@ func TestFind_RuntimeWithoutDocumentWarns(t *testing.T) {
 	_, errOut = runFindCapture(t, items, findFilter{runtime: "vllm", signed: "verified"})
 	if errOut != "" {
 		t.Fatalf("row excluded by --signed must not be named: %q", errOut)
+	}
+}
+
+// The names find reads are the ones the builder emits; the second entry
+// of each list is the pre-v1.7.0 spelling, kept so a newer plugin reads
+// documents written by an older controller.
+func TestFind_PropertyNamesMatchBuilder(t *testing.T) {
+	if runtimeNameProperties[0] != bom.PropRuntimeName {
+		t.Fatalf("runtime name property %q, builder emits %q", runtimeNameProperties[0], bom.PropRuntimeName)
+	}
+	if imageReferenceProperties[0] != bom.PropImageReference {
+		t.Fatalf("image reference property %q, builder emits %q", imageReferenceProperties[0], bom.PropImageReference)
+	}
+	if runtimeNameProperties[1] != "runtime.name" || imageReferenceProperties[1] != "image.reference" {
+		t.Fatalf("pre-v1.7.0 names dropped: %v %v", runtimeNameProperties, imageReferenceProperties)
+	}
+}
+
+// A document written by a controller before v1.7.0 carries the dotted
+// property names. --image and --runtime still read it.
+func TestFind_ReadsPreV17Documents(t *testing.T) {
+	legacy := []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[
+	 {"type":"application","name":"vllm","properties":[{"name":"runtime.name","value":"vllm"}]},
+	 {"type":"container","name":"vllm/vllm-openai","hashes":[{"alg":"SHA-256","content":"` + testDigest + `"}],
+	  "properties":[{"name":"image.reference","value":"vllm/vllm-openai:v0.6.3"}]}
+	]}`)
+	u := fixtureAIBOM(t, legacy, false)
+	u.SetName("apps-deployment-legacy")
+	_ = unstructured.SetNestedField(u.Object, "triton", "status", "summary", "runtime", "name")
+	items := []unstructured.Unstructured{*u}
+
+	out, _ := runFindCapture(t, items, findFilter{image: "vllm/vllm-openai"})
+	if !strings.Contains(out, "apps-deployment-legacy") {
+		t.Fatalf("--image missed a pre-v1.7.0 document:\n%s", out)
+	}
+	out, _ = runFindCapture(t, items, findFilter{runtime: "vllm"})
+	if !strings.Contains(out, "apps-deployment-legacy") {
+		t.Fatalf("--runtime missed a pre-v1.7.0 document:\n%s", out)
 	}
 }

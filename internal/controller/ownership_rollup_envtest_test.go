@@ -161,8 +161,8 @@ func TestIntegration_Rollup_LWSAbsorbsStatefulSet(t *testing.T) {
 	// it up (pod event → root via the chain) and list the StatefulSet.
 	createPodWithDigest(t, env.k8sClient, ctx, ns, "group-0-0", map[string]string{"app": "group-0"},
 		ownerRefTo("apps/v1", "StatefulSet", "group-0", sts.UID), rollupDigest)
-	bom := waitInlineContains(t, env.k8sClient, ctx, lwsKey, rollupDigest, `"aibom.rollup.owned.0"`, `"StatefulSet/group-0"`)
-	if strings.Contains(bom, "aibom.rollup.owned.1") {
+	bom := waitInlineContains(t, env.k8sClient, ctx, lwsKey, rollupDigest, `"k8s-aibom:rollup:owned:0"`, `"StatefulSet/group-0"`)
+	if strings.Contains(bom, "k8s-aibom:rollup:owned:1") {
 		t.Errorf("exactly one absorbed workload expected: %s", bom)
 	}
 	if aibomExists(env.k8sClient, ctx, stsKey) {
@@ -218,7 +218,7 @@ func TestIntegration_Rollup_DynamoGraphAbsorbsComponentAndDeployment(t *testing.
 
 	bom := waitInlineContains(t, env.k8sClient, ctx, dgdKey, rollupDigest,
 		`"Deployment/graph-worker"`, `"DynamoComponentDeployment/graph-worker"`)
-	if !strings.Contains(bom, `"aibom.rollup.owned.0"`) || !strings.Contains(bom, `"aibom.rollup.owned.1"`) || strings.Contains(bom, `"aibom.rollup.owned.2"`) {
+	if !strings.Contains(bom, `"k8s-aibom:rollup:owned:0"`) || !strings.Contains(bom, `"k8s-aibom:rollup:owned:1"`) || strings.Contains(bom, `"k8s-aibom:rollup:owned:2"`) {
 		t.Errorf("want exactly two absorbed workloads: %s", bom)
 	}
 	time.Sleep(1 * time.Second)
@@ -262,7 +262,7 @@ func TestIntegration_Rollup_CronJobAbsorbsJob(t *testing.T) {
 		OwnerReferences: []metav1.OwnerReference{ownerRefTo("batch/v1", "Job", "nightly-eval-29", job.UID)}}, Spec: evalSpec}
 	mustCreate(t, env.k8sClient, ctx, p)
 
-	waitInlineContains(t, env.k8sClient, ctx, cjKey, `"aibom.rollup.owned.0"`, `"Job/nightly-eval-29"`)
+	waitInlineContains(t, env.k8sClient, ctx, cjKey, `"k8s-aibom:rollup:owned:0"`, `"Job/nightly-eval-29"`)
 	time.Sleep(1 * time.Second)
 	if aibomExists(env.k8sClient, ctx, types.NamespacedName{Name: AIBOMNameForWorkload("batch", "Job", "nightly-eval-29"), Namespace: ns}) {
 		t.Fatal("a Job owned by a tracked CronJob must not have its own AIBOM")
