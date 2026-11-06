@@ -6,6 +6,48 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Document shape (one transition, v1.7.0)
+
+Three changes to the emitted CycloneDX document land together (#132), so
+downstream readers see one byte-shape transition. Byte-identity with
+documents from v1.4.0 through v1.6.x ends here; determinism within a
+release is unchanged (identical inputs still produce identical bytes),
+and the `AIBOM` status summary fields and the API schema do not change.
+
+- **`metadata.lifecycles` is `[{"phase": "operations"}]` on every
+  document.** Every k8s-aibom document is an as-deployed inventory
+  observed from the Kubernetes API; the CycloneDX maintainers' guidance
+  on spec#990 is that this context is a lifecycle on the metadata, not a
+  perspective or a property. As-trained context is deliberately not
+  emitted (`docs/schema-divergences.md`).
+
+- **Container components carry a `pkg:oci` purl**:
+  `pkg:oci/<name>@sha256:<digest>?repository_url=<repository>&tag=<tag>`
+  in the purl specification's canonical form (name lowercased,
+  qualifiers percent-encoded and sorted). The version is the resolved
+  digest; a tag-only image gets no version rather than a fabricated one,
+  and `repository_url` is the repository as the owner wrote it. The
+  observed reference and tag stay as properties.
+
+- **Properties are named under the `k8s-aibom` namespace registered in
+  the CycloneDX Property Taxonomy**, with the taxonomy's colon grammar:
+  `aibom.workload.kind` → `k8s-aibom:workload:kind`,
+  `aibom.confidence` → `k8s-aibom:confidence`,
+  `runtime.name` → `k8s-aibom:runtime:name`,
+  `image.reference` → `k8s-aibom:image:reference`,
+  `signature.status` → `k8s-aibom:security:signing:status`, and so on
+  for every property; the full mapping is in
+  `docs/cyclonedx-property-taxonomy.md`. Scrapers keep their internal
+  keys; the builder maps every key through one function at emission.
+
+  **Upgrade note for consumers that read property names** (AICR's
+  health check, the production-stack and KubeAI integrations,
+  Dependency-Track policies, custom relays): switch to the new names
+  when you move to v1.7.0; documents written before the upgrade keep
+  the old names until the workload is next reconciled. `kubectl aibom`
+  v1.7.0 reads both spellings, so a newer plugin still reads documents
+  from an older controller.
+
 ### Added
 
 - **README names Project AIBOM as the training-side counterpart** (Red Hat

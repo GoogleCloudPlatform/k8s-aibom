@@ -15,16 +15,18 @@ produces; per-field additions land as consumers raise them. This
 register is the companion to any schema conversation with CycloneDX
 upstream (see the 2.0 RFC comments on CycloneDX/specification#990).
 
-## D-002: `aibom.*` evidence and confidence properties
+## D-002: `k8s-aibom:confidence` / `k8s-aibom:evidence:*` properties
 
 **Status:** active
 **What we do:** every attribute-bearing component carries
-`aibom.confidence` (declared | inferred | unresolved | verified),
-`aibom.evidence.locator` (the exact spec field the fact came from,
+`k8s-aibom:confidence` (declared | inferred | unresolved | verified),
+`k8s-aibom:evidence:locator` (the exact spec field the fact came from,
 e.g. `spec.template.spec.containers[0].args[1]`) and
-`aibom.evidence.source`, plus workload identity properties
-(`aibom.workload.*`) and controller provenance
-(`aibom.controller.*`).
+`k8s-aibom:evidence:source`, plus workload identity properties
+(`k8s-aibom:workload:*`) and controller provenance
+(`k8s-aibom:controller:*`). Names are under the `k8s-aibom` namespace
+registered in the CycloneDX Property Taxonomy (v1.7.0; dotted `aibom.*`
+names before that).
 **What the spec says:** CycloneDX 1.6 has `components[].evidence`
 with identity confidence for *software* components, but its
 methods vocabulary has no runtime-observation or
@@ -36,14 +38,17 @@ extension mechanism. Proposed upstream: a `signature-verification`
 identification technique (spec#990 comment) and official
 `ai:runtime:*` names (property-taxonomy#175).
 
-## D-003: `signature.*` verification facts
+## D-003: `k8s-aibom:security:signing:*` verification facts
 
 **Status:** active
-**What we do:** model components carry `signature.status`
-(unsigned | claimed | verified), `signature.outcome` (including
-`signature-valid-unconstrained`), `signature.reason`,
-`signature.identity`, `signature.rekorEntry`,
-`signature.subjectNameMismatch`.
+**What we do:** model components carry
+`k8s-aibom:security:signing:status` (unsigned | claimed | verified),
+`k8s-aibom:security:signing:outcome` (including
+`signature-valid-unconstrained`), `k8s-aibom:security:signing:reason`,
+`k8s-aibom:security:signing:identity`,
+`k8s-aibom:security:signing:rekorEntry`,
+`k8s-aibom:security:signing:subjectNameMismatch` (`signature.*` before
+v1.7.0).
 **What the spec says:** 1.6 has no representation for "a runtime
 verifier checked this model's signature against an operator trust
 root"; `attestation` semantics cover party assertions, not direct
@@ -52,7 +57,7 @@ verification.
 facts being inspectable; collapsing "valid signature, unconstrained
 signer" into "verified" would launder identity (Design 002 §5).
 
-## D-004: `aibom.redaction.applied`
+## D-004: `k8s-aibom:redaction:applied`
 
 **Status:** active
 **What we do:** when the output sanitization pass redacts credential
@@ -60,15 +65,31 @@ material, the document says so — a fact, never a silent omission.
 **Why we diverge:** an auditor must be able to distinguish "value
 absent" from "value removed"; the spec has no redaction marker.
 
-## D-005: `image.reference` / `image.tag` container properties
+## D-005: `k8s-aibom:image:reference` / `k8s-aibom:image:tag` container properties
 
-**Status:** active
+**Status:** active, narrowed in v1.7.0
 **What we do:** container components carry the observed reference
-and tag as properties alongside the digest in `hashes[]`.
-**Why we diverge:** the digest is the identity; the mutable
-reference is evidence context. purl emission (`pkg:oci`) is planned
-(roadmap, v1.7 candidates) and will supersede part of this entry —
-tracked here so the byte-determinism change ships changelog-led.
+and tag as properties alongside the digest in `hashes[]`. Since v1.7.0
+image identity is also expressed natively as the component's `purl`
+(`pkg:oci/<name>@sha256:<digest>?repository_url=<repository>&tag=<tag>`,
+no version when no digest was resolved).
+**Why we diverge:** the digest is the identity; the mutable reference
+as the owner wrote it is evidence context that the purl's lowercased,
+split form does not preserve byte-for-byte, and auditors match on it.
+
+## Native fields used instead of properties
+
+Not divergences; recorded so nobody adds a property for them.
+
+- **As-deployed context is `metadata.lifecycles`** (`phase: operations`),
+  since v1.7.0. The CycloneDX maintainers' guidance on spec#990 is that
+  as-deployed versus as-trained is a lifecycle on the metadata, not a
+  perspective. k8s-aibom observes serving, so every document carries
+  exactly that one phase; as-trained context is deliberately not
+  emitted, and a training-side record of the same model (for example a
+  Project AIBOM run record) is a separate document with its own phase.
+- **Image identity is the component `purl`** (`pkg:oci`), since v1.7.0.
+- **Digests are `component.hashes`.**
 
 ## Format for divergence entries
 
@@ -125,7 +146,7 @@ as the corresponding code lands.
   `volume_source`, `node_selector`, etc.). This is in addition to (not a
   replacement for) workload-level `declared` / `inferred` confidence. The
   mapping into CycloneDX uses `evidence.identity.methods[]` for identity-bearing
-  attributes and `properties[]` with name `aibom.evidence.source` for others.
+  attributes and `properties[]` with name `k8s-aibom:evidence:source` for others.
   See PRD §9.4 and FR1.5.
 
 - **D-003: Image digest unresolved state.** When no running pod has yet reported
@@ -146,15 +167,15 @@ as the corresponding code lands.
 Every Component the builder emits carries three properties identifying
 its evidence and confidence:
 
-- `aibom.confidence` — one of `declared`, `inferred`, `unresolved`
-- `aibom.evidence.source` — one of the closed `EvidenceSource` constants
+- `k8s-aibom:confidence` — one of `declared`, `inferred`, `unresolved`
+- `k8s-aibom:evidence:source` — one of the closed `EvidenceSource` constants
   (`pod_annotation`, `env_var`, `image_reference`, etc.)
-- `aibom.evidence.locator` — a human-readable JSON-path-style pointer to
+- `k8s-aibom:evidence:locator` — a human-readable JSON-path-style pointer to
   the manifest field the value was extracted from
 
 The CycloneDX `Component.Evidence` field (a structured
 `Evidence.Identity.Methods[]` block) is NOT populated in v1. Workload-level
-aggregate confidence is exposed as `aibom.confidence` in
+aggregate confidence is exposed as `k8s-aibom:confidence` in
 `metadata.properties[]`.
 
 **What the spec says**
@@ -177,7 +198,7 @@ v1 ships a flat, auditor-readable property-based encoding because:
    for any name/value pair. The structured `Evidence.Identity` mapping
    requires careful per-attribute decisions about `technique` and
    `confidence` mapping that would block v1 schedule on debate.
-2. **Auditor accessibility.** A flat `aibom.evidence.source = env_var`
+2. **Auditor accessibility.** A flat `k8s-aibom:evidence:source = env_var`
    property is grep-able in a BOM JSON. A nested
    `evidence.identity[0].methods[0].confidence = 0.7` is harder to read
    and the float-confidence interpretation is unclear.
@@ -194,7 +215,7 @@ carries a property-based one today. Specifically:
   from `EvidenceSource` and `confidence` mapped from our string tier
   (`declared` → 0.9, `inferred` → 0.5).
 - Map signature claims (D-001) into `technique=attestation`.
-- Keep the existing `aibom.evidence.*` and `aibom.confidence` properties
+- Keep the existing `k8s-aibom:evidence:*` and `k8s-aibom:confidence` properties
   for one v2 release so consumers depending on the property-based shape
   have time to migrate. Dual-emit during the transition.
 - Document the property-form deprecation in the release notes; remove in
@@ -217,9 +238,9 @@ proposed "Kubernetes runtime ML-BOM profile" the project is moving toward
   "type": "machine-learning-model",
   "name": "meta-llama/Llama-3.1-8B-Instruct",
   "properties": [
-    {"name": "aibom.confidence", "value": "declared"},
-    {"name": "aibom.evidence.source", "value": "container_arg"},
-    {"name": "aibom.evidence.locator", "value": "spec.template.spec.containers[0].args[0 1](--model)"}
+    {"name": "k8s-aibom:confidence", "value": "declared"},
+    {"name": "k8s-aibom:evidence:source", "value": "container_arg"},
+    {"name": "k8s-aibom:evidence:locator", "value": "spec.template.spec.containers[0].args[0 1](--model)"}
   ]
 }
 ```
@@ -231,9 +252,9 @@ proposed "Kubernetes runtime ML-BOM profile" the project is moving toward
   "type": "machine-learning-model",
   "name": "meta-llama/Llama-3.1-8B-Instruct",
   "properties": [
-    {"name": "aibom.confidence", "value": "declared"},
-    {"name": "aibom.evidence.source", "value": "container_arg"},
-    {"name": "aibom.evidence.locator", "value": "spec.template.spec.containers[0].args[0 1](--model)"}
+    {"name": "k8s-aibom:confidence", "value": "declared"},
+    {"name": "k8s-aibom:evidence:source", "value": "container_arg"},
+    {"name": "k8s-aibom:evidence:locator", "value": "spec.template.spec.containers[0].args[0 1](--model)"}
   ],
   "evidence": {
     "identity": [{
