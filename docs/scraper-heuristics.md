@@ -114,14 +114,21 @@ follows:
 - Attributes with `unresolved` confidence are **excluded** from the
   aggregation.
 - The workload-level confidence is the **lowest tier** among the
-  non-excluded attributes. Tiers: `declared` > `inferred`.
+  non-excluded attributes. Tiers: `verified` > `declared` > `inferred`.
 - If every attribute is `unresolved`, the workload-level confidence is
   `unresolved` and the discovery layer decides whether to suppress the
   workload entirely.
 
 Concretely: any single `inferred` attribute drags the workload to
-`inferred`. Only when every non-excluded attribute is `declared` does the
-workload report `declared`.
+`inferred`. A mix of `verified` and `declared` reports `declared`. Only
+when every non-excluded attribute is `verified` does the workload report
+`verified`.
+
+A model component whose signature verifies against an operator trust root
+with a signer-identity constraint (Design 002 §4) has its own confidence
+raised to `verified`; an unconstrained valid signature leaves confidence
+unchanged and records the `signature-valid-unconstrained` outcome fact.
+`status.summary.models[].confidence` follows the component.
 
 ## Runtime detection and runtime version
 

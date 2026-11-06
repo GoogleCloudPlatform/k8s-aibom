@@ -130,5 +130,13 @@ func applySignatures(ctx context.Context, v SignatureVerifier, comps []Component
 		if res.SubjectNameMismatch {
 			p[propSignatureNameNote] = "true"
 		}
+		// Design 002 §4 / #328: only a constrained verified signature
+		// raises the model component's confidence. An unconstrained
+		// valid signature stays SignatureClaimed with its outcome fact
+		// and must not upgrade confidence — a claim never upgrades
+		// itself.
+		if res.Status == SignatureVerified {
+			comps[i].Confidence = ConfidenceVerified
+		}
 	}
 }
