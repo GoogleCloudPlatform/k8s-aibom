@@ -3,9 +3,9 @@
 The graduation release serves both `aibom.k8saibom.dev/v1alpha1` and
 `v1beta1` (schema-identical; conversion strategy `None`) with **storage
 on `v1beta1`**. Design and rationale:
-[Design 001](design/001-api-graduation-v1beta1.md). Since v1.6.0 one
-`AIBOMControllerConfig` field, `spec.discovery.workloadKinds`, exists
-only in `v1beta1`; see [Clients and manifests](#clients-and-manifests-no-action-required).
+[Design 001](design/001-api-graduation-v1beta1.md). In v1.6.0 one
+`AIBOMControllerConfig` field, `spec.discovery.workloadKinds`, existed
+only in `v1beta1`; since v1.7.0 both versions carry it again.
 
 ## What you must do at upgrade (everyone)
 
@@ -83,22 +83,14 @@ that anyone writing checks against a graduated cluster should know:
 
 `v1alpha1` clients, manifests, and GitOps pipelines keep working
 unchanged for all of 1.x. Adopt `v1beta1` in your manifests at your own
-pace; the fields are identical, with one exception.
+pace; the fields are identical.
 
-`spec.discovery.workloadKinds` on `AIBOMControllerConfig` (v1.6.0) is
-declared only in `v1beta1`. The API server drops fields that the
-request's version does not declare, so:
-
-- a `v1alpha1` manifest that sets it fails `kubectl`'s strict field
-  validation, and in clients that don't validate strictly the field is
-  dropped with only a warning;
-- an apply or patch through `v1alpha1` removes an allowlist the config
-  already has, with no warning, and the controller goes back to
-  inventorying every kind.
-
-Before you set `workloadKinds`, move every manifest or pipeline that
-writes the config to `v1beta1`. The chart renders `v1beta1` since
-v1.4.0.
+`spec.discovery.workloadKinds` on `AIBOMControllerConfig` was declared
+only in `v1beta1` in v1.6.0, so a `v1alpha1` apply or patch dropped an
+allowlist the config already had. Since v1.7.0 both versions declare
+the field and a write through either version keeps it. Writing the
+config through `v1beta1` is still the recommended form; the chart
+renders `v1beta1` since v1.4.0.
 
 ## The eventual removal of `v1alpha1` (future, announced)
 
