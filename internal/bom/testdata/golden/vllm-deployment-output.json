@@ -129,6 +129,7 @@
           "content": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         }
       ],
+      "purl": "pkg:oci/vllm-openai@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?repository_url=vllm%2Fvllm-openai\u0026tag=v0.6.3",
       "properties": [
         {
           "name": "aibom.confidence",

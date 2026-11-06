@@ -383,6 +383,7 @@ func vllmFixtureBOMInputs() *scraper.BOMInputs {
 				Type:    scraper.ComponentContainer,
 				Name:    "vllm/vllm-openai",
 				Version: "v0.6.3",
+				PURL:    "pkg:oci/vllm-openai@sha256:" + testDigest + "?repository_url=vllm%2Fvllm-openai&tag=v0.6.3",
 				Hashes:  map[string]string{"sha256": testDigest},
 				Evidence: scraper.Evidence{
 					Source: scraper.SourcePodStatus, Locator: "status.containerStatuses[name=vllm].imageID",
