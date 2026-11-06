@@ -1,0 +1,61 @@
+# GitHub Pages configuration for https://googlecloudplatform.github.io/k8s-aibom/
+# Built by the legacy Pages Jekyll pipeline from main:/docs. No workflow involved.
+remote_theme: just-the-docs/just-the-docs
+title: k8s-aibom
+description: Know what AI is actually running in your clusters. Runtime CycloneDX ML-BOMs for Kubernetes with evidence, confidence tiers and Sigstore-verified model signatures.
+url: https://googlecloudplatform.github.io
+baseurl: /k8s-aibom
+
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+back_to_top: true
+back_to_top_text: Back to top
+enable_copy_code_button: true
+
+aux_links:
+  GitHub: https://github.com/GoogleCloudPlatform/k8s-aibom
+  Releases: https://github.com/GoogleCloudPlatform/k8s-aibom/releases
+aux_links_new_tab: true
+
+footer_content: 'Apache-2.0. k8s-aibom is an open-source project; it is not an officially supported Google product.'
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+
+optional_front_matter:
+  remove_originals: true
+relative_links:
+  enabled: true
+  collections: false
+titles_from_headings:
+  enabled: true
+  strip_title: false
+  collections: false
+
+# Navigation. Pages take their title from the first heading; sections are
+# grouped by folder. New files under docs/ appear automatically. The folder
+# globs skip index.md: Jekyll 3 merges defaults under explicit front matter,
+# so a section page would otherwise become its own child and vanish.
+defaults:
+  - scope: {path: ""}
+    values: {layout: default}
+  - scope: {path: "install-eks-aks.md"}
+    values: {nav_order: 2}
+  - scope: {path: "compatibility.md"}
+    values: {nav_order: 3}
+  - scope: {path: "incident-response.md"}
+    values: {nav_order: 4}
+  - scope: {path: "policy-cookbook.md"}
+    values: {nav_order: 5}
+  - scope: {path: "security-model.md"}
+    values: {nav_order: 6}
+  - scope: {path: "design/[!i]*"}
+    values: {parent: Design documents}
+  - scope: {path: "evidence/[!i]*"}
+    values: {parent: Evidence}
+  - scope: {path: "integrations/[!i]*"}
+    values: {parent: Integrations}
