@@ -48,6 +48,15 @@ and the `AIBOM` status summary fields and the API schema do not change.
   v1.7.0 reads both spellings, so a newer plugin still reads documents
   from an older controller.
 
+### API contract
+
+- **`spec.discovery.workloadKinds` is declared in `v1alpha1` as well**
+  (#343). The field was `v1beta1`-only in v1.6.0, so with conversion
+  `None` an apply or patch through `v1alpha1` silently removed an
+  allowlist the config already had. Both served versions are
+  schema-identical again. Upgrade note: a `v1alpha1` apply no longer
+  drops the allowlist, and a `v1alpha1` manifest may now set it.
+
 ### Added
 
 - **README names Project AIBOM as the training-side counterpart** (Red Hat

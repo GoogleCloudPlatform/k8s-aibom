@@ -91,3 +91,81 @@ func TestIntegration_DualVersionServing(t *testing.T) {
 		t.Errorf("v1alpha1 read after v1beta1 write: StaleThresholdReconciles = %d, want 7", alphaAgain.Spec.BOMGeneration.StaleThresholdReconciles)
 	}
 }
+
+// TestIntegration_DualVersionServing_WorkloadKinds proves that
+// spec.discovery.workloadKinds survives writes through either version:
+// the field was v1beta1-only in v1.6.0, so a v1alpha1 write pruned it.
+func TestIntegration_DualVersionServing_WorkloadKinds(t *testing.T) {
+	env := startEnvTest(t)
+	ctx := context.Background()
+
+	alphaScheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(alphaScheme))
+	utilruntime.Must(aibomv1alpha1.AddToScheme(alphaScheme))
+	alphaClient, err := client.New(env.cfg, client.Options{Scheme: alphaScheme})
+	if err != nil {
+		t.Fatalf("v1alpha1 client: %v", err)
+	}
+
+	const name = "dual-version-workload-kinds-test"
+	kinds := []string{"apps/Deployment", "batch/CronJob"}
+
+	// Create through v1alpha1 with the allowlist set.
+	alpha := &aibomv1alpha1.AIBOMControllerConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: aibomv1alpha1.AIBOMControllerConfigSpec{
+			BOMGeneration: aibomv1alpha1.BOMGenerationConfig{
+				InlineThresholdBytes:     131072,
+				StaleThresholdReconciles: 5,
+			},
+			Discovery: aibomv1alpha1.DiscoveryConfig{
+				WorkloadKinds: kinds,
+			},
+		},
+	}
+	if err := alphaClient.Create(ctx, alpha); err != nil {
+		t.Fatalf("create via v1alpha1: %v", err)
+	}
+	t.Cleanup(func() { _ = alphaClient.Delete(context.Background(), alpha) })
+
+	var beta aibomv1beta1.AIBOMControllerConfig
+	if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: name}, &beta); err != nil {
+		t.Fatalf("get via v1beta1: %v", err)
+	}
+	if got := beta.Spec.Discovery.WorkloadKinds; !equalStrings(got, kinds) {
+		t.Fatalf("v1beta1 read after v1alpha1 create: workloadKinds = %v, want %v", got, kinds)
+	}
+
+	// Patch through v1alpha1 without mentioning the field: the stored
+	// allowlist must survive.
+	var alphaAgain aibomv1alpha1.AIBOMControllerConfig
+	if err := alphaClient.Get(ctx, types.NamespacedName{Name: name}, &alphaAgain); err != nil {
+		t.Fatalf("get via v1alpha1: %v", err)
+	}
+	patched := alphaAgain.DeepCopy()
+	patched.Spec.BOMGeneration.StaleThresholdReconciles = 7
+	if err := alphaClient.Patch(ctx, patched, client.MergeFrom(&alphaAgain)); err != nil {
+		t.Fatalf("patch via v1alpha1: %v", err)
+	}
+	if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: name}, &beta); err != nil {
+		t.Fatalf("get via v1beta1 after patch: %v", err)
+	}
+	if beta.Spec.BOMGeneration.StaleThresholdReconciles != 7 {
+		t.Errorf("v1beta1 read after v1alpha1 patch: StaleThresholdReconciles = %d, want 7", beta.Spec.BOMGeneration.StaleThresholdReconciles)
+	}
+	if got := beta.Spec.Discovery.WorkloadKinds; !equalStrings(got, kinds) {
+		t.Errorf("v1beta1 read after v1alpha1 patch: workloadKinds = %v, want %v", got, kinds)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
