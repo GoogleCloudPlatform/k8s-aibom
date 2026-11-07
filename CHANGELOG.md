@@ -152,6 +152,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   19 such links outside `docs/design/` now point at the file on GitHub,
   which works on the site and in the repository. Documentation only.
 
+- **`kubectl aibom find` rejects a filter given an empty value** (#352).
+  `--runtime`, `--model`, `--image`, `--digest` and `--signed` set to
+  `""` counted as no filter, so `find -A --digest "$DIGEST"` with the
+  variable unset listed every AIBOM as running that digest. Such a flag
+  is now an argument error, reported before the kubeconfig is loaded,
+  like `--digest sha256:` already was. Leaving a flag out still means no
+  filter. Plugin only.
+
 - **The Gatekeeper recipe in the policy cookbook flags namespaces that
   were never opted in** (#333). It checked
   `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in
