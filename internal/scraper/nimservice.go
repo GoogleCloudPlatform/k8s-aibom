@@ -169,6 +169,7 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 			Type:     ComponentContainer,
 			Name:     TruncateString(name, MaxComponentNameLength),
 			Version:  TruncateString(parsedTag, MaxComponentNameLength),
+			PURL:     ociPURL(ref, digest),
 			Evidence: Evidence{Source: SourceImageReference, Locator: "spec.image.repository"},
 			Properties: map[string]string{
 				"image.reference":  ref,

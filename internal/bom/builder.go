@@ -45,8 +45,8 @@ type BuildOptions struct {
 	ControllerVersion string
 	// OwnedWorkloads lists tracked workloads this document absorbs under
 	// the ownership roll-up (Design 005), as "Kind/name", already sorted.
-	// Emitted as aibom.rollup.owned.<i> metadata properties; empty for
-	// documents that absorb nothing (byte-identical to before).
+	// Emitted as k8s-aibom:rollup:owned:<i> metadata properties; empty
+	// for documents that absorb nothing.
 	OwnedWorkloads []string
 }
 
@@ -95,6 +95,13 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 		Version:     1,
 		Metadata: &cdx.Metadata{
 			Timestamp: ts,
+			// Every document is an as-deployed inventory observed from
+			// the Kubernetes API. CycloneDX expresses that context as a
+			// lifecycle phase on the metadata (the maintainers' guidance
+			// on spec#990), not as a perspective or a property; a
+			// training-side record of the same model would be a separate
+			// document with a different phase.
+			Lifecycles: &[]cdx.Lifecycle{{Phase: cdx.LifecyclePhaseOperations}},
 			Tools: &cdx.ToolsChoice{
 				Components: &[]cdx.Component{{
 					Type:    cdx.ComponentTypeApplication,
@@ -143,13 +150,13 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 // identifies the workload itself — the "subject" the BOM is describing.
 func buildRootComponent(opts BuildOptions) *cdx.Component {
 	props := []cdx.Property{
-		{Name: "aibom.workload.kind", Value: opts.WorkloadKind},
-		{Name: "aibom.workload.group", Value: opts.WorkloadGroup},
-		{Name: "aibom.workload.apiVersion", Value: opts.WorkloadAPIVer},
-		{Name: "aibom.workload.namespace", Value: opts.WorkloadNamespace},
-		{Name: "aibom.workload.name", Value: opts.WorkloadName},
-		{Name: "aibom.workload.uid", Value: opts.WorkloadUID},
-		{Name: "aibom.workload.category", Value: opts.WorkloadCategory},
+		prop("aibom.workload.kind", opts.WorkloadKind),
+		prop("aibom.workload.group", opts.WorkloadGroup),
+		prop("aibom.workload.apiVersion", opts.WorkloadAPIVer),
+		prop("aibom.workload.namespace", opts.WorkloadNamespace),
+		prop("aibom.workload.name", opts.WorkloadName),
+		prop("aibom.workload.uid", opts.WorkloadUID),
+		prop("aibom.workload.category", opts.WorkloadCategory),
 	}
 	c := &cdx.Component{
 		BOMRef:     workloadBOMRef(opts),
@@ -166,33 +173,31 @@ func buildRootComponent(opts BuildOptions) *cdx.Component {
 // them without descending into individual components.
 func buildMetadataProperties(inputs *scraper.BOMInputs, opts BuildOptions) *[]cdx.Property {
 	props := []cdx.Property{
-		{Name: "aibom.confidence", Value: string(inputs.Confidence)},
-		{Name: "aibom.controller.name", Value: opts.ControllerName},
-		{Name: "aibom.controller.version", Value: opts.ControllerVersion},
+		prop("aibom.confidence", string(inputs.Confidence)),
+		prop("aibom.controller.name", opts.ControllerName),
+		prop("aibom.controller.version", opts.ControllerVersion),
 	}
 	if inputs.TruncatedComponents > 0 {
-		// Mirror of aibom.redaction.applied: a consumer must be able
-		// to distinguish "complete document" from "capped document".
-		props = append(props, cdx.Property{
-			Name:  "aibom.truncation.applied",
-			Value: fmt.Sprintf("components-dropped:%d", inputs.TruncatedComponents),
-		})
+		// Mirror of the redaction marker: a consumer must be able to
+		// distinguish "complete document" from "capped document".
+		props = append(props, prop("aibom.truncation.applied",
+			fmt.Sprintf("components-dropped:%d", inputs.TruncatedComponents)))
 	}
 	// Absorbed workloads (Design 005): one indexed property each, so a
 	// consumer can see which StatefulSets, Deployments or Jobs this
 	// document stands in for.
 	for i, o := range opts.OwnedWorkloads {
-		props = append(props, cdx.Property{Name: fmt.Sprintf("aibom.rollup.owned.%d", i), Value: o})
+		props = append(props, prop(fmt.Sprintf("aibom.rollup.owned.%d", i), o))
 	}
 	// One property block per Provenance entry. Index suffix keeps names
 	// unique under sort-by-name consumers.
 	for i, p := range inputs.Provenance {
 		base := fmt.Sprintf("aibom.scrape.%d", i)
 		props = append(props,
-			cdx.Property{Name: base + ".scraperName", Value: p.ScraperName},
-			cdx.Property{Name: base + ".scraperVersion", Value: p.ScraperVersion},
-			cdx.Property{Name: base + ".method", Value: p.ScrapeMethod},
-			cdx.Property{Name: base + ".timestamp", Value: p.ScrapeTimestamp.UTC().Format(time.RFC3339)},
+			prop(base+".scraperName", p.ScraperName),
+			prop(base+".scraperVersion", p.ScraperVersion),
+			prop(base+".method", p.ScrapeMethod),
+			prop(base+".timestamp", p.ScrapeTimestamp.UTC().Format(time.RFC3339)),
 		)
 	}
 	out := filterProps(props)
@@ -250,12 +255,15 @@ func toCDXComponent(c scraper.Component, opts BuildOptions, idx int, parentRef s
 		out.PackageURL = c.PURL
 	}
 	props := []cdx.Property{
-		{Name: "aibom.confidence", Value: string(c.Confidence)},
-		{Name: "aibom.evidence.source", Value: string(c.Evidence.Source)},
-		{Name: "aibom.evidence.locator", Value: c.Evidence.Locator},
+		prop("aibom.confidence", string(c.Confidence)),
+		prop("aibom.evidence.source", string(c.Evidence.Source)),
+		prop("aibom.evidence.locator", c.Evidence.Locator),
 	}
+	// Scraper keys are sorted under their internal spelling; the mapping
+	// to taxonomy names is order-preserving for every key in use, so the
+	// emitted order is deterministic either way.
 	for _, k := range sortedKeys(c.Properties) {
-		props = append(props, cdx.Property{Name: k, Value: c.Properties[k]})
+		props = append(props, prop(k, c.Properties[k]))
 	}
 	out.Properties = filterProps(props)
 	if len(c.Children) > 0 {
@@ -282,13 +290,11 @@ func buildServices(in []scraper.Service) []cdx.Service {
 		// endpoints are the likeliest future URI carriers.
 		s, redacted := redactService(s)
 		props := []cdx.Property{
-			{Name: "aibom.evidence.source", Value: string(s.Evidence.Source)},
-			{Name: "aibom.evidence.locator", Value: s.Evidence.Locator},
+			prop("aibom.evidence.source", string(s.Evidence.Source)),
+			prop("aibom.evidence.locator", s.Evidence.Locator),
 		}
 		if len(redacted) > 0 {
-			props = append(props, cdx.Property{
-				Name: redactionPropertyKey, Value: strings.Join(redacted, ","),
-			})
+			props = append(props, prop(redactionPropertyKey, strings.Join(redacted, ",")))
 		}
 		out = append(out, cdx.Service{
 			Name: s.Name,
@@ -388,6 +394,13 @@ func filterProps(in []cdx.Property) *[]cdx.Property {
 		return nil
 	}
 	return &out
+}
+
+// prop builds one emitted property from a scraper-layer key, mapping the
+// key through PropertyName so every name in the document is under the
+// registered taxonomy namespace.
+func prop(key, value string) cdx.Property {
+	return cdx.Property{Name: PropertyName(key), Value: value}
 }
 
 // sortedKeys returns the keys of a map[string]string in lexical order so

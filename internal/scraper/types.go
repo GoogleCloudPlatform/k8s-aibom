@@ -172,9 +172,11 @@ const (
 // The BOM builder maps these into CycloneDX 1.6 ML-BOM components.
 //
 // Properties is a free-form string map used for attributes that don't have
-// a dedicated field on the struct. Each key SHOULD use a dotted-name
-// convention (e.g., "runtime.name", "hardware.accelerator") and the BOM
-// builder maps these into CycloneDX properties[].
+// a dedicated field on the struct. Each key SHOULD use the internal
+// dotted-name convention (e.g., "runtime.name", "signature.status"); the
+// BOM builder maps every key into the registered CycloneDX taxonomy name
+// ("k8s-aibom:runtime:name", "k8s-aibom:security:signing:status") at
+// emission, so the scraper layer stays CycloneDX-agnostic.
 //
 // Children represents nested components owned by this one (e.g., the
 // transformers Python package inside a serving runtime application).

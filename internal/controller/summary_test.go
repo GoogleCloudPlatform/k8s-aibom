@@ -178,11 +178,11 @@ func docModelConfidence(t *testing.T, data []byte, name string) string {
 			continue
 		}
 		for _, p := range c.Properties {
-			if p.Name == "aibom.confidence" {
+			if p.Name == "k8s-aibom:confidence" {
 				return p.Value
 			}
 		}
-		t.Fatalf("component %q has no aibom.confidence property", name)
+		t.Fatalf("component %q has no k8s-aibom:confidence property", name)
 	}
 	t.Fatalf("document has no machine-learning-model component %q", name)
 	return ""

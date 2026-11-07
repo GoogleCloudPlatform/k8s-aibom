@@ -12,15 +12,24 @@ described in [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
 ## Status and transition
 
-k8s-aibom documents through v1.6 emit these facts under dotted names
-(`aibom.workload.kind`, `runtime.name`, `signature.status`, …) that
-predate the namespace registration. **From v1.7 the controller emits
-the colon-delimited names in this document.** The rename changes
-document bytes for identical inputs and ships in the same release as
-the other CycloneDX-alignment changes (`pkg:oci` purls,
-`metadata.lifecycles`), so downstream consumers see one byte-shape
-transition. The mapping is given in the last section; within a release,
+**Since v1.7.0 the controller emits the colon-delimited names in this
+document.** Documents through v1.6 carried the same facts under dotted
+names (`aibom.workload.kind`, `runtime.name`, `signature.status`, …)
+that predate the namespace registration; the mapping is the last
+section. The rename changed document bytes for identical inputs and
+shipped in the same release as the other CycloneDX-alignment changes
+(`pkg:oci` purls on container components, `metadata.lifecycles`), so
+downstream consumers saw one byte-shape transition. Within a release,
 documents remain byte-deterministic.
+
+In the code, scrapers keep their internal dotted keys and the BOM
+builder maps every key through one function (`bom.PropertyName`) at
+emission; the names a reader needs (`k8s-aibom:confidence`,
+`k8s-aibom:runtime:name`, `k8s-aibom:image:reference`,
+`k8s-aibom:security:signing:status`, …) are exported constants in
+`internal/bom`. The `kubectl aibom` plugin reads the current names and
+still accepts the pre-v1.7 spelling, so it reads documents written by an
+older controller.
 
 Design principle, inherited from the project: every property is a
 **fact observed from the Kubernetes API or declared by the workload
@@ -132,6 +141,11 @@ of a model in isolation.
 
 ## Mapping from pre-v1.7 names
 
+Renamed in v1.7.0. The mapping is mechanical except where noted: the
+`aibom.` prefix becomes the namespace, `signature.` becomes
+`security:signing`, every other dot becomes a colon. The owner-written
+`<name>` in `dynamo.component.<name>.type` is kept verbatim.
+
 | Through v1.6 | From v1.7 |
 |---|---|
 | `aibom.workload.*` | `k8s-aibom:workload:*` |
@@ -145,7 +159,6 @@ of a model in isolation.
 | `dataset.path`, `dependency.type` | `k8s-aibom:dataset:path`, `k8s-aibom:dependency:type` |
 | `kserve.*`, `dynamo.*`, `nim.*`, `lws.*`, `disaggregatedset.*` | `k8s-aibom:kserve:*`, `k8s-aibom:dynamo:*`, `k8s-aibom:nim:*`, `k8s-aibom:lws:*`, `k8s-aibom:disaggregatedset:*` |
 | `signature.*` | `k8s-aibom:security:signing:*` |
-| `kserve.*`, `dynamo.*`, `nim.*`, `lws.*` | `k8s-aibom:kserve:*`, `k8s-aibom:dynamo:*`, `k8s-aibom:nim:*`, `k8s-aibom:lws:*` |
 
 Facts that the CycloneDX core model expresses natively are not and
 will not be properties: as-deployed context is `metadata.lifecycles`
