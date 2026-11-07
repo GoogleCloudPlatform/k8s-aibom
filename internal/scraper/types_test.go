@@ -66,6 +66,7 @@ func TestEvidenceSourceStringValues(t *testing.T) {
 func TestConfidenceStringValues(t *testing.T) {
 	cases := map[Confidence]string{
 		ConfidenceDeclared:   "declared",
+		ConfidenceVerified:   "verified",
 		ConfidenceInferred:   "inferred",
 		ConfidenceUnresolved: "unresolved",
 	}

@@ -143,6 +143,20 @@ All notable changes to k8s-aibom are documented here. The format follows
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+### Changed
+
+- **v1.7 document-shape transition** (#132, #328). A model component whose
+  signature verifies against an operator trust root with a signer-identity
+  constraint now carries `aibom.confidence: verified` (Design 002 §4);
+  previously `signature.status` became `verified` while the component's
+  confidence stayed `declared`. An unconstrained valid signature still
+  leaves confidence unchanged and records `signature-valid-unconstrained`.
+  `status.summary.models[].confidence` follows the component. Document
+  bytes change only for workloads with a verified signature; this rides
+  the same release as the #132 CycloneDX alignment (`pkg:oci` purls,
+  `metadata.lifecycles`, `k8s-aibom:` property names) so downstreams see
+  one shape transition.
+
 ### Fixed
 
 - **Links from the documentation site to files outside `docs/` resolve**

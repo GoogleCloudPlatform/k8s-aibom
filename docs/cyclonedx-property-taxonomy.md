@@ -72,7 +72,7 @@ fact so an auditor can trace it back without cluster access.
 
 | Property | Description |
 |----------|-------------|
-| `k8s-aibom:confidence` | On `metadata.properties`: aggregate confidence of the document. On a component: confidence of that fact. Values: `declared` (written by the workload owner), `inferred` (derived by heuristic), `verified` (declared and cryptographically verified), `unresolved`. |
+| `k8s-aibom:confidence` | On `metadata.properties`: aggregate confidence of the document (lowest tier among non-`unresolved` attributes: `verified` > `declared` > `inferred`). On a component: confidence of that fact. Values: `declared` (written by the workload owner), `inferred` (derived by heuristic), `verified` (a declared claim cryptographically verified against an operator trust root with a signer-identity constraint; Design 002 §4), `unresolved`. |
 | `k8s-aibom:evidence:source` | Source kind the fact was read from: `crd_field`, `container_arg`, `env_var`, `env_var_name_present`, `image_reference`, `image_pattern`, `image_label`, `pod_status`, `pod_annotation`, `pod_template_annotation`, `workload_annotation`, `volume_source`, `resource_request`, `node_selector`. |
 | `k8s-aibom:evidence:locator` | Path within the Kubernetes object the fact was read from (e.g. `spec.components[1].modelRef.name`). |
 | `k8s-aibom:redaction:applied` | Present when a field of this component was redacted at emission; value names the redaction class. Redaction is recorded, never silent. |

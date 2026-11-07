@@ -36,10 +36,10 @@ func (f *fakeVerifier) Verify(_ context.Context, c SignatureClaim) (SignatureRes
 
 func TestReservedAnnotationsAreNotModels(t *testing.T) {
 	comps := extractAnnotationModels(map[string]string{
-		AnnotationSignatureRef:              "https://models.example.com/sig.json",
-		AnnotationModelDigest:               "sha256:abcd",
-		modelAnnotationPrefix + "name":      "meta-llama/Llama-3.1-8B-Instruct",
-		"unrelated.example.com/other":       "ignored",
+		AnnotationSignatureRef:         "https://models.example.com/sig.json",
+		AnnotationModelDigest:          "sha256:abcd",
+		modelAnnotationPrefix + "name": "meta-llama/Llama-3.1-8B-Instruct",
+		"unrelated.example.com/other":  "ignored",
 	}, SourceWorkloadAnnotation, "metadata.annotations")
 
 	if len(comps) != 1 {
@@ -82,6 +82,9 @@ func TestApplySignaturesWiresClaimAndRecordsFacts(t *testing.T) {
 	if p[propSignatureStatus] != "verified" || p[propSignatureIdentity] == "" || p[propSignatureRekorEntry] == "" {
 		t.Fatalf("facts not recorded: %v", p)
 	}
+	if comps[0].Confidence != ConfidenceVerified {
+		t.Fatalf("verified signature must raise model confidence, got %q", comps[0].Confidence)
+	}
 	if comps[1].Properties[propSignatureStatus] != "" {
 		t.Fatalf("non-model component got signature properties")
 	}
@@ -101,11 +104,87 @@ func TestApplySignaturesNoClaimWritesNothing(t *testing.T) {
 
 func TestApplySignaturesVerifierErrorDegrades(t *testing.T) {
 	fv := &fakeVerifier{err: errors.New("boom")}
-	comps := []Component{{Type: ComponentMLModel, Name: "m"}}
+	comps := []Component{{Type: ComponentMLModel, Name: "m", Confidence: ConfidenceDeclared}}
 	applySignatures(context.Background(), fv, comps,
 		map[string]string{AnnotationSignatureRef: "base64:xx"})
 	p := comps[0].Properties
 	if p[propSignatureStatus] != string(SignatureClaimed) || p[propSignatureOutcome] != "error" {
 		t.Fatalf("error did not degrade to claimed+error: %v", p)
+	}
+	if comps[0].Confidence != ConfidenceDeclared {
+		t.Fatalf("verifier error must leave confidence unchanged, got %q", comps[0].Confidence)
+	}
+}
+
+// TestApplySignatures_VerifiedRaisesConfidence is the #328 contract:
+// SignatureVerified raises the model component's Confidence to verified
+// (Design 002 §4). status.summary.models[].confidence follows because
+// summary.go copies aibom.confidence from the component.
+func TestApplySignatures_VerifiedRaisesConfidence(t *testing.T) {
+	fv := &fakeVerifier{result: SignatureResult{
+		Status:     SignatureVerified,
+		Outcome:    "verified",
+		Identity:   "release@models.example.com",
+		RekorEntry: "108000001",
+	}}
+	comps := []Component{
+		{Type: ComponentMLModel, Name: "meta-llama/Llama-3.1-8B-Instruct", Confidence: ConfidenceDeclared},
+		{Type: ComponentApplication, Name: "vllm", Confidence: ConfidenceInferred},
+	}
+	applySignatures(context.Background(), fv, comps,
+		map[string]string{AnnotationSignatureRef: "https://models.example.com/sig.json"})
+
+	if comps[0].Confidence != ConfidenceVerified {
+		t.Fatalf("model confidence = %q, want %q", comps[0].Confidence, ConfidenceVerified)
+	}
+	if comps[0].Properties[propSignatureStatus] != string(SignatureVerified) {
+		t.Fatalf("signature.status = %q, want verified", comps[0].Properties[propSignatureStatus])
+	}
+	// Non-model components must not be touched.
+	if comps[1].Confidence != ConfidenceInferred {
+		t.Fatalf("application confidence changed: %q", comps[1].Confidence)
+	}
+	// Aggregate: verified model + inferred runtime → lowest tier is inferred.
+	if got := aggregateConfidence(comps); got != ConfidenceInferred {
+		t.Fatalf("aggregateConfidence = %q, want %q", got, ConfidenceInferred)
+	}
+	// All-verified (no lower tiers) → workload confidence verified.
+	only := []Component{{Type: ComponentMLModel, Name: "m", Confidence: ConfidenceVerified}}
+	if got := aggregateConfidence(only); got != ConfidenceVerified {
+		t.Fatalf("aggregate of only-verified = %q, want %q", got, ConfidenceVerified)
+	}
+	// Verified + declared → declared (lowest of the two).
+	mix := []Component{
+		{Type: ComponentMLModel, Name: "m", Confidence: ConfidenceVerified},
+		{Type: ComponentApplication, Name: "rt", Confidence: ConfidenceDeclared},
+	}
+	if got := aggregateConfidence(mix); got != ConfidenceDeclared {
+		t.Fatalf("aggregate verified+declared = %q, want %q", got, ConfidenceDeclared)
+	}
+}
+
+// An unconstrained valid signature is recorded as claimed with the
+// signature-valid-unconstrained outcome and must never raise confidence
+// (Design 002 §4 / §6 — a claim never upgrades itself).
+func TestApplySignatures_UnconstrainedLeavesConfidence(t *testing.T) {
+	fv := &fakeVerifier{result: SignatureResult{
+		Status:  SignatureClaimed,
+		Outcome: "signature-valid-unconstrained",
+	}}
+	comps := []Component{
+		{Type: ComponentMLModel, Name: "m", Confidence: ConfidenceDeclared},
+	}
+	applySignatures(context.Background(), fv, comps,
+		map[string]string{AnnotationSignatureRef: "https://models.example.com/sig.json"})
+
+	p := comps[0].Properties
+	if p[propSignatureStatus] != string(SignatureClaimed) {
+		t.Fatalf("status = %q, want claimed", p[propSignatureStatus])
+	}
+	if p[propSignatureOutcome] != "signature-valid-unconstrained" {
+		t.Fatalf("outcome = %q, want signature-valid-unconstrained", p[propSignatureOutcome])
+	}
+	if comps[0].Confidence != ConfidenceDeclared {
+		t.Fatalf("unconstrained signature must leave confidence unchanged, got %q", comps[0].Confidence)
 	}
 }
