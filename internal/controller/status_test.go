@@ -19,10 +19,12 @@ package controller
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	cdx "github.com/CycloneDX/cyclonedx-go"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -320,6 +322,89 @@ func TestStatusBuilder_SummaryExtractsRuntimeAndModels(t *testing.T) {
 	}
 	if status.Summary.Models[0].Identity != "meta-llama/Llama-3.1-8B-Instruct" {
 		t.Errorf("Models[0].Identity = %q", status.Summary.Models[0].Identity)
+	}
+}
+
+// A Deployment running vLLM with a LiteLLM proxy beside it (#335, #336)
+// has two runtime application components. The summary lists both, in
+// document order, each distinct runtime once even when two containers
+// run it, and the deprecated single runtime is the first entry.
+func TestBuildSummary_ListsEveryRuntime(t *testing.T) {
+	runtimeComponent := func(name, version, locator string) scraper.Component {
+		return scraper.Component{
+			Type:       scraper.ComponentApplication,
+			Name:       name,
+			Version:    version,
+			Confidence: scraper.ConfidenceInferred,
+			Evidence:   scraper.Evidence{Source: scraper.SourceImagePattern, Locator: locator},
+			Properties: map[string]string{"runtime.name": name},
+		}
+	}
+	inputs := &scraper.BOMInputs{
+		ScraperName:     "inference.spec",
+		ScrapeTimestamp: fixedNow,
+		Confidence:      scraper.ConfidenceInferred,
+		Components: []scraper.Component{
+			runtimeComponent("litellm", "", "spec.template.spec.containers[1].image"),
+			runtimeComponent("vllm", "v0.6.3", "spec.template.spec.containers[0].image"),
+			// A second vLLM container with the same image.
+			runtimeComponent("vllm", "v0.6.3", "spec.template.spec.containers[2].image"),
+		},
+		Provenance: []scraper.Provenance{{
+			ScraperName:     "inference.spec",
+			ScraperVersion:  "0.1.0",
+			ScrapeMethod:    "spec",
+			ScrapeTimestamp: fixedNow,
+		}},
+	}
+	doc, err := bom.NewBuilder().WithClock(func() time.Time { return fixedNow }).Build(inputs, bom.BuildOptions{
+		WorkloadKind:      "Deployment",
+		WorkloadGroup:     "apps",
+		WorkloadAPIVer:    "v1",
+		WorkloadNamespace: "prod-inference",
+		WorkloadName:      "chat",
+		WorkloadCategory:  "inference",
+		ControllerName:    "k8s-aibom",
+		ControllerVersion: "0.1.0",
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	summary := buildSummary(doc, testSummaryOptions())
+	if summary == nil {
+		t.Fatal("summary is nil")
+	}
+	want := []aibomv1beta1.RuntimeSummary{
+		{Name: "litellm", Confidence: "inferred"},
+		{Name: "vllm", Version: "v0.6.3", Confidence: "inferred"},
+	}
+	if !reflect.DeepEqual(summary.Runtimes, want) {
+		t.Fatalf("Runtimes = %+v, want %+v", summary.Runtimes, want)
+	}
+	if summary.Runtime == nil || *summary.Runtime != want[0] {
+		t.Fatalf("Runtime = %+v, want the first entry %+v", summary.Runtime, want[0])
+	}
+	// The deprecated field is a copy, not an alias into the list.
+	summary.Runtime.Name = "changed"
+	if summary.Runtimes[0].Name != "litellm" {
+		t.Fatal("Runtime aliases Runtimes[0]")
+	}
+}
+
+func TestBuildSummary_NoRuntimeLeavesBothEmpty(t *testing.T) {
+	doc := buildTestBOM(t, 0)
+	var kept []cdx.Component
+	for _, c := range *doc.CDX.Components {
+		if c.Type != cdx.ComponentTypeApplication {
+			kept = append(kept, c)
+		}
+	}
+	doc.CDX.Components = &kept
+
+	summary := buildSummary(doc, testSummaryOptions())
+	if summary.Runtime != nil || summary.Runtimes != nil {
+		t.Fatalf("no runtime component: Runtime = %+v, Runtimes = %+v, want both unset", summary.Runtime, summary.Runtimes)
 	}
 }
 
