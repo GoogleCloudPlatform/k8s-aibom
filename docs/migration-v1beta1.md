@@ -15,7 +15,7 @@ chart upgrade; only Argo CD does. Since v1.6 the release ships a
 companion `k8s-aibom-crds` chart that makes this an ordinary upgrade
 (upgrade it first, then the main chart; adoption of pre-existing CRDs
 is a one-time step described in
-[its README](../charts/k8s-aibom-crds/README.md)). Without it:
+[its README](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/charts/k8s-aibom-crds/README.md)). Without it:
 
 ```bash
 helm show crds oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version <new> \

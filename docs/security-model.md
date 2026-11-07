@@ -144,7 +144,7 @@ immediately.
 
 The controller's Kubernetes RBAC is the least-privilege set described
 in PRD §NFR3.2 and enforced by the kubebuilder markers in
-[`internal/controller/aibom_controller.go`](../internal/controller/aibom_controller.go).
+[`internal/controller/aibom_controller.go`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/controller/aibom_controller.go).
 Specifically:
 
 - **Read** on `apps/v1.Deployment` (extended to StatefulSet, KServe

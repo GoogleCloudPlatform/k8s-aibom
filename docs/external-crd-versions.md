@@ -11,7 +11,7 @@ paths." A CRD upgrade that renames or removes those paths is an
 upgrade-blocking event for that scraper.
 
 The minimal CRD copies vendored under
-[`config/crd/external/`](../config/crd/external/) are TEST-ONLY: they
+[`config/crd/external/`](https://github.com/GoogleCloudPlatform/k8s-aibom/tree/main/config/crd/external) are TEST-ONLY: they
 exist so `envtest` can validate CR creation against a schema that
 won't break when the upstream project ships patch versions of the
 pinned API. They are NOT a substitute for the real CRDs in
@@ -170,7 +170,7 @@ Minimal test-only Grove CRDs live under `config/crd/external/`.
 | `spec.predictor.serviceAccountName` | Recorded as `kserve.serviceAccountName` property |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components |
 
-**Test-only minimal CRD:** [`config/crd/external/serving.kserve.io_inferenceservices.yaml`](../config/crd/external/serving.kserve.io_inferenceservices.yaml)
+**Test-only minimal CRD:** [`config/crd/external/serving.kserve.io_inferenceservices.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/serving.kserve.io_inferenceservices.yaml)
 
 **Upgrade obligations.** A KServe upgrade that introduces v1beta2 or
 v1 with breaking changes to any of the listed paths requires explicit
@@ -234,7 +234,7 @@ a one-component graph with locators rooted at `spec`; a component owned
 by a graph is absorbed into the graph's document and never scraped on
 its own.
 
-**Test-only minimal CRD:** [`config/crd/external/nvidia.com_dynamographdeployments.yaml`](../config/crd/external/nvidia.com_dynamographdeployments.yaml) — serves `v1beta1` only.
+**Test-only minimal CRD:** [`config/crd/external/nvidia.com_dynamographdeployments.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/nvidia.com_dynamographdeployments.yaml) — serves `v1beta1` only.
 
 **Deployed-version facts (from the AICR maintainer, 2026-10-01).**
 AICR pins dynamo-platform **1.4.2** (operator image
@@ -310,7 +310,7 @@ own conclusion, not customer input); `spec.initContainers` /
 digests arrive with the Design 003 §3 ownership roll-up (NIMService →
 Deployment / LeaderWorkerSet → Pod).
 
-**Test-only minimal CRD:** [`config/crd/external/apps.nvidia.com_nimservices.yaml`](../config/crd/external/apps.nvidia.com_nimservices.yaml)
+**Test-only minimal CRD:** [`config/crd/external/apps.nvidia.com_nimservices.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/apps.nvidia.com_nimservices.yaml)
 
 **Upgrade obligations.** `v1alpha1` is the operator's only served
 version today. A `v1alpha2`/`v1beta1` requires the same explicit work
@@ -349,7 +349,7 @@ StatefulSets it materializes roll up under Design 003 §3.
 `rolloutStrategy`, `volumeClaimTemplates`; pods (digests resolve only
 from digest-pinned references until §3).
 
-**Test-only minimal CRD:** [`config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml`](../config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml)
+**Test-only minimal CRD:** [`config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml)
 
 **Upgrade obligations.** `v1` is the only served version. A `v2`
 requires extending `lwsHandledKinds`; keep `inference.lws` as the
@@ -398,7 +398,7 @@ document's errors and skipped; the other roles still extract.
 `volumeClaimTemplates`; `DisaggregatedSetRoleScaler` (a scaling
 adapter, not a workload).
 
-**Test-only minimal CRD:** [`config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml`](../config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml)
+**Test-only minimal CRD:** [`config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml)
 
 **Upgrade obligations.** `v1` is the only served version. A `v2`
 requires extending `disaggregatedSetHandledKinds`; keep

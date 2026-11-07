@@ -145,6 +145,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Links from the documentation site to files outside `docs/` resolve**
+  (#354). The GitHub Pages site is built from `docs/` only, so relative
+  links such as `../README.md#quickstart` or
+  `../internal/scraper/v1-runtime-patterns.yaml` led to 404s there. The
+  19 such links outside `docs/design/` now point at the file on GitHub,
+  which works on the site and in the repository. Documentation only.
+
 - **`kubectl aibom find` rejects a filter given an empty value** (#352).
   `--runtime`, `--model`, `--image`, `--digest` and `--signed` set to
   `""` counted as no filter, so `find -A --digest "$DIGEST"` with the
