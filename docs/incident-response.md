@@ -42,7 +42,7 @@ from "the plugin broke". (`kubectl aibom summary -A` remains the
 unfiltered view.)
 
 Runtime attribution is `inferred` (matched from the image against the
-[audit-reviewable allowlist](../internal/scraper/v1-runtime-patterns.yaml)),
+[audit-reviewable allowlist](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml)),
 and only images on that allowlist are attributed — a mirrored or
 custom-built image may show no runtime. **An empty RUNTIME column is
 "not attributed," never "confirmed absent."** For incident scoping,

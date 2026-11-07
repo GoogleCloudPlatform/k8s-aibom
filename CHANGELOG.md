@@ -145,6 +145,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Links from the documentation site to files outside `docs/` resolve**
+  (#354). The GitHub Pages site is built from `docs/` only, so relative
+  links such as `../README.md#quickstart` or
+  `../internal/scraper/v1-runtime-patterns.yaml` led to 404s there. The
+  19 such links outside `docs/design/` now point at the file on GitHub,
+  which works on the site and in the repository. Documentation only.
+
 - **The Gatekeeper recipe in the policy cookbook flags namespaces that
   were never opted in** (#333). It checked
   `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in

@@ -173,7 +173,7 @@ observable in a more authoritative way.
 The three model allowlists used below (`modelEnvVarNames`,
 `modelArgFlags`, `modelVolumePathPrefixes`) are compiled into the
 controller from
-[`internal/scraper/v1-runtime-patterns.yaml`](../internal/scraper/v1-runtime-patterns.yaml).
+[`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml).
 The `AIBOMControllerConfig` CR does not expose them: it overrides only
 the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`).
 Extending an allowlist is a PR to that file; see
@@ -249,7 +249,7 @@ These are detection cases v1 deliberately does NOT match, despite
 appearances. Each is a deferred-by-design choice, not an
 implementation gap. Future contributors arriving at one of these
 expecting to "fix" it should read this section AND the
-[conservative-detection principle](../internal/scraper/v1-runtime-patterns.yaml)
+[conservative-detection principle](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml)
 documented inline in the runtime-patterns YAML before opening a PR —
 the asymmetry between false positives and false negatives in
 auditor-facing output makes speculative pattern broadening dangerous.

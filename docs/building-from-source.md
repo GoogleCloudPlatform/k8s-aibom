@@ -1,7 +1,7 @@
 # Building from Source
 
 Most users should install from the published, attested release artifacts —
-see the [Quickstart](../README.md#quickstart). Build from source when you
+see the [Quickstart](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/README.md#quickstart). Build from source when you
 are working in an air-gapped environment, maintaining a fork, or developing
 the controller itself.
 
@@ -65,6 +65,6 @@ No `helm` installed? `make helm` bootstraps one at `./bin/helm`.
 
 ## Development
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the development workflow and
+See [CONTRIBUTING.md](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/CONTRIBUTING.md) for the development workflow and
 testing discipline (`make test`, envtest, the conservative-detection
 conventions).

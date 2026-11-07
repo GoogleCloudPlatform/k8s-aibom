@@ -2,10 +2,10 @@
 
 Direction, not commitment: items may move as demand and contributions
 dictate. Releases ship on a monthly train (see the release-cadence
-policy in [VERSIONING.md](../VERSIONING.md)); features catch the train
+policy in [VERSIONING.md](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/VERSIONING.md)); features catch the train
 they are ready for, and new capability surface gets a published design
 doc with a review window first. Delivered work is recorded in the
-[CHANGELOG](../CHANGELOG.md).
+[CHANGELOG](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/CHANGELOG.md).
 
 ## Shipped
 
@@ -16,7 +16,7 @@ dual serving, plus the readiness-probe fixes found in boundary
 testing), and v1.4.0 (the downstream-coverage release: NVIDIA
 NIM/Dynamo/TGI detection patterns, chart CR at `v1beta1`, performance
 docs re-baselined on dual-sampled live-GKE runs) — see the
-[CHANGELOG](../CHANGELOG.md) for details and the qualification record
+[CHANGELOG](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/CHANGELOG.md) for details and the qualification record
 on [issue #8](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/8).
 The weekly Kubernetes version matrix backing the compatibility range
 also shipped (with v1.3.0). **v1.5.1 — security PATCH — shipped

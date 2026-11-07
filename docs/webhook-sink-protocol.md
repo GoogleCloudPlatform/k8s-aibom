@@ -95,7 +95,7 @@ This document is the source of truth for the protocol. Changes are
   the controller and announced as a breaking change in release notes.
 
 The corresponding tests in
-[`internal/sink/webhook_test.go`](../internal/sink/webhook_test.go)
+[`internal/sink/webhook_test.go`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/sink/webhook_test.go)
 lock the constants. If a test in that file fails on a header
 constant, the corresponding row of the table above also needs to
 change in the same commit.
