@@ -259,13 +259,14 @@ func sortComponents(cs []Component) {
 }
 
 // aggregateConfidence computes a workload-level Confidence from per-component
-// confidences. Rule (per the project memory):
+// confidences. Rule (per the project memory / Design 002 §4 / #328):
 //   - Attributes with ConfidenceUnresolved are EXCLUDED from the aggregation.
 //   - The workload-level confidence is the lowest tier among the remaining
-//     attributes (Declared > Inferred).
+//     attributes (Verified > Declared > Inferred).
 //   - If every attribute is Unresolved, the workload is Unresolved and the
 //     discovery layer decides whether to suppress it.
 func aggregateConfidence(cs []Component) Confidence {
+	seenVerified := false
 	seenDeclared := false
 	seenInferred := false
 	seenAny := false
@@ -274,6 +275,9 @@ func aggregateConfidence(cs []Component) Confidence {
 			continue
 		}
 		switch c.Confidence {
+		case ConfidenceVerified:
+			seenVerified = true
+			seenAny = true
 		case ConfidenceDeclared:
 			seenDeclared = true
 			seenAny = true
@@ -292,6 +296,9 @@ func aggregateConfidence(cs []Component) Confidence {
 	}
 	if seenDeclared {
 		return ConfidenceDeclared
+	}
+	if seenVerified {
+		return ConfidenceVerified
 	}
 	return ConfidenceUnresolved
 }

@@ -115,6 +115,29 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 	}
 }
 
+// A find filter given an empty value (an unset shell variable,
+// `--digest "$DIGEST"`) is an error. It used to count as no filter, so
+// the command listed every AIBOM as a match.
+func TestRun_FindEmptyFilterIsAnError(t *testing.T) {
+	withoutCluster(t)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"find", "-A", "--runtime", ""}, "--runtime needs a value"},
+		{[]string{"find", "-A", "--model="}, "--model needs a value"},
+		{[]string{"find", "-A", "--image", ""}, "--image needs a value"},
+		{[]string{"find", "-A", "--digest", ""}, "--digest needs a value"},
+		{[]string{"find", "-A", "--signed="}, "--signed needs a value"},
+		{[]string{"find", "--runtime", "vllm", "--digest", ""}, "--digest needs a value"},
+	} {
+		err := run(tc.args)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("run(%q) = %v, want an error containing %q", tc.args, err, tc.want)
+		}
+	}
+}
+
 // A well-formed command still reaches the kubeconfig; without one it
 // fails there, as before.
 func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {

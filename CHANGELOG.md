@@ -185,7 +185,36 @@ and the `AIBOM` status summary fields and the API schema do not change.
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+### Changed
+
+- **v1.7 document-shape transition** (#132, #328). A model component whose
+  signature verifies against an operator trust root with a signer-identity
+  constraint now carries `aibom.confidence: verified` (Design 002 §4);
+  previously `signature.status` became `verified` while the component's
+  confidence stayed `declared`. An unconstrained valid signature still
+  leaves confidence unchanged and records `signature-valid-unconstrained`.
+  `status.summary.models[].confidence` follows the component. Document
+  bytes change only for workloads with a verified signature; this rides
+  the same release as the #132 CycloneDX alignment (`pkg:oci` purls,
+  `metadata.lifecycles`, `k8s-aibom:` property names) so downstreams see
+  one shape transition.
+
 ### Fixed
+
+- **Links from the documentation site to files outside `docs/` resolve**
+  (#354). The GitHub Pages site is built from `docs/` only, so relative
+  links such as `../README.md#quickstart` or
+  `../internal/scraper/v1-runtime-patterns.yaml` led to 404s there. The
+  19 such links outside `docs/design/` now point at the file on GitHub,
+  which works on the site and in the repository. Documentation only.
+
+- **`kubectl aibom find` rejects a filter given an empty value** (#352).
+  `--runtime`, `--model`, `--image`, `--digest` and `--signed` set to
+  `""` counted as no filter, so `find -A --digest "$DIGEST"` with the
+  variable unset listed every AIBOM as running that digest. Such a flag
+  is now an argument error, reported before the kubeconfig is loaded,
+  like `--digest sha256:` already was. Leaving a flag out still means no
+  filter. Plugin only.
 
 - **The Gatekeeper recipe in the policy cookbook flags namespaces that
   were never opted in** (#333). It checked
