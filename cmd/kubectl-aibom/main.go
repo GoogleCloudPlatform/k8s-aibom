@@ -184,6 +184,21 @@ Flags:
 	f := findFilter{runtime: *fRuntime, model: *fModel, image: *fImage, digest: *fDigest, signed: *fSigned}
 	switch sub {
 	case "find":
+		// A filter given an empty value (`--digest "$DIGEST"` with the
+		// variable unset) would filter nothing and list every AIBOM as
+		// a match.
+		var empty []string
+		fs.Visit(func(fl *flag.Flag) {
+			switch fl.Name {
+			case "runtime", "model", "image", "digest", "signed":
+				if fl.Value.String() == "" {
+					empty = append(empty, flagName(fl.Name))
+				}
+			}
+		})
+		if len(empty) > 0 {
+			return fmt.Errorf("%s needs a value; leave the flag out to match every AIBOM", strings.Join(empty, ", "))
+		}
 		if f.signed != "" && f.signed != "unsigned" && f.signed != "claimed" && f.signed != "verified" {
 			return fmt.Errorf("--signed must be one of unsigned, claimed, verified")
 		}
