@@ -26,7 +26,7 @@ AIBOM controller ── webhook sink (HTTPS POST, raw BOM JSON)
 ## Minimal relay
 
 A complete, deployable example. The workload identity arrives inside
-the BOM itself (`metadata.component` and the `aibom.workload.*`
+the BOM itself (`metadata.component` and the `k8s-aibom:workload:*`
 properties), so the relay derives the project name from the document —
 no extra plumbing.
 
@@ -108,10 +108,10 @@ conditions and the CR-status copy remains authoritative.
 - One auto-created project per workload (`namespace/name`), refreshed
   on every BOM change — drift shows up as component diffs.
 - Models as `machine-learning-model` components with the
-  `aibom.confidence` / `signature.*` properties preserved for policy
+  `k8s-aibom:confidence` / `k8s-aibom:security:signing:*` properties preserved for policy
   and audit queries.
 - Dependency-Track's own policy engine on top: notify on new
-  unmanaged models, on `signature.status` ≠ `verified` in designated
+  unmanaged models, on `k8s-aibom:security:signing:status` ≠ `verified` in designated
   projects, or on any component change in regulated namespaces —
   judgments live in your consumer, facts come from the cluster.
 

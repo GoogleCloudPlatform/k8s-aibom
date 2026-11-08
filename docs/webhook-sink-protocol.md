@@ -33,7 +33,7 @@ handling" below for the controller's interpretation.
 | `X-Aibom-Workload-Kind` | always | Kubernetes kind of the workload (e.g., `Deployment`, `StatefulSet`, `InferenceService`). |
 | `X-Aibom-Workload-Namespace` | always | Workload's Kubernetes namespace. |
 | `X-Aibom-Workload-Name` | always | Workload's Kubernetes `metadata.name`. |
-| `X-Aibom-Workload-Category` | always (v1) | High-level AI lifecycle category, the same value as the document's `aibom.workload.category` (`inference`, `agent`, `vector-database`, `training`, `evaluation`). |
+| `X-Aibom-Workload-Category` | always (v1) | High-level AI lifecycle category, the same value as the document's `k8s-aibom:workload:category` (`inference`, `agent`, `vector-database`, `training`, `evaluation`). |
 | `X-Aibom-Controller-Version` | always | Version of the k8s-aibom controller that produced this BOM. |
 | `Authorization` | when configured | `Bearer <token>`. Sent only when the sink sets `webhook.auth.bearerToken`. The token is the value of the Secret key named by `webhook.auth.bearerToken.secretRef` (a Secret in the controller's namespace), with surrounding whitespace trimmed; a whitespace-only value is a sink error. The chart needs `rbac.sinkSecretAccess=true` to let the controller read the Secret. Auth on an `http://` endpoint is rejected when the configuration loads, so the header is only sent over `https://`. |
 
@@ -95,7 +95,7 @@ This document is the source of truth for the protocol. Changes are
   the controller and announced as a breaking change in release notes.
 
 The corresponding tests in
-[`internal/sink/webhook_test.go`](../internal/sink/webhook_test.go)
+[`internal/sink/webhook_test.go`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/sink/webhook_test.go)
 lock the constants. If a test in that file fails on a header
 constant, the corresponding row of the table above also needs to
 change in the same commit.

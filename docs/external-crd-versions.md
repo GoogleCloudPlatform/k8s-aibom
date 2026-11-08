@@ -11,7 +11,7 @@ paths." A CRD upgrade that renames or removes those paths is an
 upgrade-blocking event for that scraper.
 
 The minimal CRD copies vendored under
-[`config/crd/external/`](../config/crd/external/) are TEST-ONLY: they
+[`config/crd/external/`](https://github.com/GoogleCloudPlatform/k8s-aibom/tree/main/config/crd/external) are TEST-ONLY: they
 exist so `envtest` can validate CR creation against a schema that
 won't break when the upstream project ships patch versions of the
 pinned API. They are NOT a substitute for the real CRDs in
@@ -128,7 +128,7 @@ One workload, one AIBOM. A tracked workload owned, directly or
 transitively via controller `ownerReferences`, by another tracked kind
 (the apps/v1 and batch kinds plus every third-party kind the supervisor
 runs) is not separately reported. The owner's document records each
-absorbed workload as `aibom.rollup.owned.<i>` (`Kind/name`, sorted) and
+absorbed workload as `k8s-aibom:rollup:owned:<i>` (`Kind/name`, sorted) and
 receives the descendants' pods, which is how the CRD kinds resolve
 pod-status digests. Attribution is ownership only: Dynamo's pod labels
 exist but are never consulted, because a tenant pod can carry a label
@@ -145,7 +145,7 @@ kinds `PodCliqueSet`, `PodCliqueScalingGroup`, `PodClique`
 (`grove.io/v1alpha1`; read-only, never watched). Under Grove the
 `PodCliqueSet` is owned directly by the graph, and both
 `PodCliqueSet → PodClique` and `PodCliqueSet → PodCliqueScalingGroup →
-PodClique` resolve; Grove kinds never appear in `aibom.rollup.owned`.
+PodClique` resolve; Grove kinds never appear in `k8s-aibom:rollup:owned`.
 Every hop validates the fetched owner's UID against the reference, so
 an owner re-created under the same name cannot adopt a stale child.
 Minimal test-only Grove CRDs live under `config/crd/external/`.
@@ -165,12 +165,12 @@ Minimal test-only Grove CRDs live under `config/crd/external/`.
 |---|---|
 | `spec.predictor.model.modelFormat.name` | Runtime application Component name |
 | `spec.predictor.model.modelFormat.version` | Runtime Component version |
-| `spec.predictor.model.runtime` | Recorded as `kserve.runtime.ref` property (not followed in v1) |
+| `spec.predictor.model.runtime` | Recorded as `k8s-aibom:kserve:runtime:ref` property (not followed in v1) |
 | `spec.predictor.model.storageUri` | ML-model Component identity |
-| `spec.predictor.serviceAccountName` | Recorded as `kserve.serviceAccountName` property |
+| `spec.predictor.serviceAccountName` | Recorded as `k8s-aibom:kserve:serviceAccountName` property |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components |
 
-**Test-only minimal CRD:** [`config/crd/external/serving.kserve.io_inferenceservices.yaml`](../config/crd/external/serving.kserve.io_inferenceservices.yaml)
+**Test-only minimal CRD:** [`config/crd/external/serving.kserve.io_inferenceservices.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/serving.kserve.io_inferenceservices.yaml)
 
 **Upgrade obligations.** A KServe upgrade that introduces v1beta2 or
 v1 with breaking changes to any of the listed paths requires explicit
@@ -213,10 +213,10 @@ down to managed Pods) is triggered.
 | Path | Used as |
 |---|---|
 | `spec.backendFramework` (enum `sglang` \| `vllm` \| `trtllm`) | Runtime application Component, **declared**; `trtllm` is recorded as runtime `tensorrt-llm` so it matches the pattern table's name for the same runtime image |
-| `spec.components[i].name`, `spec.components[i].type` | `dynamo.component.name` / `dynamo.component.type` properties on every Component extracted from that graph component; graph topology recorded as `dynamo.component.<name>.type` on the runtime Component. Roles never imply models |
-| `spec.components[i].modelRef.{name,revision}` | ML-model Component, **declared**, attributed to its component (`model.revision` when set) |
+| `spec.components[i].name`, `spec.components[i].type` | `k8s-aibom:dynamo:component:name` / `k8s-aibom:dynamo:component:type` properties on every Component extracted from that graph component; graph topology recorded as `dynamo.component.<name>.type` on the runtime Component. Roles never imply models |
+| `spec.components[i].modelRef.{name,revision}` | ML-model Component, **declared**, attributed to its component (`k8s-aibom:model:revision` when set) |
 | `spec.components[i].podTemplate` | Full PodTemplateSpec through the shared inference extraction (images, env/arg allowlists, volume mounts, template annotations); locators rooted at `spec.components[i].podTemplate.spec` |
-| `spec.components[i].roles[j].{name,podTemplate}` | Same, rooted at `spec.components[i].roles[j].podTemplate.spec`, plus `dynamo.role.name` |
+| `spec.components[i].roles[j].{name,podTemplate}` | Same, rooted at `spec.components[i].roles[j].podTemplate.spec`, plus `k8s-aibom:dynamo:role:name` |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components; signature claims (Design 002) |
 
 **Binding rule (AICR review of Design 003):** no model identity is
@@ -234,7 +234,7 @@ a one-component graph with locators rooted at `spec`; a component owned
 by a graph is absorbed into the graph's document and never scraped on
 its own.
 
-**Test-only minimal CRD:** [`config/crd/external/nvidia.com_dynamographdeployments.yaml`](../config/crd/external/nvidia.com_dynamographdeployments.yaml) — serves `v1beta1` only.
+**Test-only minimal CRD:** [`config/crd/external/nvidia.com_dynamographdeployments.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/nvidia.com_dynamographdeployments.yaml) — serves `v1beta1` only.
 
 **Deployed-version facts (from the AICR maintainer, 2026-10-01).**
 AICR pins dynamo-platform **1.4.2** (operator image
@@ -297,11 +297,11 @@ the dependency graph.
 | Path | Used as |
 |---|---|
 | the CR kind itself | Runtime application Component `nim`, **declared** (locator `kind`): the customer chose NIM serving |
-| `spec.image.repository`, `spec.image.tag` | Container Component (`image.reference` = `repository:tag`). Digest, and therefore container confidence, only when the repository is digest-pinned — container confidence means digest provenance everywhere in this codebase, so a tag-only reference is `unresolved` exactly as on a Deployment whose pods are not listed |
+| `spec.image.repository`, `spec.image.tag` | Container Component (`k8s-aibom:image:reference` = `repository:tag`). Digest, and therefore container confidence, only when the repository is digest-pinned — container confidence means digest provenance everywhere in this codebase, so a tag-only reference is `unresolved` exactly as on a Deployment whose pods are not listed |
 | `spec.env[]`, `spec.args[]` | ML-model Components through the existing env-name / arg-flag allowlists (`NIM_MODEL_NAME`, `NIM_SERVED_MODEL_NAME`, `--model`, …); locators `spec.env[i](NAME)`, `spec.args[i](--flag)`; no `container.name` property (there is no container at that path) |
 | `nvcr.io/nim/<org>/<name>` image path | ML-model Component `<org>/<name>`, **inferred**, **only when nothing is declared** via env, args or annotations. Valid solely because NIM publishes one model per image (Design 003 open question 3, resolved on AICR review). Exact, case-sensitive prefix; exactly two path segments |
-| `spec.storage.{nimCache{name,profile}, pvc.name, hostPath, emptyDir}` | `nim.storage.*` properties on the runtime Component and on every model Component; `nim.storage.kind` lists the shapes present, sorted. The NIMCache's contents are never resolved (non-goal 3) |
-| `spec.multiNode.{backendType, parallelism.tensor, parallelism.pipeline}`, `spec.inferencePlatform` | `nim.multiNode*` / `nim.inferencePlatform` properties on the runtime Component |
+| `spec.storage.{nimCache{name,profile}, pvc.name, hostPath, emptyDir}` | `k8s-aibom:nim:storage:*` properties on the runtime Component and on every model Component; `k8s-aibom:nim:storage:kind` lists the shapes present, sorted. The NIMCache's contents are never resolved (non-goal 3) |
+| `spec.multiNode.{backendType, parallelism.tensor, parallelism.pipeline}`, `spec.inferencePlatform` | `k8s-aibom:nim:multiNode*` / `k8s-aibom:nim:inferencePlatform` properties on the runtime Component |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components (count as declared for the image-path rule); signature claims (Design 002) |
 
 **Not read:** `status.*` (incl. `status.model`, which is the operator's
@@ -310,7 +310,7 @@ own conclusion, not customer input); `spec.initContainers` /
 digests arrive with the Design 003 §3 ownership roll-up (NIMService →
 Deployment / LeaderWorkerSet → Pod).
 
-**Test-only minimal CRD:** [`config/crd/external/apps.nvidia.com_nimservices.yaml`](../config/crd/external/apps.nvidia.com_nimservices.yaml)
+**Test-only minimal CRD:** [`config/crd/external/apps.nvidia.com_nimservices.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/apps.nvidia.com_nimservices.yaml)
 
 **Upgrade obligations.** `v1alpha1` is the operator's only served
 version today. A `v1alpha2`/`v1beta1` requires the same explicit work
@@ -336,8 +336,8 @@ into types already in the dependency graph.
 | Path | Used as |
 |---|---|
 | `spec.leaderWorkerTemplate.leaderTemplate` (optional) | Full PodTemplateSpec through the shared inference extraction; locators rooted at `spec.leaderWorkerTemplate.leaderTemplate.spec`; every resulting Component carries `lws.role: leader` |
-| `spec.leaderWorkerTemplate.workerTemplate` (required upstream) | Same, rooted at `…workerTemplate.spec`, `lws.role: worker` |
-| `spec.leaderWorkerTemplate.size`, `spec.replicas` | `lws.size` / `lws.replicas` properties on container Components (omitted when unset) |
+| `spec.leaderWorkerTemplate.workerTemplate` (required upstream) | Same, rooted at `…workerTemplate.spec`, `k8s-aibom:lws:role: worker` |
+| `spec.leaderWorkerTemplate.size`, `spec.replicas` | `k8s-aibom:lws:size` / `k8s-aibom:lws:replicas` properties on container Components (omitted when unset) |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components; signature claims (Design 002), with each template's annotations as fallback |
 
 There is no declared-runtime row: an LWS declares nothing about what it
@@ -349,7 +349,7 @@ StatefulSets it materializes roll up under Design 003 §3.
 `rolloutStrategy`, `volumeClaimTemplates`; pods (digests resolve only
 from digest-pinned references until §3).
 
-**Test-only minimal CRD:** [`config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml`](../config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml)
+**Test-only minimal CRD:** [`config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/leaderworkerset.x-k8s.io_leaderworkersets.yaml)
 
 **Upgrade obligations.** `v1` is the only served version. A `v2`
 requires extending `lwsHandledKinds`; keep `inference.lws` as the
@@ -379,10 +379,10 @@ lws v0.11.1 types, its CRD and llm-d's wide-EP manifest).
 
 | Path | Used as |
 |---|---|
-| `spec.roles[i].name` | `disaggregatedset.role` property on every Component the role produces (index when missing, recorded as an error) |
+| `spec.roles[i].name` | `k8s-aibom:disaggregatedset:role` property on every Component the role produces (index when missing, recorded as an error) |
 | `spec.roles[i].spec.leaderWorkerTemplate.leaderTemplate` (optional) | Full PodTemplateSpec through the shared LWS extraction; locators rooted at `spec.roles[i].spec.leaderWorkerTemplate.leaderTemplate.spec`; `lws.role: leader` |
-| `spec.roles[i].spec.leaderWorkerTemplate.workerTemplate` | Same, rooted at `…workerTemplate.spec`, `lws.role: worker` |
-| `spec.roles[i].spec.leaderWorkerTemplate.size`, `spec.roles[i].spec.replicas`, `spec.slices` | `lws.size` / `lws.replicas` / `disaggregatedset.slices` on container Components (omitted when unset) |
+| `spec.roles[i].spec.leaderWorkerTemplate.workerTemplate` | Same, rooted at `…workerTemplate.spec`, `k8s-aibom:lws:role: worker` |
+| `spec.roles[i].spec.leaderWorkerTemplate.size`, `spec.roles[i].spec.replicas`, `spec.slices` | `k8s-aibom:lws:size` / `k8s-aibom:lws:replicas` / `k8s-aibom:disaggregatedset:slices` on container Components (omitted when unset) |
 | `metadata.annotations` (`model.k8saibom.dev/*`) | Additional ML-model Components; signature claims (Design 002), then each role's `metadata.annotations`, then each template's |
 
 No declared-runtime row: a DisaggregatedSet declares nothing about what
@@ -398,7 +398,7 @@ document's errors and skipped; the other roles still extract.
 `volumeClaimTemplates`; `DisaggregatedSetRoleScaler` (a scaling
 adapter, not a workload).
 
-**Test-only minimal CRD:** [`config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml`](../config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml)
+**Test-only minimal CRD:** [`config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/config/crd/external/disaggregatedset.x-k8s.io_disaggregatedsets.yaml)
 
 **Upgrade obligations.** `v1` is the only served version. A `v2`
 requires extending `disaggregatedSetHandledKinds`; keep

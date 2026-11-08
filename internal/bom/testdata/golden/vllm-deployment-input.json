@@ -23,6 +23,7 @@
       "type": "container",
       "name": "vllm/vllm-openai",
       "version": "v0.6.3",
+      "purl": "pkg:oci/vllm-openai@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?repository_url=vllm%2Fvllm-openai&tag=v0.6.3",
       "hashes": {
         "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       },

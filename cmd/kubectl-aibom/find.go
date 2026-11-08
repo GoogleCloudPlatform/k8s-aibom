@@ -61,6 +61,26 @@ type findFilter struct {
 
 func (f findFilter) needsDocument() bool { return f.image != "" || f.digest != "" }
 
+// Property names find reads from the document, as emitted since v1.7.0
+// under the registered `k8s-aibom` taxonomy namespace
+// (docs/cyclonedx-property-taxonomy.md), each followed by the spelling
+// controllers before v1.7.0 emitted. A plugin newer than the controller
+// that wrote a document still reads it; the first entry of each list is
+// the current name.
+var (
+	runtimeNameProperties    = []string{"k8s-aibom:runtime:name", "runtime.name"}
+	imageReferenceProperties = []string{"k8s-aibom:image:reference", "image.reference"}
+)
+
+func isProperty(name string, names []string) bool {
+	for _, n := range names {
+		if name == n {
+			return true
+		}
+	}
+	return false
+}
+
 // containerFacts is what find needs from the inline CycloneDX document:
 // the container image references and their SHA-256 digests, and the
 // runtime names the document attributes (a controller older than
@@ -118,7 +138,7 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 	for _, c := range parsed.Components {
 		if c.Type == "application" {
 			for _, p := range c.Properties {
-				if p.Name == "runtime.name" && p.Value != "" {
+				if isProperty(p.Name, runtimeNameProperties) && p.Value != "" {
 					facts.runtimes = append(facts.runtimes, p.Value)
 				}
 			}
@@ -128,7 +148,7 @@ func inlineContainers(u *unstructured.Unstructured) (facts containerFacts, unava
 			continue
 		}
 		for _, p := range c.Properties {
-			if p.Name == "image.reference" && p.Value != "" {
+			if isProperty(p.Name, imageReferenceProperties) && p.Value != "" {
 				facts.images = append(facts.images, p.Value)
 			}
 		}

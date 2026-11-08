@@ -5,6 +5,11 @@
   "version": 1,
   "metadata": {
     "timestamp": "2026-05-10T12:00:00Z",
+    "lifecycles": [
+      {
+        "phase": "operations"
+      }
+    ],
     "tools": {
       "components": [
         {
@@ -21,62 +26,62 @@
       "name": "vllm-llama3",
       "properties": [
         {
-          "name": "aibom.workload.kind",
+          "name": "k8s-aibom:workload:kind",
           "value": "Deployment"
         },
         {
-          "name": "aibom.workload.group",
+          "name": "k8s-aibom:workload:group",
           "value": "apps"
         },
         {
-          "name": "aibom.workload.apiVersion",
+          "name": "k8s-aibom:workload:apiVersion",
           "value": "v1"
         },
         {
-          "name": "aibom.workload.namespace",
+          "name": "k8s-aibom:workload:namespace",
           "value": "prod-inference"
         },
         {
-          "name": "aibom.workload.name",
+          "name": "k8s-aibom:workload:name",
           "value": "vllm-llama3"
         },
         {
-          "name": "aibom.workload.uid",
+          "name": "k8s-aibom:workload:uid",
           "value": "abc-123"
         },
         {
-          "name": "aibom.workload.category",
+          "name": "k8s-aibom:workload:category",
           "value": "inference"
         }
       ]
     },
     "properties": [
       {
-        "name": "aibom.confidence",
+        "name": "k8s-aibom:confidence",
         "value": "inferred"
       },
       {
-        "name": "aibom.controller.name",
+        "name": "k8s-aibom:controller:name",
         "value": "k8s-aibom"
       },
       {
-        "name": "aibom.controller.version",
+        "name": "k8s-aibom:controller:version",
         "value": "0.1.0"
       },
       {
-        "name": "aibom.scrape.0.scraperName",
+        "name": "k8s-aibom:scrape:0:scraperName",
         "value": "inference.spec"
       },
       {
-        "name": "aibom.scrape.0.scraperVersion",
+        "name": "k8s-aibom:scrape:0:scraperVersion",
         "value": "0.1.0"
       },
       {
-        "name": "aibom.scrape.0.method",
+        "name": "k8s-aibom:scrape:0:method",
         "value": "spec"
       },
       {
-        "name": "aibom.scrape.0.timestamp",
+        "name": "k8s-aibom:scrape:0:timestamp",
         "value": "2026-05-10T12:00:00Z"
       }
     ]
@@ -89,31 +94,31 @@
       "version": "v0.6.3",
       "properties": [
         {
-          "name": "aibom.confidence",
+          "name": "k8s-aibom:confidence",
           "value": "inferred"
         },
         {
-          "name": "aibom.evidence.source",
+          "name": "k8s-aibom:evidence:source",
           "value": "image_pattern"
         },
         {
-          "name": "aibom.evidence.locator",
+          "name": "k8s-aibom:evidence:locator",
           "value": "spec.template.spec.containers[0].image (pattern: ^vllm/.*)"
         },
         {
-          "name": "container.name",
+          "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
-          "name": "image.tag",
+          "name": "k8s-aibom:image:tag",
           "value": "v0.6.3"
         },
         {
-          "name": "runtime.name",
+          "name": "k8s-aibom:runtime:name",
           "value": "vllm"
         },
         {
-          "name": "runtime.pattern",
+          "name": "k8s-aibom:runtime:pattern",
           "value": "^vllm/.*"
         }
       ]
@@ -129,29 +134,30 @@
           "content": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         }
       ],
+      "purl": "pkg:oci/vllm-openai@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?repository_url=vllm%2Fvllm-openai\u0026tag=v0.6.3",
       "properties": [
         {
-          "name": "aibom.confidence",
+          "name": "k8s-aibom:confidence",
           "value": "declared"
         },
         {
-          "name": "aibom.evidence.source",
+          "name": "k8s-aibom:evidence:source",
           "value": "pod_status"
         },
         {
-          "name": "aibom.evidence.locator",
+          "name": "k8s-aibom:evidence:locator",
           "value": "status.containerStatuses[name=vllm].imageID"
         },
         {
-          "name": "container.init",
+          "name": "k8s-aibom:container:init",
           "value": "false"
         },
         {
-          "name": "container.name",
+          "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
-          "name": "image.reference",
+          "name": "k8s-aibom:image:reference",
           "value": "vllm/vllm-openai:v0.6.3"
         }
       ]
@@ -162,31 +168,31 @@
       "name": "llama-weights",
       "properties": [
         {
-          "name": "aibom.confidence",
+          "name": "k8s-aibom:confidence",
           "value": "inferred"
         },
         {
-          "name": "aibom.evidence.source",
+          "name": "k8s-aibom:evidence:source",
           "value": "volume_source"
         },
         {
-          "name": "aibom.evidence.locator",
+          "name": "k8s-aibom:evidence:locator",
           "value": "spec.template.spec.containers[0].volumeMounts[0](model-store -\u003e /models)"
         },
         {
-          "name": "container.name",
+          "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
-          "name": "volume.mountPath",
+          "name": "k8s-aibom:volume:mountPath",
           "value": "/models"
         },
         {
-          "name": "volume.name",
+          "name": "k8s-aibom:volume:name",
           "value": "model-store"
         },
         {
-          "name": "volume.source",
+          "name": "k8s-aibom:volume:source",
           "value": "persistentVolumeClaim"
         }
       ]
@@ -197,27 +203,27 @@
       "name": "meta-llama/Llama-3.1-8B-Instruct",
       "properties": [
         {
-          "name": "aibom.confidence",
+          "name": "k8s-aibom:confidence",
           "value": "declared"
         },
         {
-          "name": "aibom.evidence.source",
+          "name": "k8s-aibom:evidence:source",
           "value": "container_arg"
         },
         {
-          "name": "aibom.evidence.locator",
+          "name": "k8s-aibom:evidence:locator",
           "value": "spec.template.spec.containers[0].args[0 1](--model)"
         },
         {
-          "name": "container.name",
+          "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
-          "name": "identity.argFlag",
+          "name": "k8s-aibom:identity:argFlag",
           "value": "--model"
         },
         {
-          "name": "identity.confidence",
+          "name": "k8s-aibom:identity:confidence",
           "value": "claimed"
         }
       ]
@@ -228,27 +234,27 @@
       "name": "meta-llama/Llama-3.1-8B-Instruct",
       "properties": [
         {
-          "name": "aibom.confidence",
+          "name": "k8s-aibom:confidence",
           "value": "inferred"
         },
         {
-          "name": "aibom.evidence.source",
+          "name": "k8s-aibom:evidence:source",
           "value": "env_var"
         },
         {
-          "name": "aibom.evidence.locator",
+          "name": "k8s-aibom:evidence:locator",
           "value": "spec.template.spec.containers[0].env[0](HF_MODEL_ID)"
         },
         {
-          "name": "container.name",
+          "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
-          "name": "identity.confidence",
+          "name": "k8s-aibom:identity:confidence",
           "value": "claimed"
         },
         {
-          "name": "identity.envVarName",
+          "name": "k8s-aibom:identity:envVarName",
           "value": "HF_MODEL_ID"
         }
       ]

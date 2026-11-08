@@ -59,7 +59,7 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 			Namespace:  opts.WorkloadNamespace,
 			Category:   opts.WorkloadCategory,
 		},
-		Confidence: readMetadataProperty(doc.CDX, "aibom.confidence"),
+		Confidence: readMetadataProperty(doc.CDX, bom.PropConfidence),
 	}
 	if doc.CDX.Components == nil {
 		return summary
@@ -67,21 +67,21 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 	for _, c := range *doc.CDX.Components {
 		switch c.Type {
 		case cdx.ComponentTypeApplication:
-			if name := readProperty(c, "runtime.name"); name != "" {
+			if name := readProperty(c, bom.PropRuntimeName); name != "" {
 				// Every attributed runtime, in document order. Two
 				// containers running the same runtime image produce
 				// identical entries; list each one once.
 				rt := aibomv1beta1.RuntimeSummary{
 					Name:       name,
 					Version:    c.Version,
-					Confidence: readProperty(c, "aibom.confidence"),
+					Confidence: readProperty(c, bom.PropConfidence),
 				}
 				if !slices.Contains(summary.Runtimes, rt) {
 					summary.Runtimes = append(summary.Runtimes, rt)
 				}
 			}
 		case cdx.ComponentTypeMachineLearningModel:
-			confidence := readProperty(c, "aibom.confidence")
+			confidence := readProperty(c, bom.PropConfidence)
 			if confidence == string(scraper.ConfidenceUnresolved) {
 				// ModelSummary.Confidence is never "unresolved":
 				// unresolved attributes are not summarized. agent.spec
@@ -92,13 +92,13 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 			}
 			summary.Models = append(summary.Models, aibomv1beta1.ModelSummary{
 				Identity:   c.Name,
-				Source:     readProperty(c, "aibom.evidence.source"),
+				Source:     readProperty(c, bom.PropEvidenceSource),
 				Confidence: confidence,
 				// Signed: populated by Phase 8+ signature plumbing.
 				// v1 NoopVerifier-derived value is encoded in the BOM's
-				// component properties as "identity.confidence=claimed";
+				// component properties as "k8s-aibom:identity:confidence=claimed";
 				// see docs/schema-divergences.md D-001.
-				Signed: readProperty(c, "signature.status"),
+				Signed: readProperty(c, bom.PropSigningStatus),
 			})
 		}
 	}

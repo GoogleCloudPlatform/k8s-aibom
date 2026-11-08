@@ -141,15 +141,19 @@ type Evidence struct {
 	Locator string         `json:"locator,omitempty"`
 }
 
-// Confidence is the per-attribute or per-workload confidence label. At
-// attribute level all three values are possible. At workload level (the
-// aggregate confidence), only Declared and Inferred are emitted —
-// Unresolved is reserved for individual attributes that could not be
-// determined (e.g., image digest with no Ready pod yet).
+// Confidence is the per-attribute or per-workload confidence label.
+// Attribute-level values are Declared, Verified, Inferred and Unresolved.
+// Workload-level aggregate uses the lowest tier among non-Unresolved
+// attributes (Verified > Declared > Inferred). Unresolved is reserved
+// for individual attributes that could not be determined (e.g., image
+// digest with no Ready pod yet) and is excluded from aggregation.
+// Verified is set on a model component when applySignatures gets
+// SignatureVerified (Design 002 §4 / #328).
 type Confidence string
 
 const (
 	ConfidenceDeclared   Confidence = "declared"
+	ConfidenceVerified   Confidence = "verified"
 	ConfidenceInferred   Confidence = "inferred"
 	ConfidenceUnresolved Confidence = "unresolved"
 )
@@ -172,9 +176,11 @@ const (
 // The BOM builder maps these into CycloneDX 1.6 ML-BOM components.
 //
 // Properties is a free-form string map used for attributes that don't have
-// a dedicated field on the struct. Each key SHOULD use a dotted-name
-// convention (e.g., "runtime.name", "hardware.accelerator") and the BOM
-// builder maps these into CycloneDX properties[].
+// a dedicated field on the struct. Each key SHOULD use the internal
+// dotted-name convention (e.g., "runtime.name", "signature.status"); the
+// BOM builder maps every key into the registered CycloneDX taxonomy name
+// ("k8s-aibom:runtime:name", "k8s-aibom:security:signing:status") at
+// emission, so the scraper layer stays CycloneDX-agnostic.
 //
 // Children represents nested components owned by this one (e.g., the
 // transformers Python package inside a serving runtime application).

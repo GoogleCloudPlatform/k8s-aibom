@@ -69,7 +69,7 @@ from one reconcile to the next while the set of running digests does.
 The project ships two inference-shaped scrapers with deliberately
 different confidence semantics. Auditors reading workload-level
 confidence should interpret the value in context of which scraper
-produced it (see the `aibom.scrape.0.scraperName` property on every
+produced it (see the `k8s-aibom:scrape:0:scraperName` property on every
 BOM):
 
 - **`inference.spec`** (Deployment / StatefulSet / DaemonSet).
@@ -114,14 +114,21 @@ follows:
 - Attributes with `unresolved` confidence are **excluded** from the
   aggregation.
 - The workload-level confidence is the **lowest tier** among the
-  non-excluded attributes. Tiers: `declared` > `inferred`.
+  non-excluded attributes. Tiers: `verified` > `declared` > `inferred`.
 - If every attribute is `unresolved`, the workload-level confidence is
   `unresolved` and the discovery layer decides whether to suppress the
   workload entirely.
 
 Concretely: any single `inferred` attribute drags the workload to
-`inferred`. Only when every non-excluded attribute is `declared` does the
-workload report `declared`.
+`inferred`. A mix of `verified` and `declared` reports `declared`. Only
+when every non-excluded attribute is `verified` does the workload report
+`verified`.
+
+A model component whose signature verifies against an operator trust root
+with a signer-identity constraint (Design 002 §4) has its own confidence
+raised to `verified`; an unconstrained valid signature leaves confidence
+unchanged and records the `signature-valid-unconstrained` outcome fact.
+`status.summary.models[].confidence` follows the component.
 
 ## Runtime detection and runtime version
 
@@ -143,7 +150,7 @@ in the allowlist; names such as `lmsysorg/sglang-router` and
   `^v?\d+\.\d+(\.\d+)?(-[\w.]+)?$` (i.e., `v0.6.3`, `0.6.3`, `v1.0`,
   `24.01-py3`, `v0.6.3-rc1`). Tags like `latest`, `nightly-20251025`,
   `main`, or git SHAs leave the version empty. The raw tag is preserved
-  in the Component's `image.tag` property for traceability.
+  in the Component's `k8s-aibom:image:tag` property for traceability.
 
 Putting `latest` in a version field would mislead auditors who reasonably
 expect a version field to carry semantic version information. Empty is
@@ -173,7 +180,7 @@ observable in a more authoritative way.
 The three model allowlists used below (`modelEnvVarNames`,
 `modelArgFlags`, `modelVolumePathPrefixes`) are compiled into the
 controller from
-[`internal/scraper/v1-runtime-patterns.yaml`](../internal/scraper/v1-runtime-patterns.yaml).
+[`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml).
 The `AIBOMControllerConfig` CR does not expose them: it overrides only
 the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`).
 Extending an allowlist is a PR to that file; see
@@ -249,7 +256,7 @@ These are detection cases v1 deliberately does NOT match, despite
 appearances. Each is a deferred-by-design choice, not an
 implementation gap. Future contributors arriving at one of these
 expecting to "fix" it should read this section AND the
-[conservative-detection principle](../internal/scraper/v1-runtime-patterns.yaml)
+[conservative-detection principle](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml)
 documented inline in the runtime-patterns YAML before opening a PR —
 the asymmetry between false positives and false negatives in
 auditor-facing output makes speculative pattern broadening dangerous.
