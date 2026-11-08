@@ -69,7 +69,7 @@ from one reconcile to the next while the set of running digests does.
 The project ships two inference-shaped scrapers with deliberately
 different confidence semantics. Auditors reading workload-level
 confidence should interpret the value in context of which scraper
-produced it (see the `aibom.scrape.0.scraperName` property on every
+produced it (see the `k8s-aibom:scrape:0:scraperName` property on every
 BOM):
 
 - **`inference.spec`** (Deployment / StatefulSet / DaemonSet).
@@ -150,7 +150,7 @@ in the allowlist; names such as `lmsysorg/sglang-router` and
   `^v?\d+\.\d+(\.\d+)?(-[\w.]+)?$` (i.e., `v0.6.3`, `0.6.3`, `v1.0`,
   `24.01-py3`, `v0.6.3-rc1`). Tags like `latest`, `nightly-20251025`,
   `main`, or git SHAs leave the version empty. The raw tag is preserved
-  in the Component's `image.tag` property for traceability.
+  in the Component's `k8s-aibom:image:tag` property for traceability.
 
 Putting `latest` in a version field would mislead auditors who reasonably
 expect a version field to carry semantic version information. Empty is

@@ -6,6 +6,60 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Document shape (one transition, v1.7.0)
+
+Four changes to the emitted CycloneDX document land together (#132,
+#328), so downstream readers see one byte-shape transition. Byte-identity with
+documents from v1.4.0 through v1.6.x ends here; determinism within a
+release is unchanged (identical inputs still produce identical bytes),
+and the `AIBOM` status summary fields and the API schema do not change.
+
+- **`metadata.lifecycles` is `[{"phase": "operations"}]` on every
+  document.** Every k8s-aibom document is an as-deployed inventory
+  observed from the Kubernetes API; the CycloneDX maintainers' guidance
+  on spec#990 is that this context is a lifecycle on the metadata, not a
+  perspective or a property. As-trained context is deliberately not
+  emitted (`docs/schema-divergences.md`).
+
+- **Container components carry a `pkg:oci` purl**:
+  `pkg:oci/<name>@sha256:<digest>?repository_url=<repository>&tag=<tag>`
+  in the purl specification's canonical form (name lowercased,
+  qualifiers percent-encoded and sorted). The version is the resolved
+  digest; a tag-only image gets no version rather than a fabricated one,
+  and `repository_url` is the repository as the owner wrote it. The
+  observed reference and tag stay as properties.
+
+- **Properties are named under the `k8s-aibom` namespace registered in
+  the CycloneDX Property Taxonomy**, with the taxonomy's colon grammar:
+  `aibom.workload.kind` → `k8s-aibom:workload:kind`,
+  `aibom.confidence` → `k8s-aibom:confidence`,
+  `runtime.name` → `k8s-aibom:runtime:name`,
+  `image.reference` → `k8s-aibom:image:reference`,
+  `signature.status` → `k8s-aibom:security:signing:status`, and so on
+  for every property; the full mapping is in
+  `docs/cyclonedx-property-taxonomy.md`. Scrapers keep their internal
+  keys; the builder maps every key through one function at emission.
+
+  **Upgrade note for consumers that read property names** (AICR's
+  health check, the production-stack and KubeAI integrations,
+  Dependency-Track policies, custom relays): switch to the new names
+  when you move to v1.7.0; documents written before the upgrade keep
+  the old names until the workload is next reconciled. `kubectl aibom`
+  v1.7.0 reads both spellings, so a newer plugin still reads documents
+  from an older controller.
+
+- **A verified model signature raises the model component's confidence
+  to `verified`** (#328, Design 002 §4). Previously
+  `k8s-aibom:security:signing:status` became `verified` while the
+  component's `k8s-aibom:confidence` stayed `declared`. Only a signature
+  verified against an operator trust root with a signer-identity
+  constraint upgrades; an unconstrained valid signature still leaves
+  confidence unchanged and records `signature-valid-unconstrained`.
+  `status.summary.models[].confidence` follows the component, and the
+  aggregate tier order is `verified` > `declared` > `inferred`, lowest
+  tier winning. Bytes change only for workloads with a verified
+  signature.
+
 ### API contract
 
 - **`spec.discovery.workloadKinds` is declared in `v1alpha1` as well**
@@ -142,20 +196,6 @@ All notable changes to k8s-aibom are documented here. The format follows
   `whisper-asr-webservice`. Publisher-anchored at the image-name
   boundary, so other users' whisper images and other registries stay
   unmatched.
-
-### Changed
-
-- **v1.7 document-shape transition** (#132, #328). A model component whose
-  signature verifies against an operator trust root with a signer-identity
-  constraint now carries `aibom.confidence: verified` (Design 002 §4);
-  previously `signature.status` became `verified` while the component's
-  confidence stayed `declared`. An unconstrained valid signature still
-  leaves confidence unchanged and records `signature-valid-unconstrained`.
-  `status.summary.models[].confidence` follows the component. Document
-  bytes change only for workloads with a verified signature; this rides
-  the same release as the #132 CycloneDX alignment (`pkg:oci` purls,
-  `metadata.lifecycles`, `k8s-aibom:` property names) so downstreams see
-  one shape transition.
 
 ### Fixed
 

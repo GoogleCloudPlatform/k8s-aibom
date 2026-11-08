@@ -96,7 +96,7 @@ func TestIntegration_Rollup_Grove_DirectClique(t *testing.T) {
 		ownerRefTo("grove.io/v1alpha1", "PodClique", "graph-0-worker", pclq.GetUID()), groveDigest)
 
 	bom := waitInlineContains(t, env.k8sClient, ctx, dgdKey, groveDigest)
-	if strings.Contains(bom, "aibom.rollup.owned.") {
+	if strings.Contains(bom, "k8s-aibom:rollup:owned:") {
 		t.Errorf("Grove kinds are walk-only intermediates and must not be listed as absorbed workloads: %s", bom)
 	}
 }
@@ -144,7 +144,7 @@ func TestIntegration_Rollup_Grove_ScalingGroup_AndLabelDecoy(t *testing.T) {
 	if strings.Contains(bom, decoyDigest) {
 		t.Fatalf("a pod with the graph label but a foreign ownership chain contaminated the graph's document: %s", bom)
 	}
-	if strings.Contains(bom, "aibom.rollup.owned.") {
+	if strings.Contains(bom, "k8s-aibom:rollup:owned:") {
 		t.Errorf("Grove kinds must not be listed as absorbed workloads: %s", bom)
 	}
 }

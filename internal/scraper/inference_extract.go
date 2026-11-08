@@ -251,6 +251,10 @@ func (s *InferenceSpecScraper) extractContainerComponentAt(specLocator string, c
 			"container.init":  boolStr(init),
 		},
 	}
+	// Image identity in the CycloneDX core model: a pkg:oci purl built
+	// from the reference as written and the resolved digest (empty when
+	// the digest is unknown; the purl then has no version).
+	comp.PURL = ociPURL(c.Image, digest)
 	if digest != "" {
 		comp.Hashes = map[string]string{"sha256": strings.TrimPrefix(digest, "sha256:")}
 		comp.Confidence = ConfidenceDeclared
