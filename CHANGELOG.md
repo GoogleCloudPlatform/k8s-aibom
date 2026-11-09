@@ -199,6 +199,16 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **The README and docs name properties as v1.7.0 documents emit them**
+  (#360). Seven places still gave the name from before the taxonomy
+  rename: `aibom.redaction.applied` in the README's sanitization
+  guarantee and in the threat model, `dependency.type` in the scraper
+  heuristics, and `dynamo.component.<name>.type`, `container.name` and
+  `lws.role` (twice) in the external CRD tables. They now read
+  `k8s-aibom:redaction:applied`, `k8s-aibom:dependency:type`,
+  `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:container:name`
+  and `k8s-aibom:lws:role`. Documentation only.
+
 - **The scraper heuristics no longer say TensorRT-LLM has no pattern of
   its own** (#358). The deferred-cases table in
   `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
