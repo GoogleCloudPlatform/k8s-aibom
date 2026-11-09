@@ -60,6 +60,20 @@ and the `AIBOM` status summary fields and the API schema do not change.
   tier winning. Bytes change only for workloads with a verified
   signature.
 
+### Document shape (v1.8.0)
+
+- **Every document has a `dependencies` array** (#363): one entry for
+  `metadata.component` whose `dependsOn` lists the `bom-ref` of every
+  top-level component in document order (runtimes, container images,
+  models, data, remote APIs). Nested components and edges between
+  components are not emitted, since nothing observed says that one
+  component depends on another. A document with no components still
+  carries the workload entry, without `dependsOn`. Dependency-Track
+  now shows the workload's graph instead of logging `The dependency
+  graph has 0 entries` on every upload, and GUAC gets the
+  workload-to-component edges from the document. Bytes change for
+  every document.
+
 ### API contract
 
 - **`spec.discovery.workloadKinds` is declared in `v1alpha1` as well**
