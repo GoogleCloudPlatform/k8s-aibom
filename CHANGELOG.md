@@ -77,6 +77,22 @@ and the `AIBOM` status summary fields and the API schema do not change.
   (CycloneDX export, distinct short name, cross-links) agreed on their
   tracker. Documentation only.
 
+- **Dependency-Track and GUAC walkthroughs against the v1.7 document**
+  (#313). `docs/integrations/dependency-track.md` now has a tested
+  walkthrough (Dependency-Track 4.14.6) and a list of what
+  Dependency-Track drops; the new `docs/integrations/guac.md` does the
+  same for GUAC v1.1.0. Both use documents from a kind cluster; one of
+  them is kept as `docs/integrations/fixtures/llama-cpp-chat.cdx.json`
+  and a unit test validates it against the CycloneDX 1.6 schema.
+  Corrections to the Dependency-Track page: the relay's API key also
+  needs `PROJECT_CREATION_UPLOAD`; policies cannot match `k8s-aibom:`
+  properties or the classifier in 4.x; an upload replaces the
+  component list rather than showing a diff; the webhook sink refuses
+  a relay behind a ClusterIP Service; and adding a sink does not send
+  documents that already exist. The relay example now rejects anything
+  but a POST of a document with a workload name, and passes
+  Dependency-Track's answer back. Documentation and a test only.
+
 - **Aggregate CRD discovery health** (#226, Design 004 A6): one
   `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
   failures and candidate CRD read failures through Degraded status,

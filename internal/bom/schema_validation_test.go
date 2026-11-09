@@ -101,3 +101,24 @@ func TestSchemaLoadsSuccessfully(t *testing.T) {
 		t.Fatal("loadCycloneDXSchema returned nil schema with no error")
 	}
 }
+
+// The consumer walkthroughs in docs/integrations upload these documents
+// as-is, so they must stay valid as the schema pin moves.
+func TestIntegrationFixturesAreValidCycloneDX(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "docs", "integrations", "fixtures", "*.cdx.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no fixtures found under docs/integrations/fixtures")
+	}
+	for _, p := range paths {
+		t.Run(filepath.Base(p), func(t *testing.T) {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertValidCycloneDX(t, b)
+		})
+	}
+}

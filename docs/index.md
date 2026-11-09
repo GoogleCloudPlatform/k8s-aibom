@@ -20,6 +20,7 @@ Know what AI is actually running in your clusters. k8s-aibom is an unprivileged 
 - [Incident response with `kubectl aibom`](incident-response.md)
 - [Policy cookbook (Kyverno, Gatekeeper)](policy-cookbook.md)
 - [Dependency-Track integration](integrations/dependency-track.md)
+- [GUAC integration](integrations/guac.md)
 - [Webhook sink protocol](webhook-sink-protocol.md)
 
 ## How it decides
