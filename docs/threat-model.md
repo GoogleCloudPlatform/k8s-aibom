@@ -51,7 +51,7 @@ read surface is the Kubernetes API.
   allowlist; ambiguous stays `unresolved`); declared values recorded
   as *claims* with evidence locators, never as verified facts; length
   truncation on extracted names; the output sanitization pass
-  (`aibom.redaction.applied` is recorded, never silent).
+  (`k8s-aibom:redaction:applied` is recorded, never silent).
 - **B2 — Pod status → digest attribution (T1 → A1).** Digests enter a
   BOM only from pods tied to the workload through the controller
   ownerReference chain, with an image-name match on the candidate's
