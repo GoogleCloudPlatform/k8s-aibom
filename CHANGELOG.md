@@ -199,6 +199,15 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **The scraper heuristics no longer say TensorRT-LLM has no pattern of
+  its own** (#358). The deferred-cases table in
+  `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
+  were covered and that a separate pattern would double-count, but
+  `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime` (v1.4.0) and
+  `nvcr.io/nvidia/tensorrt-llm/release` (v1.6.0) attribute as
+  `tensorrt-llm`. The row is marked resolved, and the runtime-patterns
+  comment that listed two forms now lists all three. Documentation only.
+
 - **Links from the documentation site to files outside `docs/` resolve**
   (#354). The GitHub Pages site is built from `docs/` only, so relative
   links such as `../README.md#quickstart` or
