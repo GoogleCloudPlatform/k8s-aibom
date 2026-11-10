@@ -8,8 +8,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Document shape (one transition, v1.7.0)
 
-Four changes to the emitted CycloneDX document land together (#132,
-#328), so downstream readers see one byte-shape transition. Byte-identity with
+Five changes to the emitted CycloneDX document land together (#132,
+#328, #363), so downstream readers see one byte-shape transition. Byte-identity with
 documents from v1.4.0 through v1.6.x ends here; determinism within a
 release is unchanged (identical inputs still produce identical bytes),
 and the `AIBOM` status summary fields and the API schema do not change.
@@ -59,6 +59,18 @@ and the `AIBOM` status summary fields and the API schema do not change.
   aggregate tier order is `verified` > `declared` > `inferred`, lowest
   tier winning. Bytes change only for workloads with a verified
   signature.
+
+- **Every document has a `dependencies` array** (#363): one entry for
+  `metadata.component` whose `dependsOn` lists the `bom-ref` of every
+  top-level component in document order (runtimes, container images,
+  models, data, remote APIs). Nested components and edges between
+  components are not emitted, since nothing observed says that one
+  component depends on another. A document with no components still
+  carries the workload entry, without `dependsOn`. Dependency-Track
+  now shows the workload's graph instead of logging `The dependency
+  graph has 0 entries` on every upload, and GUAC gets the
+  workload-to-component edges from the document. Bytes change for
+  every document.
 
 ### API contract
 

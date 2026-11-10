@@ -90,6 +90,10 @@ Not divergences; recorded so nobody adds a property for them.
   Project AIBOM run record) is a separate document with its own phase.
 - **Image identity is the component `purl`** (`pkg:oci`), since v1.7.0.
 - **Digests are `component.hashes`.**
+- **Workload-to-component edges are `dependencies`**, since v1.8.0: one
+  entry for `metadata.component` depending on every top-level
+  component. No edges between components are emitted, because none are
+  observed.
 
 ## Format for divergence entries
 
