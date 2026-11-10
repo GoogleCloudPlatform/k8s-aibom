@@ -107,6 +107,11 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"summary", "-A", "--namespace=prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
 		{[]string{"summary", "--all-namespaces", "prod-jobs"}, `summary takes no positional arguments, got "prod-jobs"`},
 		{[]string{"view", "my-aibom", "--all-namespaces"}, "--all-namespaces does not apply to view"},
+		// After "--" every token is positional, flag-shaped or not.
+		{[]string{"find", "--", "vllm"}, `find takes no positional arguments, got "vllm"`},
+		{[]string{"view", "--"}, "view requires exactly one AIBOM name"},
+		{[]string{"view", "a", "--", "b"}, "view requires exactly one AIBOM name"},
+		{[]string{"verify", "--", "-n", "prod-jobs"}, "verify requires exactly one AIBOM name"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -163,6 +168,13 @@ func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 		{"find", "--namespace=prod-jobs", "--model", "Qwen"},
 		{"view", "my-aibom", "--namespace", "prod-jobs", "--raw"},
 		{"verify", "--namespace", "prod-jobs", "my-aibom"},
+		// "--" ends the flags; the name after it is the positional
+		// argument. It used to be swallowed as the value of "--".
+		{"view", "--", "my-aibom"},
+		{"view", "-n", "prod-jobs", "--raw", "--", "my-aibom"},
+		{"verify", "--", "my-aibom"},
+		{"summary", "-n", "prod-jobs", "--"},
+		{"find", "-A", "--runtime", "vllm", "--"},
 	} {
 		err := run(args)
 		if err == nil || !strings.Contains(err.Error(), "no configuration has been provided") {

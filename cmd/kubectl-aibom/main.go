@@ -114,6 +114,14 @@ Flags:
 	var flagArgs []string
 	for i := 1; i < len(args); i++ {
 		a := args[i]
+		// "--" ends the flags, as it does for the flag package and
+		// kubectl: every token after it is positional. It used to be
+		// read as a flag taking a value, so `view -- NAME` swallowed
+		// NAME and reported that a name is required.
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
 		if !strings.HasPrefix(a, "-") {
 			positional = append(positional, a)
 			continue

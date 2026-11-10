@@ -199,6 +199,13 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **`kubectl aibom` treats `--` as the end of the flags** (#365). The
+  plugin's argument splitter read `--` as a flag taking a value, so the
+  token after it was dropped: `view -- NAME` and `verify -- NAME` failed
+  with "requires exactly one AIBOM name", and `find -- vllm` listed every
+  AIBOM unfiltered instead of reporting the stray argument. Every token
+  after `--` is now positional and goes through the usual checks.
+
 - **The README and docs name properties as v1.7.0 documents emit them**
   (#360). Seven places still gave the name from before the taxonomy
   rename: `aibom.redaction.applied` in the README's sanitization
