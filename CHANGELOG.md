@@ -213,6 +213,26 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **The scraper heuristics no longer give a six-runtime allowlist**
+  (#366). `docs/scraper-heuristics.md` said `inference.spec` matches
+  against "vllm, tgi, triton, ollama, ray-serve, llm-d" and that seven
+  named patterns match at the image-name boundary; the default
+  `runtimeImagePatterns` attribute 29 runtimes, most of them
+  boundary-matched. Both places now give examples and point at
+  `internal/scraper/v1-runtime-patterns.yaml`, with NIM and Dynamo as
+  examples of the prefix matches, and the README's runtime list says it is not the
+  full set. Documentation only.
+
+- **The README and docs name properties as v1.7.0 documents emit them**
+  (#360). Seven places still gave the name from before the taxonomy
+  rename: `aibom.redaction.applied` in the README's sanitization
+  guarantee and in the threat model, `dependency.type` in the scraper
+  heuristics, and `dynamo.component.<name>.type`, `container.name` and
+  `lws.role` (twice) in the external CRD tables. They now read
+  `k8s-aibom:redaction:applied`, `k8s-aibom:dependency:type`,
+  `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:container:name`
+  and `k8s-aibom:lws:role`. Documentation only.
+
 - **The scraper heuristics no longer say TensorRT-LLM has no pattern of
   its own** (#358). The deferred-cases table in
   `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
