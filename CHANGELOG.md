@@ -206,6 +206,16 @@ and the `AIBOM` status summary fields and the API schema do not change.
   AIBOM unfiltered instead of reporting the stray argument. Every token
   after `--` is now positional and goes through the usual checks.
 
+- **The scraper heuristics no longer give a six-runtime allowlist**
+  (#366). `docs/scraper-heuristics.md` said `inference.spec` matches
+  against "vllm, tgi, triton, ollama, ray-serve, llm-d" and that seven
+  named patterns match at the image-name boundary; the default
+  `runtimeImagePatterns` attribute 29 runtimes, most of them
+  boundary-matched. Both places now give examples and point at
+  `internal/scraper/v1-runtime-patterns.yaml`, with NIM and Dynamo as
+  examples of the prefix matches, and the README's runtime list says it is not the
+  full set. Documentation only.
+
 - **The README and docs name properties as v1.7.0 documents emit them**
   (#360). Seven places still gave the name from before the taxonomy
   rename: `aibom.redaction.applied` in the README's sanitization
