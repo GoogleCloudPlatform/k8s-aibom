@@ -71,6 +71,11 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Added
 
+- **`GOVERNANCE.md` and `MAINTAINERS.md`**: roles (contributor, reviewer,
+  maintainer) with entry criteria, the decision process (lazy consensus,
+  design documents, votes), security and conduct handling, and how the
+  document changes. Reviewer nominations are open. Documentation only.
+
 - **README names Project AIBOM as the training-side counterpart** (Red Hat
   Research / Mass Open Cloud): reproducibility records for training and
   inference runs, next to k8s-aibom's serving-side inventory; interop
