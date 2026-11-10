@@ -1,7 +1,9 @@
 # Design 007: llm-d lens — DisaggregatedSet coverage and InferencePool membership
 
-Status: Accepted 2026-10-08 (review window on #139). Part 1 implemented
-on main the following day; Part 2a targets v1.7 and Part 2b v1.8.
+Status: Accepted 2026-10-08 (review window on #139); Part 2 amendment
+accepted 2026-11-10 (review window 5–10 November on #331). Part 1
+implemented on main the following day; Part 2a targets v1.7 and Part
+2b v1.8.
 Tracks #137. Review from llm-d maintainers and anyone running the
 wide-EP well-lit path is still invited on the implementation.
 
@@ -92,9 +94,10 @@ role:
 
 ### Part 2 — `InferencePool` membership as a routing fact
 
-**Amendment proposed for #137 (2026-11-05).** Review window: November
-5–10, as confirmed on PR #331. Per `VERSIONING.md`, implementation
-begins only after the design amendment is accepted. Part 2a (document
+**Amendment accepted 2026-11-10** (proposed for #137 on 2026-11-05;
+review window 5–10 November on PR #331, no objections). Per
+`VERSIONING.md`, implementation begins only after the design amendment
+is accepted; Part 2a implementation is open as #356. Part 2a (document
 facts, CRD discovery and freshness) targets v1.7 (November 17 rc.1
 scope freeze), or a later train if review or testing needs longer.
 Part 2b (status summary and `find --pool`) targets v1.8 as a separate
