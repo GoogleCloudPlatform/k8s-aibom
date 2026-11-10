@@ -216,6 +216,15 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **`kubectl aibom` rejects an empty `-n`, `--context` or
+  `--kubeconfig`.** A scope flag set to `""` (`-n "$NS"` with the
+  variable unset) counted as not given, so the command quietly used the
+  kubeconfig's namespace, current context or default file: `verify NAME
+  -n ""` verified a same-named AIBOM in another namespace and exited 0.
+  `-n`, `--namespace`, `--context` and `--kubeconfig` with an empty
+  value are now argument errors; leaving the flag out still uses the
+  kubeconfig default.
+
 - **`kubectl aibom` treats `--` as the end of the flags** (#365). The
   plugin's argument splitter read `--` as a flag taking a value, so the
   token after it was dropped: `view -- NAME` and `verify -- NAME` failed

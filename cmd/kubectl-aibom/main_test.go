@@ -143,6 +143,31 @@ func TestRun_FindEmptyFilterIsAnError(t *testing.T) {
 	}
 }
 
+// -n, --namespace, --context or --kubeconfig given an empty value (an
+// unset shell variable, `verify "$NAME" -n "$NS"`) is an error. Each
+// used to count as not given, so the command quietly read the
+// kubeconfig's namespace, context or file instead.
+func TestRun_EmptyScopeFlagIsAnError(t *testing.T) {
+	withoutCluster(t)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"summary", "-n", ""}, "-n needs a value"},
+		{[]string{"find", "--runtime", "vllm", "-n="}, "-n needs a value"},
+		{[]string{"view", "my-aibom", "--namespace", ""}, "--namespace needs a value"},
+		{[]string{"verify", "--namespace=", "my-aibom"}, "--namespace needs a value"},
+		{[]string{"summary", "-A", "--context", ""}, "--context needs a value"},
+		{[]string{"view", "my-aibom", "--kubeconfig="}, "--kubeconfig needs a value"},
+		{[]string{"verify", "my-aibom", "-n", "", "--context", ""}, "--context, -n needs a value"},
+	} {
+		err := run(tc.args)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("run(%q) = %v, want an error containing %q", tc.args, err, tc.want)
+		}
+	}
+}
+
 // A well-formed command still reaches the kubeconfig; without one it
 // fails there, as before.
 func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
