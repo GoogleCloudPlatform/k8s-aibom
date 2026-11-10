@@ -8,8 +8,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Document shape (one transition, v1.7.0)
 
-Four changes to the emitted CycloneDX document land together (#132,
-#328), so downstream readers see one byte-shape transition. Byte-identity with
+Five changes to the emitted CycloneDX document land together (#132,
+#328, #363), so downstream readers see one byte-shape transition. Byte-identity with
 documents from v1.4.0 through v1.6.x ends here; determinism within a
 release is unchanged (identical inputs still produce identical bytes),
 and the `AIBOM` status summary fields and the API schema do not change.
@@ -59,8 +59,6 @@ and the `AIBOM` status summary fields and the API schema do not change.
   aggregate tier order is `verified` > `declared` > `inferred`, lowest
   tier winning. Bytes change only for workloads with a verified
   signature.
-
-### Document shape (v1.8.0)
 
 - **Every document has a `dependencies` array** (#363): one entry for
   `metadata.component` whose `dependsOn` lists the `bom-ref` of every
