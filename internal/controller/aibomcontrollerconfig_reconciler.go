@@ -340,6 +340,10 @@ func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctr
 	// fires once is more valuable than a status update that may
 	// conflict and retry.
 	r.emitTransitionEvent(ctx, r.lastObserved, newState, toStore)
+	// The transition is reported: record it now, so a status write
+	// that conflicts or fails below does not make the retry emit the
+	// event and count the reload a second time.
+	r.lastObserved = newState
 	if newState != stateMissing {
 		r.emitSchemaSkewEvent(configName, skew)
 	}
@@ -363,7 +367,6 @@ func (r *AIBOMControllerConfigReconciler) Reconcile(ctx context.Context, req ctr
 		}
 	}
 
-	r.lastObserved = newState
 	return ctrl.Result{}, nil
 }
 
