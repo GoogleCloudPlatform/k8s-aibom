@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -106,20 +105,11 @@ func (r *StatefulSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // match narrows, the direct controller ownerReference decides
 // membership (see pod_ownership.go).
 func (r *StatefulSetReconciler) listOwnedPods(ctx context.Context, ss *appsv1.StatefulSet) ([]corev1.Pod, error) {
-	if ss.Spec.Selector == nil {
-		return nil, nil
+	pods, err := listSelectedPods(ctx, r.Client, ss.Namespace, ss.Spec.Selector)
+	if err != nil {
+		return nil, err
 	}
-	if len(ss.Spec.Selector.MatchLabels) == 0 {
-		return nil, nil
-	}
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
-		client.InNamespace(ss.Namespace),
-		client.MatchingLabels(ss.Spec.Selector.MatchLabels),
-	); err != nil {
-		return nil, fmt.Errorf("list pods: %w", err)
-	}
-	return filterPodsOwnedBy(pods.Items, singleOwner(ss.UID)), nil
+	return filterPodsOwnedBy(pods, singleOwner(ss.UID)), nil
 }
 
 // SetupWithManager registers this reconciler with the controller-runtime

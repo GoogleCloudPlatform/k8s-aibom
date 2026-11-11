@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -148,24 +147,15 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // namespace would let one workload's pods (or a tenant's planted pod)
 // contaminate another workload's digests (see pod_ownership.go).
 func (r *DeploymentReconciler) listOwnedPods(ctx context.Context, dep *appsv1.Deployment) ([]corev1.Pod, error) {
-	if dep.Spec.Selector == nil {
-		return nil, nil
-	}
-	if len(dep.Spec.Selector.MatchLabels) == 0 {
-		return nil, nil
-	}
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
-		client.InNamespace(dep.Namespace),
-		client.MatchingLabels(dep.Spec.Selector.MatchLabels),
-	); err != nil {
-		return nil, fmt.Errorf("list pods: %w", err)
+	pods, err := listSelectedPods(ctx, r.Client, dep.Namespace, dep.Spec.Selector)
+	if err != nil || len(pods) == 0 {
+		return nil, err
 	}
 	owners, err := replicaSetOwnerUIDs(ctx, r.Client, dep)
 	if err != nil {
 		return nil, err
 	}
-	return filterPodsOwnedBy(pods.Items, owners), nil
+	return filterPodsOwnedBy(pods, owners), nil
 }
 
 // AIBOMNameForDeployment returns the canonical AIBOM resource name for a

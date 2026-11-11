@@ -216,6 +216,15 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **Pod digests resolve for workloads whose selector uses
+  `matchExpressions`.** Deployment, StatefulSet, DaemonSet and Job
+  reconcilers listed the workload's pods by `selector.matchLabels`
+  only, and listed nothing when `matchLabels` was empty, so a workload
+  that selects its pods with `matchExpressions` alone never had its
+  container digests resolved from pod status. Pods are now listed by
+  the whole selector; controller ownership still decides which pods
+  count.
+
 - **`kubectl aibom` rejects an empty `-n`, `--context` or
   `--kubeconfig`.** A scope flag set to `""` (`-n "$NS"` with the
   variable unset) counted as not given, so the command quietly used the

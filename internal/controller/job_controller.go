@@ -91,22 +91,13 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func (r *JobReconciler) listOwnedPods(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
-	if job.Spec.Selector == nil {
-		return nil, nil
-	}
-	if len(job.Spec.Selector.MatchLabels) == 0 {
-		return nil, nil
-	}
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
-		client.InNamespace(job.Namespace),
-		client.MatchingLabels(job.Spec.Selector.MatchLabels),
-	); err != nil {
+	pods, err := listSelectedPods(ctx, r.Client, job.Namespace, job.Spec.Selector)
+	if err != nil {
 		return nil, err
 	}
 	// Direct controller ownership decides membership; selector match
 	// alone is insufficient (see pod_ownership.go).
-	return filterPodsOwnedBy(pods.Items, singleOwner(job.UID)), nil
+	return filterPodsOwnedBy(pods, singleOwner(job.UID)), nil
 }
 
 func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
