@@ -214,6 +214,13 @@ and the `AIBOM` status summary fields and the API schema do not change.
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+### Security
+
+- **Go 1.26.11** (GO-2026-6859): the `net/http` HTTP/1 server could
+  panic on a header race when `MaxBytesReader` or `MaxBytesHandler`
+  limits were exceeded. The controller and plugin are rebuilt on the
+  fixed toolchain; `govulncheck` is clean again. No change in behaviour.
+
 ### Fixed
 
 - **`kubectl aibom` rejects an empty `-n`, `--context` or
