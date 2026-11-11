@@ -59,6 +59,17 @@ func TestIntegration_DualVersionServing(t *testing.T) {
 				InlineThresholdBytes:     131072,
 				StaleThresholdReconciles: 5,
 			},
+			Sinks: []aibomv1alpha1.SinkConfig{{
+				Name: "private-ca-webhook",
+				Type: aibomv1alpha1.SinkTypeWebhook,
+				Webhook: &aibomv1alpha1.WebhookSinkSpec{
+					Endpoint: "https://collector.example.test/bom",
+					Auth: &aibomv1alpha1.WebhookAuth{BearerToken: &aibomv1alpha1.BearerTokenAuth{
+						SecretRef:   aibomv1alpha1.SecretKeyRef{Name: "webhook-token", Key: "token"},
+						CASecretRef: &aibomv1alpha1.SecretKeyRef{Name: "alpha-ca", Key: "alpha-ca.crt"},
+					}},
+				},
+			}},
 		},
 	}
 	if err := alphaClient.Create(ctx, alpha); err != nil {
@@ -78,7 +89,16 @@ func TestIntegration_DualVersionServing(t *testing.T) {
 		t.Errorf("v1beta1 read: InlineThresholdBytes = %d, want 131072", beta.Spec.BOMGeneration.InlineThresholdBytes)
 	}
 
-	// Write via the NEW version; read back via the OLD.
+	if len(beta.Spec.Sinks) != 1 || beta.Spec.Sinks[0].Webhook == nil || beta.Spec.Sinks[0].Webhook.Auth == nil || beta.Spec.Sinks[0].Webhook.Auth.BearerToken == nil {
+		t.Fatal("v1beta1 read lost the bearer webhook configuration")
+	}
+	betaCA := beta.Spec.Sinks[0].Webhook.Auth.BearerToken.CASecretRef
+	if betaCA == nil || betaCA.Name != "alpha-ca" || betaCA.Key != "alpha-ca.crt" {
+		t.Fatalf("v1beta1 read lost caSecretRef name/key: %+v", betaCA)
+	}
+
+	// Write new CA reference values via the NEW version; read back via the OLD.
+	beta.Spec.Sinks[0].Webhook.Auth.BearerToken.CASecretRef = &aibomv1beta1.SecretKeyRef{Name: "beta-ca", Key: "beta-ca.crt"}
 	beta.Spec.BOMGeneration.StaleThresholdReconciles = 7
 	if err := env.k8sClient.Update(ctx, &beta); err != nil {
 		t.Fatalf("update via v1beta1: %v", err)
@@ -89,6 +109,13 @@ func TestIntegration_DualVersionServing(t *testing.T) {
 	}
 	if alphaAgain.Spec.BOMGeneration.StaleThresholdReconciles != 7 {
 		t.Errorf("v1alpha1 read after v1beta1 write: StaleThresholdReconciles = %d, want 7", alphaAgain.Spec.BOMGeneration.StaleThresholdReconciles)
+	}
+	if len(alphaAgain.Spec.Sinks) != 1 || alphaAgain.Spec.Sinks[0].Webhook == nil || alphaAgain.Spec.Sinks[0].Webhook.Auth == nil || alphaAgain.Spec.Sinks[0].Webhook.Auth.BearerToken == nil {
+		t.Fatal("v1alpha1 read after v1beta1 write lost the bearer webhook configuration")
+	}
+	alphaCA := alphaAgain.Spec.Sinks[0].Webhook.Auth.BearerToken.CASecretRef
+	if alphaCA == nil || alphaCA.Name != "beta-ca" || alphaCA.Key != "beta-ca.crt" {
+		t.Errorf("v1alpha1 read after v1beta1 write lost caSecretRef name/key: %+v", alphaCA)
 	}
 }
 

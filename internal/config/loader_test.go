@@ -649,6 +649,18 @@ func TestLoad_InvalidCR_WebhookAuthOverCleartext(t *testing.T) {
 		}
 	}
 
+	// A custom CA does not make bearer credentials over http legal.
+	withCA := bearer.DeepCopy()
+	withCA.BearerToken.CASecretRef = &aibomv1beta1.SecretKeyRef{Name: "ca", Key: "ca.crt"}
+	l = newLoader(t, nil, mkCR("http://collector.internal/bom", withCA))
+	result, err = l.Load(context.Background())
+	if err != nil || len(result.Errors) != 1 || result.Snapshot.Source != SourceCompiledDefaults {
+		t.Fatalf("http with bearer CA must fall back: err=%v result=%+v", err, result)
+	}
+	if !strings.Contains(result.Errors[0].Message, "cleartext") {
+		t.Errorf("custom CA bypassed the cleartext rule: %+v", result.Errors)
+	}
+
 	// http WITHOUT auth: legal.
 	l = newLoader(t, nil, mkCR("http://collector.internal/bom", nil))
 	result, err = l.Load(context.Background())

@@ -165,6 +165,13 @@ func (f *ClientSinkFactory) buildWebhookSink(ctx context.Context, s aibomv1beta1
 				return nil, le
 			}
 			cfg.BearerToken = data
+			if s.Webhook.Auth.BearerToken.CASecretRef != nil {
+				caData, le := f.readSecretKey(ctx, s.Name, "Type=Webhook", "webhook.auth.bearerToken.caSecretRef", *s.Webhook.Auth.BearerToken.CASecretRef)
+				if le != nil {
+					return nil, le
+				}
+				cfg.CAPEM = caData
+			}
 		}
 		if s.Webhook.Auth.MTLS != nil {
 			certData, le := f.readSecretKey(ctx, s.Name, "Type=Webhook", "webhook.auth.mtls.clientCertSecretRef", s.Webhook.Auth.MTLS.ClientCertSecretRef)

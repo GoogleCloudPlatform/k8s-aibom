@@ -272,7 +272,17 @@ spec:
             secretRef:
               name: graph-ingest-creds
               key: token
+            # Optional: trust a private CA instead of system roots.
+            caSecretRef:
+              name: graph-ingest-ca
+              key: ca.crt
 ```
+
+For private-CA HTTPS endpoints, `webhook.auth.bearerToken.caSecretRef`
+references a PEM CA bundle in the controller's namespace, just like
+`webhook.auth.mtls.caSecretRef`. Omit it to use system roots. Certificate
+and hostname verification remain enabled; bearer tokens over plain HTTP
+are rejected. Secret references require `rbac.sinkSecretAccess=true`.
 
 **GCS authentication:** the GCS sink uses Application Default Credentials. On GKE, bind the controller's ServiceAccount to a Google service account with Workload Identity: set `serviceAccount.annotations` in the chart values to `iam.gke.io/gcp-service-account: <gsa-email>`, and grant that account `roles/storage.objectCreator` on the bucket. Where ADC is not available, `gcs.credentialsSecretRef` (`name`, `key`) names a Secret in the controller's namespace that holds a service-account JSON key. Details: [docs/security-model.md](docs/security-model.md#authentication).
 
