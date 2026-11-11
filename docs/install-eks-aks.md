@@ -30,9 +30,10 @@ identically from any cloud.
 
 **Sinks.** The CRD-status document (always on) and the webhook sink
 are cloud-neutral; use the webhook sink to feed any HTTPS consumer —
-[Dependency-Track](integrations/dependency-track.md), GUAC's
-blob-storage collector, an S3/Blob-writing relay of your own, or a
-SIEM. The GCS sink is the one Google-specific component; on EKS/AKS
+[Dependency-Track](integrations/dependency-track.md),
+[GUAC](integrations/guac.md) through one of its collectors, an
+S3/Blob-writing relay of your own, or a SIEM. The GCS sink is the one
+Google-specific component; on EKS/AKS
 either skip it or reach GCS cross-cloud via Workload Identity
 Federation if GCS is genuinely your audit archive.
 
