@@ -123,6 +123,9 @@ type InferencePoolView struct {
 
 	// newClient builds the dynamic client; tests substitute one.
 	newClient func(*rest.Config) (dynamic.Interface, error)
+	// fanoutRetry is the first delay before an incomplete re-enqueue
+	// fan-out is retried; doubles up to InferencePoolFanoutRetryMax.
+	fanoutRetry time.Duration
 
 	mu      sync.Mutex
 	running bool
@@ -519,8 +522,20 @@ func (v *InferencePoolView) take() (all bool, nss []string) {
 	return all, nss
 }
 
-// Start runs the re-enqueue loop until ctx ends.
+// InferencePoolFanoutRetryMax caps the delay between retries of an
+// incomplete re-enqueue fan-out.
+const InferencePoolFanoutRetryMax = 2 * time.Minute
+
+// Start runs the re-enqueue loop until ctx ends. A fan-out that does not
+// complete (a list error or its timeout) is requested again after a
+// capped backoff: a lost re-enqueue would leave documents with stale
+// pool membership until an unrelated workload event.
 func (v *InferencePoolView) Start(ctx context.Context) error {
+	retry := v.fanoutRetry
+	if retry <= 0 {
+		retry = 5 * time.Second
+	}
+	backoff := retry
 	for {
 		select {
 		case <-ctx.Done():
@@ -537,16 +552,35 @@ func (v *InferencePoolView) Start(ctx context.Context) error {
 				allowed = snap.WorkloadKinds
 			}
 		}
+		var failed []string
+		failedAll := false
 		if all {
-			v.Fanout.trigger(ctx, allowed, "", "re-enqueued workloads after an InferencePool view change")
+			failedAll = !v.Fanout.trigger(ctx, allowed, "", "re-enqueued workloads after an InferencePool view change")
+		} else {
+			for _, ns := range nss {
+				if !v.Fanout.trigger(ctx, allowed, ns, "re-enqueued workloads after an InferencePool change") {
+					failed = append(failed, ns)
+				}
+			}
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		if !failedAll && len(failed) == 0 {
+			backoff = retry
 			continue
 		}
-		for _, ns := range nss {
-			if ctx.Err() != nil {
-				return nil
-			}
-			v.Fanout.trigger(ctx, allowed, ns, "re-enqueued workloads after an InferencePool change")
+		if failedAll {
+			v.request("")
 		}
+		for _, ns := range failed {
+			v.request(ns)
+		}
+		ctrl.Log.WithName("inferencepool-view").Info("InferencePool re-enqueue incomplete; retrying", "retryIn", backoff.String())
+		if !sleepCtx(ctx, backoff) {
+			return nil
+		}
+		backoff = nextBackoff(backoff, InferencePoolFanoutRetryMax)
 	}
 }
 

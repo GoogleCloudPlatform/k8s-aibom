@@ -155,13 +155,15 @@ func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.
 
 // trigger re-enqueues every workload of every reporting kind, in ns
 // only when ns is set (an InferencePool change, Design 007 §2), and logs
-// each kind's count as what.
-func (f *AllowlistFanout) trigger(parent context.Context, allowed config.WorkloadKindSet, ns, what string) {
+// each kind's count as what. It reports whether every kind was listed
+// completely; the allowlist path ignores that, the InferencePool view
+// retries.
+func (f *AllowlistFanout) trigger(parent context.Context, allowed config.WorkloadKindSet, ns, what string) bool {
 	f.slotOnce.Do(func() { f.slot = make(chan struct{}, 1) })
 	select {
 	case f.slot <- struct{}{}:
 	case <-parent.Done():
-		return
+		return false
 	}
 	defer func() { <-f.slot }()
 	timeout := f.Timeout
@@ -183,20 +185,23 @@ func (f *AllowlistFanout) trigger(parent context.Context, allowed config.Workloa
 	}
 	f.mu.Unlock()
 
+	complete := true
 	for _, k := range kinds {
 		if k.supervised && (!allowed.Allows(k.gk) || inactive[k.gk]) {
 			continue
 		}
 		sent, err := f.fanOutKind(ctx, k, ns)
 		if err != nil {
+			complete = false
 			log.Info("fan-out incomplete", "kind", k.gk.String(), "enqueued", sent, "err", err.Error())
 			if ctx.Err() != nil {
-				return
+				return false
 			}
 			continue
 		}
 		log.Info(what, "kind", k.gk.String(), "count", sent)
 	}
+	return complete
 }
 
 func (f *AllowlistFanout) fanOutKind(ctx context.Context, k *fanoutKind, ns string) (int, error) {

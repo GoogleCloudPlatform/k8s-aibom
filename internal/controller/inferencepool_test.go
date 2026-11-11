@@ -449,3 +449,61 @@ func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
 	default:
 	}
 }
+
+// flakyListReader fails the first `fail` List calls, then lists one
+// Deployment in the requested namespace.
+type flakyListReader struct {
+	client.Reader
+	mu    sync.Mutex
+	fail  int
+	calls int
+}
+
+func (r *flakyListReader) List(_ context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if r.calls <= r.fail {
+		return apierrors.NewServiceUnavailable("injected list failure")
+	}
+	o := &client.ListOptions{}
+	o.ApplyOptions(opts)
+	list.(*appsv1.DeploymentList).Items = []appsv1.Deployment{{ObjectMeta: metav1.ObjectMeta{Namespace: o.Namespace, Name: "vllm"}}}
+	return nil
+}
+
+// A pool change whose re-enqueue fan-out fails (a list error or a
+// timeout) is retried: the affected workloads are still re-enqueued,
+// otherwise their documents would keep stale membership until an
+// unrelated workload event.
+func TestInferencePoolView_RetriesIncompleteFanout(t *testing.T) {
+	reader := &flakyListReader{fail: 2}
+	f := &AllowlistFanout{Reader: reader}
+	f.Source(schema.GroupKind{Group: "apps", Kind: "Deployment"}, false,
+		func() client.ObjectList { return &appsv1.DeploymentList{} },
+		func(l client.ObjectList) []client.Object {
+			var out []client.Object
+			for i := range l.(*appsv1.DeploymentList).Items {
+				out = append(out, &l.(*appsv1.DeploymentList).Items[i])
+			}
+			return out
+		})
+	ch := f.kinds[0].ch
+	v := &InferencePoolView{Fanout: f, fanoutRetry: 10 * time.Millisecond}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = v.Start(ctx) }()
+	defer func() { cancel(); <-done }()
+
+	v.request("ns")
+	select {
+	case ev := <-ch:
+		if ev.Object.GetNamespace() != "ns" || ev.Object.GetName() != "vllm" {
+			t.Fatalf("re-enqueued %s/%s", ev.Object.GetNamespace(), ev.Object.GetName())
+		}
+	case <-time.After(5 * time.Second):
+		reader.mu.Lock()
+		defer reader.mu.Unlock()
+		t.Fatalf("the namespace was never re-enqueued after %d list calls", reader.calls)
+	}
+}
