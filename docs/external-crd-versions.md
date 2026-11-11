@@ -442,10 +442,27 @@ selector only: no pod ownership, model identity, digest, Gateway route,
 Endpoint Picker health or traffic is inferred.
 
 **Unavailable view.** While the CRD is absent, not Ready, or the
-list/watch has not synced or is failing, no new pool facts are created
-and published ones are kept (read back from the inline document); once
-a list succeeds, membership is recomputed and stale facts are removed.
-Membership facts, never the view's availability, enter the input hash.
+list/watch has not synced or is failing (including a persistent 403),
+no new pool facts are created and published ones are never removed;
+once a list succeeds, membership is recomputed and stale facts are
+removed. Published facts are read back from the inline document; for an
+external or truncated document, from the controller's in-memory record
+of the document it last wrote or confirmed (matched by the document's
+SHA-256); or they are known to be none when the stored input hash
+equals the hash without pool facts. Membership facts, never the view's
+availability, enter the input hash, so availability changes alone
+re-emit nothing.
+
+**Known limitation.** The in-memory record does not survive a
+controller restart, and sinks are write-only. So after a restart, for an
+AIBOM whose document is external or truncated and whose stored input
+hash does not prove it had no pool facts, published membership cannot
+be determined while the view is unavailable. The controller then leaves
+that document unchanged and retries (logged at info) rather than risk
+removing facts; it is updated as soon as the view is readable. With the
+CRD absent for good, such a document is not updated until the CRD is
+installed again. Inline documents (the default up to 256 KiB) are not
+affected.
 
 **Not read:** `spec.targetPorts`, the rest of `spec.endpointPickerRef`,
 `status.*`; the older `inference.networking.x-k8s.io` group (any

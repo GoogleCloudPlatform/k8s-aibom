@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
@@ -289,8 +290,10 @@ func TestInferencePoolFacts_Decision(t *testing.T) {
 		{"inactive keeps inline facts", inactive, scraper.CategoryInference, inline, published, false},
 		{"unavailable, first document: none", unsynced, scraper.CategoryInference, nil, nil, false},
 		{"unavailable, hash proves none", unsynced, scraper.CategoryInference, externalNoPools, nil, false},
+		// Not inline and not recorded by this process (e.g. after a
+		// restart): never dropped, the update waits for the view.
 		{"unsynced, unknowable: defer", unsynced, scraper.CategoryInference, external, nil, true},
-		{"inactive, unknowable: proceed", inactive, scraper.CategoryInference, external, nil, false},
+		{"inactive, unknowable: defer", inactive, scraper.CategoryInference, external, nil, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -305,6 +308,72 @@ func TestInferencePoolFacts_Decision(t *testing.T) {
 				t.Errorf("got %v defer=%v, want %v defer=%v", got, deferred, tc.want, tc.wantDefer)
 			}
 		})
+	}
+}
+
+// External and truncated documents: the facts this process published
+// are kept from its record while the view is unavailable, only for the
+// document the AIBOM still carries; inline documents are not recorded.
+func TestInferencePoolFacts_RecordedForExternalDocuments(t *testing.T) {
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "w"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "vllm"}}}},
+	}
+	req := WorkloadReconcileRequest{Workload: scraper.Workload{Namespace: "ns", Name: "w", Object: dep}}
+	in := &scraper.BOMInputs{ScraperName: "inference.spec", Confidence: scraper.ConfidenceInferred, Category: scraper.CategoryInference,
+		Components: []scraper.Component{{Name: "changed-since"}}} // inputs no longer match the stored hash
+	published := []scraper.InferencePoolMembership{{Pool: "ns/p", EndpointPicker: "epp"}}
+	external := func(sha string, truncated bool) *aibomv1beta1.AIBOM {
+		a := &aibomv1beta1.AIBOM{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "w-aibom"},
+			Status: aibomv1beta1.AIBOMStatus{InputHash: "stale", BOMHash: sha,
+				BOMDocument: &aibomv1beta1.BOMDocumentRef{SHA256: sha, Truncated: truncated}}}
+		if !truncated {
+			a.Status.BOMDocument.External = &aibomv1beta1.ExternalBOMRef{Sink: "gcs", URL: "gs://b/o"}
+		}
+		return a
+	}
+
+	for _, truncated := range []bool{false, true} {
+		v := &InferencePoolView{}
+		v.begin()
+		_ = (poolStore{v}).Replace([]interface{}{pool("ns", "p", map[string]string{"app": "vllm"}, "epp")}, "1")
+		r := &WorkloadReconciler{Pools: v}
+		a := external("sha-1", truncated)
+		v.remember(a, published)
+
+		for _, down := range []func(){
+			func() {
+				v.failed(apierrors.NewForbidden(schema.GroupResource{Resource: "inferencepools"}, "", nil), func() {})
+			},
+			func() { v.end() }, // CRD removed or not Ready
+		} {
+			down()
+			got, deferred, err := r.inferencePoolFacts(req, in, a)
+			if err != nil || deferred || !reflect.DeepEqual(got, published) {
+				t.Fatalf("truncated=%v: got %v defer=%v err=%v, want the recorded facts", truncated, got, deferred, err)
+			}
+		}
+		// A different document on the AIBOM (another writer, or a
+		// rebuilt document this process did not record): unknown.
+		if _, deferred, _ := r.inferencePoolFacts(req, in, external("sha-2", truncated)); !deferred {
+			t.Errorf("truncated=%v: a document this process did not record must defer", truncated)
+		}
+		// Deleted AIBOM: record dropped.
+		v.forget(client.ObjectKeyFromObject(a))
+		if _, deferred, _ := r.inferencePoolFacts(req, in, a); !deferred {
+			t.Errorf("truncated=%v: a forgotten record must not be used", truncated)
+		}
+	}
+
+	// Inline documents are read back directly and never recorded.
+	v := &InferencePoolView{}
+	inline := aibomWithDoc(t, published)
+	inline.Name, inline.Namespace = "inline", "ns"
+	inline.Status.BOMDocument.SHA256 = "sha-inline"
+	v.remember(inline, published)
+	if _, ok := v.recall(client.ObjectKeyFromObject(inline), "sha-inline"); ok {
+		t.Error("an inline document must not be recorded")
 	}
 }
 

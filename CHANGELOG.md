@@ -126,8 +126,13 @@ and the `AIBOM` status summary fields and the API schema do not change.
   (#226), so a CRD installed later needs no restart. A pool change
   rebuilds the affected documents; while the pool view is unavailable
   (CRD absent, not Ready, or list/watch failing) no new facts are added
-  and published ones are kept. Documents of workloads that match no
-  pool are byte-identical to before. **Upgrade note:** the ClusterRole
+  and published ones are kept, and availability changes alone re-emit
+  nothing. Documents of workloads that match no pool are byte-identical
+  to before. Known limitation: after a controller restart, an AIBOM
+  whose document is external or truncated (over the inline threshold)
+  and may carry pool facts is left unchanged while the pool view is
+  unavailable, rather than risk dropping them; see
+  docs/external-crd-versions.md. **Upgrade note:** the ClusterRole
   gains one read-only rule, `get`/`list`/`watch` on
   `inference.networking.k8s.io/inferencepools`. Helm installs get it;
   custom RBAC must add it, otherwise the pool list is forbidden, the

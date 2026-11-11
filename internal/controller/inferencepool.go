@@ -32,11 +32,13 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -59,9 +61,9 @@ var (
 )
 
 // InferencePoolDeferRequeue is how soon a reconcile that deferred its
-// pool facts (view unsynced, previously published facts unreadable)
-// retries. The view's own recovery re-enqueues everything sooner.
-const InferencePoolDeferRequeue = 30 * time.Second
+// pool facts (view unavailable, previously published facts unknown)
+// retries. The view's recovery re-enqueues everything sooner.
+const InferencePoolDeferRequeue = time.Minute
 
 // +kubebuilder:rbac:groups=inference.networking.k8s.io,resources=inferencepools,verbs=get;list;watch
 
@@ -135,6 +137,22 @@ type InferencePoolView struct {
 	}
 	kickOnce sync.Once
 	kick     chan struct{}
+
+	// published records, per AIBOM, the membership this process last
+	// published and the SHA-256 of the document that carries it. It is
+	// how published facts are kept while the view is unavailable when
+	// the document is external or truncated (the AIBOM status then holds
+	// only the document's hash, and sinks are write-only). An entry is
+	// trusted only while the AIBOM still carries that document.
+	published struct {
+		sync.Mutex
+		m map[types.NamespacedName]publishedMembership
+	}
+}
+
+type publishedMembership struct {
+	sha   string
+	facts []scraper.InferencePoolMembership
 }
 
 var _ manager.LeaderElectionRunnable = (*InferencePoolView)(nil)
@@ -532,19 +550,80 @@ func (v *InferencePoolView) Start(ctx context.Context) error {
 	}
 }
 
+// remember records the membership carried by the document a now holds.
+// Only documents that are not inline are recorded: an inline document
+// is read back directly, so the record stays as small as the set of
+// oversized documents.
+func (v *InferencePoolView) remember(a *aibomv1beta1.AIBOM, facts []scraper.InferencePoolMembership) {
+	if v == nil {
+		return
+	}
+	key, sha := client.ObjectKeyFromObject(a), documentSHA(a)
+	ref := a.Status.BOMDocument
+	if sha == "" || ref != nil && ref.Inline != nil && len(ref.Inline.Data) > 0 {
+		v.forget(key)
+		return
+	}
+	v.published.Lock()
+	defer v.published.Unlock()
+	if v.published.m == nil {
+		v.published.m = map[types.NamespacedName]publishedMembership{}
+	}
+	v.published.m[key] = publishedMembership{sha: sha, facts: append([]scraper.InferencePoolMembership(nil), facts...)}
+}
+
+// recall returns the membership recorded for the document with the
+// given SHA-256, if this process published or confirmed it.
+func (v *InferencePoolView) recall(key types.NamespacedName, sha string) ([]scraper.InferencePoolMembership, bool) {
+	if v == nil || sha == "" {
+		return nil, false
+	}
+	v.published.Lock()
+	defer v.published.Unlock()
+	p, ok := v.published.m[key]
+	if !ok || p.sha != sha {
+		return nil, false
+	}
+	return append([]scraper.InferencePoolMembership(nil), p.facts...), true
+}
+
+// forget drops the record of a deleted AIBOM.
+func (v *InferencePoolView) forget(key types.NamespacedName) {
+	if v == nil {
+		return
+	}
+	v.published.Lock()
+	delete(v.published.m, key)
+	v.published.Unlock()
+}
+
+// documentSHA is the SHA-256 of the document an AIBOM currently
+// carries, inline or not.
+func documentSHA(a *aibomv1beta1.AIBOM) string {
+	if a.Status.BOMDocument != nil && a.Status.BOMDocument.SHA256 != "" {
+		return a.Status.BOMDocument.SHA256
+	}
+	return a.Status.BOMHash
+}
+
 // inferencePoolFacts returns the pool membership to publish for a
 // workload, or deferred=true when it cannot be decided yet.
 //
 // Membership is computed only for inference workloads that reached
 // this point (opted in, allowed, not rolled up, classified), from the
 // Pod templates their scraper reads. With a usable view the facts are
-// recomputed from it, which also removes stale ones. With an
-// unavailable view no new facts are created and the previously
-// published ones are kept: read back from the inline document, or known
-// to be none when the stored input hash equals the hash without pool
-// facts. When neither tells, a reconcile defers while the watch is
-// starting or recovering; with no watch at all (CRD absent or not
-// Ready) it proceeds without pool facts.
+// recomputed from it, which also removes stale ones.
+//
+// With an unavailable view (CRD absent, not Ready or removed, list or
+// watch not synced or failing) no new facts are created and the
+// published ones are kept exactly. They are taken from, in order: the
+// inline document; this process's record of the document the AIBOM
+// carries (external or truncated documents); or the stored input hash,
+// when it equals the hash without pool facts (none were published).
+// When none of these determines them, which needs a document that is
+// not inline and was not written or confirmed by this process, the
+// update is deferred rather than risk removing published facts; it
+// proceeds once the view is readable again.
 func (r *WorkloadReconciler) inferencePoolFacts(req WorkloadReconcileRequest, inputs *scraper.BOMInputs, existing *aibomv1beta1.AIBOM) (facts []scraper.InferencePoolMembership, deferred bool, err error) {
 	if r.Pools == nil || inputs.Category != scraper.CategoryInference {
 		return nil, false, nil
@@ -559,6 +638,9 @@ func (r *WorkloadReconciler) inferencePoolFacts(req WorkloadReconcileRequest, in
 	if prev, ok := publishedInferencePools(existing); ok {
 		return prev, false, nil
 	}
+	if prev, ok := r.Pools.recall(client.ObjectKeyFromObject(existing), documentSHA(existing)); ok {
+		return prev, false, nil
+	}
 	without := *inputs
 	without.InferencePools = nil
 	h, err := scraper.HashBOMInputs(&without)
@@ -568,7 +650,7 @@ func (r *WorkloadReconciler) inferencePoolFacts(req WorkloadReconcileRequest, in
 	if existing.Status.InputHash != "" && existing.Status.InputHash == h {
 		return nil, false, nil
 	}
-	return nil, st == PoolViewUnsynced, nil
+	return nil, true, nil
 }
 
 // publishedInferencePools reads the routing facts of the AIBOM's

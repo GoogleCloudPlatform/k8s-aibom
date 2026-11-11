@@ -275,6 +275,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
 			}
+			r.Pools.forget(client.ObjectKeyFromObject(aibom))
 		} else if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("get orphaned AIBOM: %w", err)
 		}
@@ -322,8 +323,12 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("inference pool membership: %w", err)
 	}
 	if deferPools {
-		logger.V(1).Info("InferencePool view not readable yet and previously published membership unknown; deferring",
-			"workload_namespace", req.Workload.Namespace, "workload_name", req.Workload.Name)
+		// Never remove published membership because the view is
+		// unavailable (Design 007 §2): the document is left as it is
+		// until the view is readable again.
+		logger.Info("InferencePool view unavailable and the published pool membership of this AIBOM's external or truncated document is unknown to this process; document update deferred until the view is readable",
+			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name,
+			"pool_view", r.Pools.State().String())
 		return ctrl.Result{RequeueAfter: InferencePoolDeferRequeue}, nil
 	}
 	inputs.InferencePools = pools
@@ -341,6 +346,8 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				"workload_name", req.Workload.Name,
 				"input_hash", inputHash[:12],
 			)
+			// The document is unchanged, so it carries exactly these facts.
+			r.Pools.remember(&existing, pools)
 			r.countExtractionErrors(inputs.Errors)
 			prevErrors := existing.Status.ConsecutiveErrors
 			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
@@ -471,6 +478,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		r.recordStatusPersistFailure(aibom, req, err)
 		return ctrl.Result{}, fmt.Errorf("update AIBOM status: %w", err)
 	}
+	r.Pools.remember(aibom, pools)
 	if sinkFailed {
 		// Deterministic self-heal: without this, a re-emit would wait
 		// for the next watch event, which for a quiet workload may
@@ -780,6 +788,7 @@ func (r *WorkloadReconciler) deleteWorkloadAIBOM(ctx context.Context, req Worklo
 	if err := r.Delete(ctx, aibom); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete %s AIBOM: %w", why, err)
 	}
+	r.Pools.forget(client.ObjectKeyFromObject(aibom))
 	return nil
 }
 

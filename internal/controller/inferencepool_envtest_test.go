@@ -40,7 +40,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/sink"
 )
 
 // Design 007 §2 (Part 2a) against a real API server: matching on Pod
@@ -352,9 +354,10 @@ func TestIntegration_InferencePool_CRDLifecycle(t *testing.T) {
 // poolFault fails InferencePool list/watch on demand and can end live
 // watches, so the reflector has to come back through a failing call.
 type poolFault struct {
-	mu      sync.Mutex
-	on      bool
-	watches []watch.Interface
+	mu        sync.Mutex
+	on        bool
+	forbidden bool // permission denied instead of a transient error
+	watches   []watch.Interface
 }
 
 func (f *poolFault) set(on bool) {
@@ -380,6 +383,12 @@ func (f *poolFault) breakWatches() {
 }
 
 func (f *poolFault) err() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.forbidden {
+		return apierrors.NewForbidden(schema.GroupResource{Group: InferencePoolGVK.Group, Resource: "inferencepools"}, "",
+			fmt.Errorf("injected: RBAC does not grant list on inferencepools"))
+	}
 	return apierrors.NewServiceUnavailable("injected InferencePool read failure")
 }
 
@@ -439,15 +448,7 @@ func (r faultyNamespaced) Watch(ctx context.Context, opts metav1.ListOptions) (w
 // recovery that changes nothing re-emits nothing.
 func TestIntegration_InferencePool_ReadFailurePreservesThenRecovers(t *testing.T) {
 	fault := &poolFault{}
-	env := startEnvTestWith(t, envTestOptions{pools: func(v *InferencePoolView) {
-		v.newClient = func(cfg *rest.Config) (dynamic.Interface, error) {
-			dc, err := dynamic.NewForConfig(cfg)
-			if err != nil {
-				return nil, err
-			}
-			return faultyDynamic{dc, fault}, nil
-		}
-	}})
+	env := startEnvTestWith(t, envTestOptions{pools: faultyPools(fault)})
 	ctx := context.Background()
 	c := env.k8sClient
 	ns := "pool-faults"
@@ -494,5 +495,241 @@ func TestIntegration_InferencePool_ReadFailurePreservesThenRecovers(t *testing.T
 		return nil
 	})
 	requireDocUnchanged(t, c, ctx, key, recovered, "recovery without changes")
+	requireManagerRunning(t, env)
+}
+
+// docSink records every emitted document by workload name: the only
+// place an external or truncated document's content can be checked.
+type docSink struct {
+	mu   sync.Mutex
+	docs map[string][][]byte
+}
+
+func (s *docSink) Name() string { return "test-docs" }
+
+func (s *docSink) Emit(_ context.Context, doc *bom.Document, meta sink.SinkMeta) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.docs == nil {
+		s.docs = map[string][][]byte{}
+	}
+	s.docs[meta.WorkloadName] = append(s.docs[meta.WorkloadName], append([]byte(nil), doc.JSON...))
+	return "test://" + meta.WorkloadNamespace + "/" + meta.WorkloadName, nil
+}
+
+func (s *docSink) HealthCheck(context.Context) error { return nil }
+func (s *docSink) WriteOnly() bool                   { return false }
+
+func (s *docSink) emitted(name string) [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([][]byte(nil), s.docs[name]...)
+}
+
+// routingOfJSON reads the routing facts of one emitted document.
+func routingOfJSON(t *testing.T, data []byte) []pm {
+	t.Helper()
+	facts, ok := publishedInferencePools(&aibomv1beta1.AIBOM{Status: aibomv1beta1.AIBOMStatus{
+		BOMDocument: &aibomv1beta1.BOMDocumentRef{Inline: &aibomv1beta1.InlineBOM{Data: data}}}})
+	if !ok {
+		t.Fatal("emitted document does not parse")
+	}
+	return facts
+}
+
+// externalDocuments makes every document external: an inline threshold
+// below any document's size, and one capturing sink.
+func externalDocuments(env *envTestEnv) *docSink {
+	ds := &docSink{}
+	prev := env.configStore.Load()
+	next := *prev
+	next.InlineThreshold = 1
+	next.ExternalSinks = []sink.Sink{ds}
+	next.SourceGeneration = prev.SourceGeneration + 1
+	next.LoadedAt = time.Now()
+	env.configStore.Store(&next)
+	return ds
+}
+
+// waitEmitted waits for an emitted document of name that contains
+// every want and records exactly facts; it returns the emit count.
+func waitEmitted(t *testing.T, ds *docSink, name string, facts []pm, wants ...string) int {
+	t.Helper()
+	n := 0
+	eventually(t, 60*time.Second, 200*time.Millisecond, func() error {
+		docs := ds.emitted(name)
+		n = len(docs)
+		if n == 0 {
+			return fmt.Errorf("nothing emitted for %s", name)
+		}
+		last := docs[n-1]
+		for _, w := range wants {
+			if !bytes.Contains(last, []byte(w)) {
+				return fmt.Errorf("last document lacks %q", w)
+			}
+		}
+		if got := routingOfJSON(t, last); !reflect.DeepEqual(got, facts) {
+			return fmt.Errorf("last document routing %v, want %v", got, facts)
+		}
+		return nil
+	})
+	return n
+}
+
+// requireNoEmission checks, over a few seconds, that nothing more is
+// emitted for name and the stored input hash does not change.
+func requireNoEmission(t *testing.T, env *envTestEnv, ds *docSink, key types.NamespacedName, name string, n int, why string) {
+	t.Helper()
+	before, err := getAIBOM(env.k8sClient, context.Background(), key)
+	if err != nil {
+		t.Fatalf("%s: %v", why, err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := len(ds.emitted(name)); got != n {
+			t.Fatalf("%s: document re-emitted (%d emits, want %d)", why, got, n)
+		}
+		a, err := getAIBOM(env.k8sClient, context.Background(), key)
+		if err != nil {
+			t.Fatalf("%s: %v", why, err)
+		}
+		if a.Status.InputHash != before.Status.InputHash {
+			t.Fatalf("%s: input hash changed on availability alone", why)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func faultyPools(fault *poolFault) func(*InferencePoolView) {
+	return func(v *InferencePoolView) {
+		v.newClient = func(cfg *rest.Config) (dynamic.Interface, error) {
+			dc, err := dynamic.NewForConfig(cfg)
+			if err != nil {
+				return nil, err
+			}
+			return faultyDynamic{dc, fault}, nil
+		}
+	}
+}
+
+func waitViewState(t *testing.T, env *envTestEnv, want PoolViewState) {
+	t.Helper()
+	eventually(t, 60*time.Second, 50*time.Millisecond, func() error {
+		if st := env.pools.State(); st != want {
+			return fmt.Errorf("view %s, want %s", st, want)
+		}
+		return nil
+	})
+}
+
+// External documents (no inline copy in status): published membership
+// survives a temporary list/watch failure and CRD removal, through
+// workload changes, with no re-emission on availability changes alone;
+// recovery applies changed and deleted membership and re-emits nothing
+// when membership is unchanged.
+func TestIntegration_InferencePool_ExternalDocumentPreserved(t *testing.T) {
+	fault := &poolFault{}
+	env := startEnvTestWith(t, envTestOptions{pools: faultyPools(fault)})
+	ds := externalDocuments(env)
+	ctx := context.Background()
+	c := env.k8sClient
+	ns := "pool-external"
+	mustCreateOptedInNamespace(t, c, ctx, ns)
+	serving := map[string]string{"llm-d.ai/inferenceServing": "true"}
+	createPool(t, c, ctx, ns, "p", serving, "")
+	mustCreate(t, c, ctx, poolDeployment(ns, "vllm", serving, nil, "vllm/vllm-openai:v0.6.3"))
+	key := types.NamespacedName{Name: AIBOMNameForWorkload("apps", "Deployment", "vllm"), Namespace: ns}
+	n := waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}})
+	a, err := getAIBOM(c, ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := a.Status.BOMDocument; ref == nil || ref.Inline != nil || ref.External == nil {
+		t.Fatalf("the document must be external, got %+v", ref)
+	}
+
+	// Temporary failure: nothing re-emitted, hash unchanged.
+	fault.set(true)
+	fault.breakWatches()
+	waitViewState(t, env, PoolViewUnsynced)
+	requireNoEmission(t, env, ds, key, "vllm", n, "temporary failure")
+	// A workload change while unavailable keeps the published fact;
+	// pool changes meanwhile are not applied.
+	deletePool(t, c, ctx, ns, "p")
+	createPool(t, c, ctx, ns, "q", serving, "q-epp")
+	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.7.0", nil)
+	waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}}, "v0.7.0")
+	// Recovery with changed membership.
+	fault.set(false)
+	n = waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/q", EndpointPicker: "q-epp"}}, "v0.7.0")
+	waitViewState(t, env, PoolViewUsable)
+	requireNoEmission(t, env, ds, key, "vllm", n, "settled after recovery")
+
+	// Recovery with unchanged membership: nothing re-emitted.
+	fault.set(true)
+	fault.breakWatches()
+	waitViewState(t, env, PoolViewUnsynced)
+	fault.set(false)
+	waitViewState(t, env, PoolViewUsable)
+	requireNoEmission(t, env, ds, key, "vllm", n, "recovery without changes")
+
+	// CRD removal: preserved, nothing re-emitted; a workload change
+	// keeps the fact; re-creation (no pools) removes it.
+	deleteCRD(t, c, InferencePoolCRD)
+	waitViewState(t, env, PoolViewInactive)
+	requireNoEmission(t, env, ds, key, "vllm", n, "CRD removal")
+	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.8.0", nil)
+	waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/q", EndpointPicker: "q-epp"}}, "v0.8.0")
+	installExternalCRD(t, env, poolCRDFile)
+	waitCRDServes(t, env, InferencePoolCRD, "v1")
+	waitEmitted(t, ds, "vllm", nil, "v0.8.0")
+	requireManagerRunning(t, env)
+}
+
+// A persistent permission-denied list: the view never recovers, yet
+// workload changes still go through with the published facts kept, a
+// new workload gets a document with no invented facts, and nothing is
+// re-emitted on availability alone. Once permission is granted the
+// view syncs and membership is applied.
+func TestIntegration_InferencePool_PersistentPermissionDenied(t *testing.T) {
+	fault := &poolFault{}
+	env := startEnvTestWith(t, envTestOptions{pools: faultyPools(fault)})
+	ds := externalDocuments(env)
+	ctx := context.Background()
+	c := env.k8sClient
+	ns := "pool-forbidden"
+	mustCreateOptedInNamespace(t, c, ctx, ns)
+	serving := map[string]string{"llm-d.ai/inferenceServing": "true"}
+	createPool(t, c, ctx, ns, "p", serving, "")
+	mustCreate(t, c, ctx, poolDeployment(ns, "vllm", serving, nil, "vllm/vllm-openai:v0.6.3"))
+	key := types.NamespacedName{Name: AIBOMNameForWorkload("apps", "Deployment", "vllm"), Namespace: ns}
+	n := waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}})
+
+	fault.mu.Lock()
+	fault.on, fault.forbidden = true, true
+	fault.mu.Unlock()
+	fault.breakWatches()
+	waitViewState(t, env, PoolViewUnsynced)
+	requireNoEmission(t, env, ds, key, "vllm", n, "permission denied")
+
+	// Not blocked: the change is emitted promptly, fact kept.
+	start := time.Now()
+	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.7.0", nil)
+	n = waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}}, "v0.7.0")
+	if d := time.Since(start); d > InferencePoolDeferRequeue {
+		t.Errorf("a workload change took %s under a persistent 403; it must not wait for the view", d)
+	}
+	// A workload first seen while denied gets no invented fact.
+	mustCreate(t, c, ctx, poolDeployment(ns, "vllm-new", serving, nil, "vllm/vllm-openai:v0.6.3"))
+	waitEmitted(t, ds, "vllm-new", nil)
+	if st := env.pools.State(); st != PoolViewUnsynced {
+		t.Fatalf("view %s under a persistent 403", st)
+	}
+
+	// Permission granted: the view syncs; the new workload gains its
+	// fact; the old one's membership is unchanged and not re-emitted.
+	fault.set(false)
+	waitEmitted(t, ds, "vllm-new", []pm{{Pool: ns + "/p"}})
+	requireNoEmission(t, env, ds, key, "vllm", n, "recovery with unchanged membership")
 	requireManagerRunning(t, env)
 }
