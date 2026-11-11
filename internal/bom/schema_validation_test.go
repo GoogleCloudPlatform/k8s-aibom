@@ -18,11 +18,14 @@ package bom
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
+	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -119,6 +122,43 @@ func TestIntegrationFixturesAreValidCycloneDX(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertValidCycloneDX(t, b)
+			assertIntegrationFixtureDependencies(t, b)
 		})
+	}
+}
+
+// Schema validation alone permits a missing graph or dangling bom-refs.
+// These walkthrough fixtures must carry the builder's one-level graph.
+func assertIntegrationFixtureDependencies(t *testing.T, data []byte) {
+	t.Helper()
+	var doc cdx.BOM
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Metadata == nil || doc.Metadata.Component == nil || doc.Metadata.Component.BOMRef == "" {
+		t.Fatal("fixture has no workload bom-ref")
+	}
+	if doc.Components == nil || len(*doc.Components) == 0 {
+		t.Fatal("fixture has no top-level components")
+	}
+	if doc.Dependencies == nil || len(*doc.Dependencies) != 1 {
+		t.Fatal("fixture must have exactly one workload dependency entry")
+	}
+	dep := (*doc.Dependencies)[0]
+	if dep.Ref != doc.Metadata.Component.BOMRef {
+		t.Fatalf("dependency ref = %q, want workload %q", dep.Ref, doc.Metadata.Component.BOMRef)
+	}
+	want := make([]string, 0, len(*doc.Components))
+	for _, component := range *doc.Components {
+		want = append(want, component.BOMRef)
+	}
+	var got []string
+	if dep.Dependencies != nil {
+		got = slices.Clone(*dep.Dependencies)
+	}
+	slices.Sort(want)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("workload dependencies = %q, want every top-level component %q", got, want)
 	}
 }

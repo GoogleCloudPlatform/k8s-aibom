@@ -14,7 +14,12 @@ at `cf8eeca`, on the same kind cluster as the
 `team-a/summarizer` serving `Qwen/Qwen2.5-0.5B-Instruct-GGUF`, all
 three on the same `ghcr.io/ggml-org/llama.cpp:server` digest. The
 `team-a/chat` document is
-[fixtures/llama-cpp-chat.cdx.json](fixtures/llama-cpp-chat.cdx.json).
+[fixtures/llama-cpp-chat.cdx.json](fixtures/llama-cpp-chat.cdx.json),
+now regenerated with the `main` controller at `110c434` and explicit
+workload-to-component dependencies. See the
+[fixture provenance](dependency-track.md#walkthrough) for the API-input
+replay used to regenerate it. The GUAC results below are from the
+original `cf8eeca` run, not a repeat with the regenerated fixture.
 
 ## Getting documents into GUAC
 
@@ -159,10 +164,15 @@ consumer; these are recorded so you know what to expect.
   `pkg:guac/pkg/` packages; nothing marks them as
   `machine-learning-model` or `application`. A model found twice in
   one document is one package.
-- **Dependencies are heuristic.** With no `dependencies` array in the
-  document, every component is an `IsDependency` of the top-level
-  package with type `UNKNOWN` and the justification `top-level package
-  GUAC heuristic connecting to each file/package`.
+- **Only workload-level dependencies.** Current documents explicitly
+  link the workload to every top-level component, but carry no edges
+  between components. They do not say which runtime uses which model
+  or describe the packages inside an image. The original `cf8eeca`
+  documents had no `dependencies` array, so GUAC connected every
+  component to the top-level package with type `UNKNOWN` and the
+  justification `top-level package GUAC heuristic connecting to each
+  file/package`. That absence is no longer a limitation of current
+  documents.
 - **The OCI purl is reshaped.** `repository_url=ghcr.io/ggml-org/llama.cpp`
   becomes the namespace `ghcr.io/ggml-org`, and only the `tag`
   qualifier is kept.

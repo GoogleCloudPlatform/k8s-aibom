@@ -160,10 +160,18 @@ from `main` at `cf8eeca`, on a kind cluster. Three Deployments ran
 `ghcr.io/ggml-org/llama.cpp:server` with the model named in
 `HF_MODEL_ID`: `team-a/chat` and `team-b/chat` with
 `ggml-org/gemma-3-1b-it-GGUF`, and `team-a/summarizer` with
-`Qwen/Qwen2.5-0.5B-Instruct-GGUF`. The `team-a/chat` document is in
-[fixtures/llama-cpp-chat.cdx.json](fixtures/llama-cpp-chat.cdx.json),
-byte for byte as `kubectl aibom view --raw` printed it; a unit test
-keeps it valid against the CycloneDX 1.6 schema.
+`Qwen/Qwen2.5-0.5B-Instruct-GGUF`.
+
+The `team-a/chat` document in
+[fixtures/llama-cpp-chat.cdx.json](fixtures/llama-cpp-chat.cdx.json)
+was regenerated with a controller built from `main` at `110c434`,
+after #364 added explicit dependencies. This regeneration replayed
+the walkthrough's Deployment spec and kubelet-observed image digest
+through an envtest Kubernetes API; it did not run the model or repeat
+the consumer walkthrough. The fixture is byte for byte as
+`kubectl aibom view --raw` printed it. Tests validate the CycloneDX
+1.6 schema and check that the workload depends on every top-level
+component.
 
 You can post the fixture to a relay without a cluster:
 
@@ -268,10 +276,13 @@ know what to expect.
   environment variable, the document has two
   `machine-learning-model` components with the same name.
   Dependency-Track keeps one, with the properties of the first.
-- **No dependency graph.** The document has no `dependencies` array,
-  and every upload logs `The dependency graph has 0 entries, but the
-  project (metadata.component node of the BOM) is not one of them`.
-  The project's dependency graph view is empty.
+- **Only a one-level dependency graph.** Documents built from `main`
+  after #364 include a `dependencies` array linking the workload
+  (`metadata.component.bom-ref`) to every top-level component. There
+  are no edges between components, so the graph does not describe
+  which runtime uses which model or the packages inside an image.
+  The original `cf8eeca` walkthrough predated this array; its empty
+  dependency graph is no longer a limitation of current documents.
 - **No vulnerability findings from the document alone.** The internal
   analyzer checks the one component with a purl, the `pkg:oci`
   container, and found nothing for it. Models and runtimes have no
