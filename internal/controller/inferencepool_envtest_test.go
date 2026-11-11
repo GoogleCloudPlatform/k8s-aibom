@@ -733,3 +733,53 @@ func TestIntegration_InferencePool_PersistentPermissionDenied(t *testing.T) {
 	requireNoEmission(t, env, ds, key, "vllm", n, "recovery with unchanged membership")
 	requireManagerRunning(t, env)
 }
+
+// The restart limitation, pinned: with the in-memory record lost (as on
+// a controller restart), an external document's published membership
+// is unknown while the view is unavailable. The update is deferred: the
+// published document stays as it is and nothing is dropped. Once the
+// view is readable the update goes through against the current view.
+func TestIntegration_InferencePool_UnknownAfterRestartDefersThenRecovers(t *testing.T) {
+	fault := &poolFault{}
+	env := startEnvTestWith(t, envTestOptions{pools: faultyPools(fault)})
+	ds := externalDocuments(env)
+	ctx := context.Background()
+	c := env.k8sClient
+	ns := "pool-restart"
+	mustCreateOptedInNamespace(t, c, ctx, ns)
+	serving := map[string]string{"llm-d.ai/inferenceServing": "true"}
+	createPool(t, c, ctx, ns, "p", serving, "")
+	mustCreate(t, c, ctx, poolDeployment(ns, "vllm", serving, nil, "vllm/vllm-openai:v0.6.3"))
+	key := types.NamespacedName{Name: AIBOMNameForWorkload("apps", "Deployment", "vllm"), Namespace: ns}
+	n := waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}})
+	published, err := getAIBOM(c, ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// View unavailable, then the record is lost.
+	fault.set(true)
+	fault.breakWatches()
+	waitViewState(t, env, PoolViewUnsynced)
+	env.pools.published.Lock()
+	env.pools.published.m = nil
+	env.pools.published.Unlock()
+
+	// A workload change cannot be published without knowing the facts:
+	// deferred, nothing emitted, the published document untouched.
+	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.7.0", nil)
+	requireNoEmission(t, env, ds, key, "vllm", n, "unknown membership after restart")
+	now, err := getAIBOM(c, ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if documentSHA(now) != documentSHA(published) || now.Status.InputHash != published.Status.InputHash {
+		t.Fatal("the published document must stay as it is while its membership is unknown")
+	}
+
+	// Readable again: the deferred change goes through, with membership
+	// from the current view.
+	fault.set(false)
+	waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/p"}}, "v0.7.0")
+	requireManagerRunning(t, env)
+}
