@@ -673,7 +673,7 @@ func TestIntegration_InferencePool_ExternalDocumentPreserved(t *testing.T) {
 	// exist, so the external document is replaced with no pool facts.
 	deleteCRD(t, c, InferencePoolCRD)
 	waitViewState(t, env, PoolViewRemoved)
-	n = waitEmitted(t, ds, "vllm", nil, "v0.7.0")
+	waitEmitted(t, ds, "vllm", nil, "v0.7.0")
 	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.8.0", nil)
 	n = waitEmitted(t, ds, "vllm", nil, "v0.8.0")
 	installExternalCRD(t, env, poolCRDFile)
