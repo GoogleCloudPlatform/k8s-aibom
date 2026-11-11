@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -65,6 +66,31 @@ func filterPodsOwnedBy(pods []corev1.Pod, owners map[types.UID]struct{}) []corev
 		}
 	}
 	return out
+}
+
+// listSelectedPods lists the pods in ns that match a workload's label
+// selector, matchLabels and matchExpressions both. A selector written
+// with matchExpressions alone is valid on every workload kind, and
+// listing by matchLabels only found no pods for it. The selector only
+// narrows the candidates; filterPodsOwnedBy decides membership. A nil
+// or empty selector lists nothing, so it never stands for "every pod
+// in the namespace".
+func listSelectedPods(ctx context.Context, c client.Client, ns string, sel *metav1.LabelSelector) ([]corev1.Pod, error) {
+	if sel == nil || (len(sel.MatchLabels) == 0 && len(sel.MatchExpressions) == 0) {
+		return nil, nil
+	}
+	selector, err := metav1.LabelSelectorAsSelector(sel)
+	if err != nil {
+		return nil, fmt.Errorf("pod selector: %w", err)
+	}
+	var pods corev1.PodList
+	if err := c.List(ctx, &pods,
+		client.InNamespace(ns),
+		client.MatchingLabelsSelector{Selector: selector},
+	); err != nil {
+		return nil, fmt.Errorf("list pods: %w", err)
+	}
+	return pods.Items, nil
 }
 
 // singleOwner is a convenience constructor for the direct-ownership
