@@ -326,7 +326,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		// Never remove published membership because the view is
 		// unavailable (Design 007 §2): the document is left as it is
 		// until the view is readable again.
-		logger.Info("InferencePool view unavailable and the published pool membership of this AIBOM's external or truncated document is unknown to this process; document update deferred until the view is readable",
+		logger.V(1).Info("InferencePool view unavailable and the published pool membership of this AIBOM's external or truncated document is unknown to this process; document update deferred until the view is readable",
 			"workload_namespace", req.Workload.Namespace, "workload_kind", req.Workload.Kind.Kind, "workload_name", req.Workload.Name,
 			"pool_view", r.Pools.State().String())
 		return ctrl.Result{RequeueAfter: InferencePoolDeferRequeue}, nil

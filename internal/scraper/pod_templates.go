@@ -17,8 +17,6 @@ limitations under the License.
 package scraper
 
 import (
-	"fmt"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -146,12 +144,4 @@ func templateLabels(t map[string]interface{}) map[string]string {
 		}
 	}
 	return out
-}
-
-// String renders the membership for logs.
-func (m InferencePoolMembership) String() string {
-	if m.EndpointPicker == "" {
-		return m.Pool
-	}
-	return fmt.Sprintf("%s (endpointPicker %s)", m.Pool, m.EndpointPicker)
 }

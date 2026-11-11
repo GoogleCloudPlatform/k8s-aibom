@@ -125,9 +125,10 @@ and the `AIBOM` status summary fields and the API schema do not change.
   started and stopped by the same CRD discovery as third-party kinds
   (#226), so a CRD installed later needs no restart. A pool change
   rebuilds the affected documents; while the pool view is unavailable
-  (CRD absent, not Ready, or list/watch failing) no new facts are added
-  and published ones are kept, and availability changes alone re-emit
-  nothing. Documents of workloads that match no pool are byte-identical
+  (absent at startup, not Ready, or list/watch failing) no new facts are
+  added and published ones are kept. A confirmed removal of a previously
+  observed CRD clears stale pool facts; temporary availability changes
+  alone re-emit nothing. Documents that match no pool are byte-identical
   to before. Known limitation: after a controller restart, an AIBOM
   whose document is external or truncated (over the inline threshold)
   and may carry pool facts is left unchanged while the pool view is

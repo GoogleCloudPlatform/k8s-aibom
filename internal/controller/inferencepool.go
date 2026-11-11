@@ -72,13 +72,16 @@ type PoolViewState int
 
 const (
 	// PoolViewInactive: no pool watch runs (CRD absent, not Ready,
-	// removed, or this process is not the leader).
+	// or this process is not the leader).
 	PoolViewInactive PoolViewState = iota
 	// PoolViewUnsynced: the watch runs but has not completed a list, or
 	// its last list/watch attempt failed.
 	PoolViewUnsynced
 	// PoolViewUsable: a list completed and no list/watch failure since.
 	PoolViewUsable
+	// PoolViewRemoved: discovery confirmed that a previously observed CRD
+	// generation was removed; all published pool matches are now stale.
+	PoolViewRemoved
 )
 
 func (s PoolViewState) String() string {
@@ -87,6 +90,8 @@ func (s PoolViewState) String() string {
 		return "usable"
 	case PoolViewUnsynced:
 		return "unsynced"
+	case PoolViewRemoved:
+		return "removed"
 	default:
 		return "inactive"
 	}
@@ -131,6 +136,7 @@ type InferencePoolView struct {
 	running bool
 	listed  bool
 	failing bool
+	removed bool
 	pools   map[string]map[string]poolEntry // namespace -> name -> entry
 
 	pend struct {
@@ -172,7 +178,7 @@ func (v *InferencePoolView) NeedLeaderElection() bool { return true }
 // Watch returns the auxiliary discovery candidate that runs the pool
 // list/watch while the CRD is Ready.
 func (v *InferencePoolView) Watch() ThirdPartyWatch {
-	return ThirdPartyWatch{Name: inferencePoolName, GVK: InferencePoolGVK, CRD: InferencePoolCRD, Run: v.run}
+	return ThirdPartyWatch{Name: inferencePoolName, GVK: InferencePoolGVK, CRD: InferencePoolCRD, Run: v.run, OnRemoved: v.confirmRemoved}
 }
 
 // Lookup returns the pools in ns whose selector matches at least one of
@@ -222,6 +228,8 @@ func (v *InferencePoolView) State() PoolViewState {
 
 func (v *InferencePoolView) stateLocked() PoolViewState {
 	switch {
+	case v.removed && !v.running:
+		return PoolViewRemoved
 	case !v.running:
 		return PoolViewInactive
 	case !v.listed || v.failing:
@@ -256,6 +264,8 @@ func selectorMatchesAny(sel map[string]string, templates []map[string]string) bo
 // removal on its own, #226 A1).
 func (v *InferencePoolView) run(ctx context.Context, recheck func()) {
 	log := ctrl.Log.WithName("inferencepool-view")
+	v.begin()
+	defer v.end()
 	newClient := v.newClient
 	if newClient == nil {
 		newClient = func(c *rest.Config) (dynamic.Interface, error) { return dynamic.NewForConfig(c) }
@@ -267,8 +277,6 @@ func (v *InferencePoolView) run(ctx context.Context, recheck func()) {
 		<-ctx.Done()
 		return
 	}
-	v.begin()
-	defer v.end()
 	log.Info("InferencePool watch started", "gvk", InferencePoolGVK.String())
 
 	ri := dc.Resource(inferencePoolGVR).Namespace(metav1.NamespaceAll)
@@ -297,12 +305,12 @@ func (v *InferencePoolView) run(ctx context.Context, recheck func()) {
 	r := toolscache.NewReflectorWithOptions(toolscache.ToListWatcherWithWatchListSemantics(lw, dc), expected, poolStore{v},
 		toolscache.ReflectorOptions{Name: "inferencepool-view", TypeDescription: InferencePoolGVK.String()})
 	r.RunWithContext(ctx)
-	log.Info("InferencePool watch stopped; previously published pool membership is kept until the view is readable again")
+	log.Info("InferencePool watch stopped; published pool membership is retained unless discovery confirms CRD removal")
 }
 
 func (v *InferencePoolView) begin() {
 	v.mu.Lock()
-	v.running, v.listed, v.failing, v.pools = true, false, false, nil
+	v.running, v.listed, v.failing, v.removed, v.pools = true, false, false, false, nil
 	v.mu.Unlock()
 }
 
@@ -311,6 +319,18 @@ func (v *InferencePoolView) begin() {
 func (v *InferencePoolView) end() {
 	v.mu.Lock()
 	v.running, v.listed, v.failing, v.pools = false, false, false, nil
+	v.mu.Unlock()
+	v.request("")
+}
+
+// confirmRemoved distinguishes a positively confirmed CRD removal from
+// a temporarily inaccessible or not-Ready view. Removal invalidates all
+// published pool matches, including those in external documents whose
+// earlier facts this process cannot read back. A new watch clears this
+// marker while it obtains a fresh pool list.
+func (v *InferencePoolView) confirmRemoved() {
+	v.mu.Lock()
+	v.removed = true
 	v.mu.Unlock()
 	v.request("")
 }
@@ -648,8 +668,9 @@ func documentSHA(a *aibomv1beta1.AIBOM) string {
 // Pod templates their scraper reads. With a usable view the facts are
 // recomputed from it, which also removes stale ones.
 //
-// With an unavailable view (CRD absent, not Ready or removed, list or
-// watch not synced or failing) no new facts are created and the
+// A confirmed CRD removal clears all previously published pool facts.
+// With an unavailable view (CRD absent at startup, not Ready, or a
+// list/watch not synced or failing) no new facts are created and the
 // published ones are kept exactly. They are taken from, in order: the
 // inline document; this process's record of the document the AIBOM
 // carries (external or truncated documents); or the stored input hash,
@@ -663,7 +684,7 @@ func (r *WorkloadReconciler) inferencePoolFacts(req WorkloadReconcileRequest, in
 		return nil, false, nil
 	}
 	facts, st := r.Pools.Lookup(req.Workload.Namespace, scraper.PodTemplateLabels(req.Workload.Object))
-	if st == PoolViewUsable {
+	if st == PoolViewUsable || st == PoolViewRemoved {
 		return facts, false, nil
 	}
 	if existing == nil {

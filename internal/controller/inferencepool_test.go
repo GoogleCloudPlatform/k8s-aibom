@@ -212,6 +212,23 @@ func TestInferencePoolView_StateAndRequests(t *testing.T) {
 	if all, _ := pending(v); !all {
 		t.Fatal("stopping must re-enqueue every namespace")
 	}
+	// Only a confirmed removal allows the view to discard published
+	// matches. Ordinary stop/restart remains an unavailable view.
+	v.confirmRemoved()
+	if st := v.State(); st != PoolViewRemoved {
+		t.Fatalf("after confirmed removal: %s", st)
+	}
+	if all, _ := pending(v); !all {
+		t.Fatal("confirmed removal must re-enqueue every namespace")
+	}
+	v.begin()
+	if st := v.State(); st != PoolViewUnsynced {
+		t.Fatalf("new watch must clear removed state: %s", st)
+	}
+	v.end()
+	if st := v.State(); st != PoolViewInactive {
+		t.Fatalf("stop of new unsynced watch: %s", st)
+	}
 }
 
 func toolsTombstone(obj interface{}) interface{} {
@@ -273,6 +290,8 @@ func TestInferencePoolFacts_Decision(t *testing.T) {
 	unsynced := &InferencePoolView{}
 	unsynced.begin()
 	inactive := &InferencePoolView{}
+	removed := &InferencePoolView{}
+	removed.confirmRemoved()
 
 	cases := []struct {
 		name      string
@@ -288,6 +307,8 @@ func TestInferencePoolFacts_Decision(t *testing.T) {
 		{"usable recomputes", usable, scraper.CategoryInference, inline, []scraper.InferencePoolMembership{{Pool: "ns/new"}}, false},
 		{"unsynced keeps inline facts", unsynced, scraper.CategoryInference, inline, published, false},
 		{"inactive keeps inline facts", inactive, scraper.CategoryInference, inline, published, false},
+		{"confirmed removal clears inline facts", removed, scraper.CategoryInference, inline, nil, false},
+		{"confirmed removal clears unknowable external facts", removed, scraper.CategoryInference, external, nil, false},
 		{"unavailable, first document: none", unsynced, scraper.CategoryInference, nil, nil, false},
 		{"unavailable, hash proves none", unsynced, scraper.CategoryInference, externalNoPools, nil, false},
 		// Not inline and not recorded by this process (e.g. after a
@@ -346,7 +367,7 @@ func TestInferencePoolFacts_RecordedForExternalDocuments(t *testing.T) {
 			func() {
 				v.failed(apierrors.NewForbidden(schema.GroupResource{Resource: "inferencepools"}, "", nil), func() {})
 			},
-			func() { v.end() }, // CRD removed or not Ready
+			func() { v.end() }, // view stopped; removal has not been confirmed
 		} {
 			down()
 			got, deferred, err := r.inferencePoolFacts(req, in, a)
@@ -411,6 +432,8 @@ func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
 			t.Fatalf("runner did not start: %v", events())
 		}
 	}
+	removals := 0
+	aux.OnRemoved = func() { removals++ }
 	t.Cleanup(func() {
 		for _, r := range s.runners {
 			r.cancel()
@@ -426,12 +449,18 @@ func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
 	waitStart()
 	observe(crdObservation{state: crdStateReady, uid: "u1"}) // no-op update
 	observe(crdObservation{state: crdStateUnservable, uid: "u1", reason: "v1 not served"})
+	if removals != 0 {
+		t.Fatal("unservable CRD must not clear published pool facts")
+	}
 	observe(crdObservation{state: crdStateReady, uid: "u1"})
 	waitStart()
 	observe(crdObservation{state: crdStateReady, uid: "u2"}) // re-created
 	waitStart()
 	observe(crdObservation{state: crdStateRemoved, uid: "u2"})
 	observe(crdObservation{state: crdStateRemoved, uid: "u2"})
+	if removals != 1 {
+		t.Errorf("confirmed removal notified %d times, want once", removals)
+	}
 
 	want := []string{"start", "stop", "start", "stop", "start", "stop"}
 	if got := events(); !reflect.DeepEqual(got, want) {

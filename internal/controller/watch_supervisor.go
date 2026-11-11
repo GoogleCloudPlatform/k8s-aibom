@@ -90,6 +90,10 @@ type ThirdPartyWatch struct {
 	// fan-out source and no AIBOM sweep; Reconciler and Base are unused.
 	// recheck asks discovery to re-read the CRD.
 	Run func(ctx context.Context, recheck func())
+	// OnRemoved is called for an auxiliary candidate only when discovery
+	// confirms removal of a previously observed CRD generation. It is
+	// not called for an unservable CRD or an initial absent CRD.
+	OnRemoved func()
 }
 
 // WatchSupervisor runs third-party kinds in isolation from the manager's
@@ -426,6 +430,9 @@ func (s *WatchSupervisor) applyAux(w ThirdPartyWatch, obs crdObservation) {
 		}()
 	case crdStateUnservable, crdStateRemoved:
 		s.stopRunner(w)
+		if obs.state == crdStateRemoved && cur.state != crdStateRemoved && w.OnRemoved != nil {
+			w.OnRemoved()
+		}
 		s.life[w.Name] = kindLife{state: obs.state, uid: obs.uid, reason: obs.reason}
 	}
 }

@@ -295,10 +295,9 @@ func TestIntegration_InferencePool_RoleAndComponentTemplates(t *testing.T) {
 }
 
 // Tests 9, 10 (CRD) and 11: the CRD is absent at startup and installed
-// later (no restart); removing it keeps the published facts without
-// re-emitting the document; a workload change while it is gone keeps
-// them too; re-creating it reconciles against the new (empty) view and
-// clears the stale facts.
+// later (no restart); a confirmed removal clears published pool facts;
+// a workload change while it is gone does not revive them; re-creating
+// it reconciles against the new (empty) view.
 func TestIntegration_InferencePool_CRDLifecycle(t *testing.T) {
 	opts := envTestOptions{omitExternalCRDs: []string{poolCRDFile}}
 	reads := observeCRDReads(&opts)
@@ -319,28 +318,26 @@ func TestIntegration_InferencePool_CRDLifecycle(t *testing.T) {
 	installExternalCRD(t, env, poolCRDFile)
 	waitCRDServes(t, env, InferencePoolCRD, "v1")
 	createPool(t, c, ctx, ns, "serving", serving, "epp")
-	published := waitRouting(t, c, ctx, key, []pm{{Pool: ns + "/serving", EndpointPicker: "epp"}})
+	waitRouting(t, c, ctx, key, []pm{{Pool: ns + "/serving", EndpointPicker: "epp"}})
 
-	// Removal: the view stops; the fan-out it requests reconciles the
-	// workload, which keeps its facts and re-emits nothing.
+	// A confirmed CRD removal means its pools no longer exist, so stale
+	// membership is removed even before the CRD is re-created.
 	deleteCRD(t, c, InferencePoolCRD)
 	eventually(t, 30*time.Second, 100*time.Millisecond, func() error {
-		if st := env.pools.State(); st != PoolViewInactive {
+		if st := env.pools.State(); st != PoolViewRemoved {
 			return fmt.Errorf("view %s after CRD removal", st)
 		}
 		return nil
 	})
-	requireDocUnchanged(t, c, ctx, key, published, "CRD removal")
+	waitRouting(t, c, ctx, key, nil)
 
-	// A workload change while the CRD is gone rebuilds the document with
-	// the published facts kept.
+	// A workload change while the CRD is gone cannot restore old pools.
 	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.7.0", nil)
-	kept := waitRouting(t, c, ctx, key, []pm{{Pool: ns + "/serving", EndpointPicker: "epp"}})
+	waitRouting(t, c, ctx, key, nil)
 	waitInlineContains(t, c, ctx, key, "v0.7.0")
-	_ = kept
 
-	// Re-created (new UID, no pools): the view lists nothing and the
-	// stale fact is removed; the workload's facts stay current.
+	// Re-created (new UID, no pools): there are still no routing facts,
+	// while the workload's other facts remain current.
 	installExternalCRD(t, env, poolCRDFile)
 	waitCRDServes(t, env, InferencePoolCRD, "v1")
 	cleared := waitRouting(t, c, ctx, key, nil)
@@ -623,10 +620,9 @@ func waitViewState(t *testing.T, env *envTestEnv, want PoolViewState) {
 }
 
 // External documents (no inline copy in status): published membership
-// survives a temporary list/watch failure and CRD removal, through
-// workload changes, with no re-emission on availability changes alone;
-// recovery applies changed and deleted membership and re-emits nothing
-// when membership is unchanged.
+// survives temporary list/watch failures, including workload changes.
+// A confirmed CRD removal clears facts even in external documents;
+// recovery with unchanged membership does not re-emit the document.
 func TestIntegration_InferencePool_ExternalDocumentPreserved(t *testing.T) {
 	fault := &poolFault{}
 	env := startEnvTestWith(t, envTestOptions{pools: faultyPools(fault)})
@@ -673,16 +669,17 @@ func TestIntegration_InferencePool_ExternalDocumentPreserved(t *testing.T) {
 	waitViewState(t, env, PoolViewUsable)
 	requireNoEmission(t, env, ds, key, "vllm", n, "recovery without changes")
 
-	// CRD removal: preserved, nothing re-emitted; a workload change
-	// keeps the fact; re-creation (no pools) removes it.
+	// Confirmed CRD removal: the previously published pool cannot still
+	// exist, so the external document is replaced with no pool facts.
 	deleteCRD(t, c, InferencePoolCRD)
-	waitViewState(t, env, PoolViewInactive)
-	requireNoEmission(t, env, ds, key, "vllm", n, "CRD removal")
+	waitViewState(t, env, PoolViewRemoved)
+	n = waitEmitted(t, ds, "vllm", nil, "v0.7.0")
 	setDeploymentImage(t, c, ctx, ns, "vllm", "vllm/vllm-openai:v0.8.0", nil)
-	waitEmitted(t, ds, "vllm", []pm{{Pool: ns + "/q", EndpointPicker: "q-epp"}}, "v0.8.0")
+	n = waitEmitted(t, ds, "vllm", nil, "v0.8.0")
 	installExternalCRD(t, env, poolCRDFile)
 	waitCRDServes(t, env, InferencePoolCRD, "v1")
-	waitEmitted(t, ds, "vllm", nil, "v0.8.0")
+	waitViewState(t, env, PoolViewUsable)
+	requireNoEmission(t, env, ds, key, "vllm", n, "re-created empty CRD")
 	requireManagerRunning(t, env)
 }
 
