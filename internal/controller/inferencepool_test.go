@@ -415,6 +415,8 @@ func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
 			<-ctx.Done()
 			rec("stop")
 		}}
+	removals := 0
+	aux.OnRemoved = func() { removals++ }
 	s.Watches = []ThirdPartyWatch{aux}
 	s.crdWorkers = map[string]*crdWorker{}
 	observe := func(obs crdObservation) {
@@ -432,8 +434,6 @@ func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
 			t.Fatalf("runner did not start: %v", events())
 		}
 	}
-	removals := 0
-	aux.OnRemoved = func() { removals++ }
 	t.Cleanup(func() {
 		for _, r := range s.runners {
 			r.cancel()
