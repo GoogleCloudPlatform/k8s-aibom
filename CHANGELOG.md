@@ -239,6 +239,15 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **A failed `AIBOMControllerConfig` status write no longer repeats
+  the config event.** The controller emits the transition event
+  (`ConfigLoaded`, `ConfigInvalid`, `ConfigRecovered`, ...) before
+  writing the CR status, but recorded the new state only after that
+  write succeeded. When the write hit a conflict or failed, the retry
+  emitted the same event again and counted the reload twice in
+  `aibom_controller_config_reloads_total`. The state is now recorded
+  as soon as the event is emitted.
+
 - **`kubectl aibom` rejects an empty `-n`, `--context` or
   `--kubeconfig`.** A scope flag set to `""` (`-n "$NS"` with the
   variable unset) counted as not given, so the command quietly used the
