@@ -29,7 +29,7 @@ Each pattern is anchored at the image name, so a project's build, development an
 
 ## Agent & Remote API Heuristics
 Agent workloads (unlike inference workloads) usually do not bundle local model weights; instead, they act as clients to remote Foundation Model APIs.
-**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). Both forms carry the property `dependency.type: remote-api`. An `unresolved` dependency stays in the document but is not listed in `status.summary.models`, which never carries unresolved attributes. The actual value of the key is **never** extracted or logged.
+**Rule.** The `AgentSpecScraper` actively looks for injected API keys in the environment block (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). If found, it creates a `machine-learning-model` component representing the external API dependency (e.g., `openai-api`). Its confidence is `inferred` when the variable has a literal value, and `unresolved` when it is set through `valueFrom` (a Secret or ConfigMap reference). Both forms carry the property `k8s-aibom:dependency:type` = `remote-api`. An `unresolved` dependency stays in the document but is not listed in `status.summary.models`, which never carries unresolved attributes. The actual value of the key is **never** extracted or logged.
 
 An API key alone does not categorize a workload as `agent`: that takes a framework image (e.g., Langflow) or a framework environment signature (e.g., `LANGCHAIN_TRACING_V2`). A workload with only an API key keeps the category another scraper gives it, `inference` by default.
 
@@ -74,7 +74,10 @@ BOM):
 
 - **`inference.spec`** (Deployment / StatefulSet / DaemonSet).
   Runtime is **inferred** via image-pattern match against an
-  allowlist (vllm, tgi, triton, ollama, ray-serve, llm-d). The
+  allowlist (vllm, tgi, triton, sglang, nim and the rest of the
+  `runtimeImagePatterns` in
+  [`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml),
+  or the `AIBOMControllerConfig` list that replaces them). The
   customer wrote an image string; the controller guessed the runtime
   from it. Confidence: `inferred`.
 
@@ -136,10 +139,14 @@ unchanged and records the `signature-valid-unconstrained` outcome fact.
 image patterns produces an additional `application`-class Component
 naming the runtime (e.g., `vllm`, `tgi`, `triton`).
 
-The TGI, Triton, Ollama, SGLang, LMDeploy, TEI and LiteLLM patterns
-match at the image-name boundary: a tag, a digest or the end of the
-reference. Supported SGLang and LiteLLM image variants are enumerated
-in the allowlist; names such as `lmsysorg/sglang-router` and
+Most patterns match at the image-name boundary: a tag, a digest or the
+end of the reference. A few match a prefix instead, such as NIM's
+`nvcr.io/nim/` org and Dynamo's `*-runtime` images (which also cover
+their `-nightly` variants). The comments in
+[`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml)
+say what each pattern matches and which near-misses it leaves out.
+Supported SGLang and LiteLLM image variants are enumerated in the
+allowlist; names such as `lmsysorg/sglang-router` and
 `nvcr.io/nvidia/tritonserver-sidecar` do not receive runtime attribution.
 
 - **Confidence: `inferred`.** The runtime identity is inferred from a
@@ -266,7 +273,7 @@ auditor-facing output makes speculative pattern broadening dangerous.
 | ~~**TGI in GHCR registry form.**~~ | **RESOLVED in v1.4.0** — real deployment signal arrived and `^ghcr\.io/huggingface/text-generation-inference.*` shipped (the publisher's own namespace, not a mirror pattern). Kept here as the worked example of the fix process below. | — |
 | ~~**TGI / TEI registry asymmetry.**~~ | **RESOLVED in v1.4.0** by the row above — both now cover the publisher's GHCR namespace. | — |
 | **Image mirrors with embedded vendor names.** `<some-private-mirror>/<some-namespace>/vllm-toolkit:tag` or similar | No match (the vLLM pattern requires the image to START with `vllm/vllm-`) | Anchored matching deliberately rejects mirrored / repackaged images. Broadening risks false positives (e.g., `customer-mirror/not-vllm/vllm-toolkit:tag` contains "vllm" but isn't vLLM). Deferred pending mirroring-pattern survey. |
-| **TensorRT-LLM standalone images.** | Production-shipping form `nvcr.io/nvidia/tritonserver:*-trtllm-*` is covered by the Triton pattern. A separate TensorRT-LLM pattern is NOT added. | Adding TensorRT-LLM separately would double-count the same workload. If a future shipping form is genuinely distinct, add it then. |
+| ~~**TensorRT-LLM standalone images.**~~ | **RESOLVED** — the standalone shipping forms turned out to be distinct images: Dynamo's `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime` (v1.4.0) and NGC's `nvcr.io/nvidia/tensorrt-llm/release` (v1.6.0, #176) both attribute as runtime `tensorrt-llm`. Triton's TensorRT-LLM backend images (`nvcr.io/nvidia/tritonserver:*-trtllm-*`) still attribute as `triton`. The repositories differ, so no image matches both and nothing is double-counted; the `tensorrt-llm/devel` build image stays unmatched. | — |
 
 **Fix process when a deferred case has real customer signal:**
 

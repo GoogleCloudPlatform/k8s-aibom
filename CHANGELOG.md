@@ -8,8 +8,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Document shape (one transition, v1.7.0)
 
-Four changes to the emitted CycloneDX document land together (#132,
-#328), so downstream readers see one byte-shape transition. Byte-identity with
+Five changes to the emitted CycloneDX document land together (#132,
+#328, #363), so downstream readers see one byte-shape transition. Byte-identity with
 documents from v1.4.0 through v1.6.x ends here; determinism within a
 release is unchanged (identical inputs still produce identical bytes),
 and the `AIBOM` status summary fields and the API schema do not change.
@@ -60,6 +60,18 @@ and the `AIBOM` status summary fields and the API schema do not change.
   tier winning. Bytes change only for workloads with a verified
   signature.
 
+- **Every document has a `dependencies` array** (#363): one entry for
+  `metadata.component` whose `dependsOn` lists the `bom-ref` of every
+  top-level component in document order (runtimes, container images,
+  models, data, remote APIs). Nested components and edges between
+  components are not emitted, since nothing observed says that one
+  component depends on another. A document with no components still
+  carries the workload entry, without `dependsOn`. Dependency-Track
+  now shows the workload's graph instead of logging `The dependency
+  graph has 0 entries` on every upload, and GUAC gets the
+  workload-to-component edges from the document. Bytes change for
+  every document.
+
 ### API contract
 
 - **`spec.discovery.workloadKinds` is declared in `v1alpha1` as well**
@@ -70,6 +82,11 @@ and the `AIBOM` status summary fields and the API schema do not change.
   drops the allowlist, and a `v1alpha1` manifest may now set it.
 
 ### Added
+
+- **`GOVERNANCE.md` and `MAINTAINERS.md`**: roles (contributor, reviewer,
+  maintainer) with entry criteria, the decision process (lazy consensus,
+  design documents, votes), security and conduct handling, and how the
+  document changes. Reviewer nominations are open. Documentation only.
 
 - **README names Project AIBOM as the training-side counterpart** (Red Hat
   Research / Mass Open Cloud): reproducibility records for training and
@@ -214,6 +231,51 @@ and the `AIBOM` status summary fields and the API schema do not change.
   unmatched.
 
 ### Fixed
+
+- **`kubectl aibom` rejects an empty `-n`, `--context` or
+  `--kubeconfig`.** A scope flag set to `""` (`-n "$NS"` with the
+  variable unset) counted as not given, so the command quietly used the
+  kubeconfig's namespace, current context or default file: `verify NAME
+  -n ""` verified a same-named AIBOM in another namespace and exited 0.
+  `-n`, `--namespace`, `--context` and `--kubeconfig` with an empty
+  value are now argument errors; leaving the flag out still uses the
+  kubeconfig default.
+
+- **`kubectl aibom` treats `--` as the end of the flags** (#365). The
+  plugin's argument splitter read `--` as a flag taking a value, so the
+  token after it was dropped: `view -- NAME` and `verify -- NAME` failed
+  with "requires exactly one AIBOM name", and `find -- vllm` listed every
+  AIBOM unfiltered instead of reporting the stray argument. Every token
+  after `--` is now positional and goes through the usual checks.
+
+- **The scraper heuristics no longer give a six-runtime allowlist**
+  (#366). `docs/scraper-heuristics.md` said `inference.spec` matches
+  against "vllm, tgi, triton, ollama, ray-serve, llm-d" and that seven
+  named patterns match at the image-name boundary; the default
+  `runtimeImagePatterns` attribute 29 runtimes, most of them
+  boundary-matched. Both places now give examples and point at
+  `internal/scraper/v1-runtime-patterns.yaml`, with NIM and Dynamo as
+  examples of the prefix matches, and the README's runtime list says it is not the
+  full set. Documentation only.
+
+- **The README and docs name properties as v1.7.0 documents emit them**
+  (#360). Seven places still gave the name from before the taxonomy
+  rename: `aibom.redaction.applied` in the README's sanitization
+  guarantee and in the threat model, `dependency.type` in the scraper
+  heuristics, and `dynamo.component.<name>.type`, `container.name` and
+  `lws.role` (twice) in the external CRD tables. They now read
+  `k8s-aibom:redaction:applied`, `k8s-aibom:dependency:type`,
+  `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:container:name`
+  and `k8s-aibom:lws:role`. Documentation only.
+
+- **The scraper heuristics no longer say TensorRT-LLM has no pattern of
+  its own** (#358). The deferred-cases table in
+  `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
+  were covered and that a separate pattern would double-count, but
+  `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime` (v1.4.0) and
+  `nvcr.io/nvidia/tensorrt-llm/release` (v1.6.0) attribute as
+  `tensorrt-llm`. The row is marked resolved, and the runtime-patterns
+  comment that listed two forms now lists all three. Documentation only.
 
 - **Links from the documentation site to files outside `docs/` resolve**
   (#354). The GitHub Pages site is built from `docs/` only, so relative

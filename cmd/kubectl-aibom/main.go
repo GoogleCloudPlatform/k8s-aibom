@@ -114,6 +114,14 @@ Flags:
 	var flagArgs []string
 	for i := 1; i < len(args); i++ {
 		a := args[i]
+		// "--" ends the flags, as it does for the flag package and
+		// kubectl: every token after it is positional. It used to be
+		// read as a flag taking a value, so `view -- NAME` swallowed
+		// NAME and reported that a name is required.
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
 		if !strings.HasPrefix(a, "-") {
 			positional = append(positional, a)
 			continue
@@ -173,6 +181,22 @@ Flags:
 			one = "NAMESPACE"
 		}
 		return fmt.Errorf("-n and -A cannot be used together (-n %s for one namespace, -A for all)", one)
+	}
+	// A namespace, context or kubeconfig given an empty value (`-n
+	// "$NS"` with the variable unset) would fall back to the
+	// kubeconfig's, so the command would read another namespace or
+	// cluster than the one asked for.
+	var emptyScope []string
+	fs.Visit(func(fl *flag.Flag) {
+		switch fl.Name {
+		case "n", "namespace", "context", "kubeconfig":
+			if fl.Value.String() == "" {
+				emptyScope = append(emptyScope, flagName(fl.Name))
+			}
+		}
+	})
+	if len(emptyScope) > 0 {
+		return fmt.Errorf("%s needs a value; leave the flag out to use the kubeconfig default", strings.Join(emptyScope, ", "))
 	}
 	if (sub == "summary" || sub == "find") && len(positional) > 0 {
 		hint := fmt.Sprintf("for a namespace, use -n %s", positional[0])

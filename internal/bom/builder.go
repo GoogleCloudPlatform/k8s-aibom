@@ -120,6 +120,7 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 	if len(comps) > 0 {
 		bom.Components = &comps
 	}
+	bom.Dependencies = buildDependencies(root.BOMRef, comps)
 	if svcs := buildServices(inputs.Services); len(svcs) > 0 {
 		bom.Services = &svcs
 	}
@@ -274,6 +275,26 @@ func toCDXComponent(c scraper.Component, opts BuildOptions, idx int, parentRef s
 		out.Components = &children
 	}
 	return out, nil
+}
+
+// buildDependencies emits the document's dependency graph: one entry
+// for the workload (metadata.component) depending on every top-level
+// component, in document order. Nested components and edges between
+// components are not emitted, because nothing the scrapers observe says
+// that one component depends on another (a model is not shown to be a
+// dependency of the runtime that serves it). The workload entry is
+// present even with no components, so consumers that look for the
+// subject in the graph (Dependency-Track) always find it.
+func buildDependencies(workloadRef string, comps []cdx.Component) *[]cdx.Dependency {
+	dep := cdx.Dependency{Ref: workloadRef}
+	if len(comps) > 0 {
+		refs := make([]string, 0, len(comps))
+		for _, c := range comps {
+			refs = append(refs, c.BOMRef)
+		}
+		dep.Dependencies = &refs
+	}
+	return &[]cdx.Dependency{dep}
 }
 
 // buildServices maps internal Services. v1 scrapers do not currently

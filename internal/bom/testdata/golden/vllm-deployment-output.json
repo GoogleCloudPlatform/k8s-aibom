@@ -259,6 +259,18 @@
         }
       ]
     }
+  ],
+  "dependencies": [
+    {
+      "ref": "workload:prod-inference/Deployment/vllm-llama3",
+      "dependsOn": [
+        "workload:prod-inference/Deployment/vllm-llama3/component/0/application/vllm",
+        "workload:prod-inference/Deployment/vllm-llama3/component/1/container/vllm/vllm-openai",
+        "workload:prod-inference/Deployment/vllm-llama3/component/2/data/llama-weights",
+        "workload:prod-inference/Deployment/vllm-llama3/component/3/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct",
+        "workload:prod-inference/Deployment/vllm-llama3/component/4/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct"
+      ]
+    }
   ]
 }
 

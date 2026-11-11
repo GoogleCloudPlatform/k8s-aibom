@@ -150,10 +150,11 @@ runtimeImagePatterns:
   - runtime: litellm
     pattern: '^ghcr\.io/berriai/litellm(?:-database|-non_root)?(?:[:@]|$)'
 
-  # TensorRT-LLM appears in two forms: under Triton
+  # TensorRT-LLM appears in three forms: under Triton
   # (`nvcr.io/nvidia/tritonserver:*-trtllm-*`, covered by the triton
-  # pattern) and standalone under Dynamo (`tensorrtllm-runtime` above).
-  # The namespaces are distinct, so the two patterns cannot
+  # pattern), standalone under Dynamo (`tensorrtllm-runtime` above) and
+  # as NGC's standalone release image (`tensorrt-llm/release`, below).
+  # The repositories are distinct, so no two of these patterns can
   # double-count one workload.
 
   # vLLM CPU release image on the vLLM project's own public ECR alias

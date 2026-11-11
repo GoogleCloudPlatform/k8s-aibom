@@ -107,6 +107,11 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		{[]string{"summary", "-A", "--namespace=prod-jobs"}, "-n and -A cannot be used together (-n prod-jobs for one namespace"},
 		{[]string{"summary", "--all-namespaces", "prod-jobs"}, `summary takes no positional arguments, got "prod-jobs"`},
 		{[]string{"view", "my-aibom", "--all-namespaces"}, "--all-namespaces does not apply to view"},
+		// After "--" every token is positional, flag-shaped or not.
+		{[]string{"find", "--", "vllm"}, `find takes no positional arguments, got "vllm"`},
+		{[]string{"view", "--"}, "view requires exactly one AIBOM name"},
+		{[]string{"view", "a", "--", "b"}, "view requires exactly one AIBOM name"},
+		{[]string{"verify", "--", "-n", "prod-jobs"}, "verify requires exactly one AIBOM name"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -130,6 +135,31 @@ func TestRun_FindEmptyFilterIsAnError(t *testing.T) {
 		{[]string{"find", "-A", "--digest", ""}, "--digest needs a value"},
 		{[]string{"find", "-A", "--signed="}, "--signed needs a value"},
 		{[]string{"find", "--runtime", "vllm", "--digest", ""}, "--digest needs a value"},
+	} {
+		err := run(tc.args)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("run(%q) = %v, want an error containing %q", tc.args, err, tc.want)
+		}
+	}
+}
+
+// -n, --namespace, --context or --kubeconfig given an empty value (an
+// unset shell variable, `verify "$NAME" -n "$NS"`) is an error. Each
+// used to count as not given, so the command quietly read the
+// kubeconfig's namespace, context or file instead.
+func TestRun_EmptyScopeFlagIsAnError(t *testing.T) {
+	withoutCluster(t)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"summary", "-n", ""}, "-n needs a value"},
+		{[]string{"find", "--runtime", "vllm", "-n="}, "-n needs a value"},
+		{[]string{"view", "my-aibom", "--namespace", ""}, "--namespace needs a value"},
+		{[]string{"verify", "--namespace=", "my-aibom"}, "--namespace needs a value"},
+		{[]string{"summary", "-A", "--context", ""}, "--context needs a value"},
+		{[]string{"view", "my-aibom", "--kubeconfig="}, "--kubeconfig needs a value"},
+		{[]string{"verify", "my-aibom", "-n", "", "--context", ""}, "--context, -n needs a value"},
 	} {
 		err := run(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -163,6 +193,13 @@ func TestRun_ValidCommandStillLoadsKubeconfig(t *testing.T) {
 		{"find", "--namespace=prod-jobs", "--model", "Qwen"},
 		{"view", "my-aibom", "--namespace", "prod-jobs", "--raw"},
 		{"verify", "--namespace", "prod-jobs", "my-aibom"},
+		// "--" ends the flags; the name after it is the positional
+		// argument. It used to be swallowed as the value of "--".
+		{"view", "--", "my-aibom"},
+		{"view", "-n", "prod-jobs", "--raw", "--", "my-aibom"},
+		{"verify", "--", "my-aibom"},
+		{"summary", "-n", "prod-jobs", "--"},
+		{"find", "-A", "--runtime", "vllm", "--"},
 	} {
 		err := run(args)
 		if err == nil || !strings.Contains(err.Error(), "no configuration has been provided") {
