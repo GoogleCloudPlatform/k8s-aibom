@@ -239,6 +239,18 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **The webhook sink protocol gives the `Content-Type` the sink sends**
+  (#376). `docs/webhook-sink-protocol.md` said every delivery carries
+  `Content-Type: application/vnd.cyclonedx+json; version=1.6`; the sink
+  has always sent `application/json`, so a receiver built to the
+  document and checking the media type refused every delivery. The
+  request shape, the headers table and the stability notes now give
+  `application/json`, with the CycloneDX version in the body's
+  `specVersion`. The envelope test now checks the header names and the
+  `Content-Type` value as the document writes them rather than against
+  the constants, which is why the drift went unnoticed. No change to
+  what the sink sends.
+
 - **The AIBOM CRD no longer says models are never `verified`** (#377).
   The `status.summary.models[].signed` description, which `kubectl
   explain` shows, said "v1 never emits `verified`", and the `confidence`

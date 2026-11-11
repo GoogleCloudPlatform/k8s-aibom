@@ -9,7 +9,7 @@ are treated as **API-surface changes** in semver terms.
 
 ```
 POST <endpoint>
-Content-Type: application/vnd.cyclonedx+json; version=1.6
+Content-Type: application/json
 X-Aibom-Document-Hash: sha256:<hex>
 X-Aibom-Workload-Kind: <kind>
 X-Aibom-Workload-Namespace: <namespace>
@@ -28,7 +28,7 @@ handling" below for the controller's interpretation.
 
 | Header | Required | Purpose |
 |---|---|---|
-| `Content-Type` | always | Identifies the body as CycloneDX 1.6 ML-BOM JSON. Constant: `application/vnd.cyclonedx+json; version=1.6`. |
+| `Content-Type` | always | Constant: `application/json`. The body is CycloneDX 1.6 ML-BOM JSON; the CycloneDX version is the body's `specVersion`, not a media-type parameter. The CycloneDX media type `application/vnd.cyclonedx+json` is not sent. |
 | `X-Aibom-Document-Hash` | always | Content-addressed hash of the BOM body (`sha256:<hex>`). Receivers SHOULD use this for deduplication — identical hashes across requests represent the same BOM and the receiver MAY drop duplicates. |
 | `X-Aibom-Workload-Kind` | always | Kubernetes kind of the workload (e.g., `Deployment`, `StatefulSet`, `InferenceService`). |
 | `X-Aibom-Workload-Namespace` | always | Workload's Kubernetes namespace. |
@@ -90,12 +90,12 @@ This document is the source of truth for the protocol. Changes are
 - Changing an existing header name, removing a header, or changing the
   `Content-Type` value: MAJOR / breaking. Coordinate with at least one
   major external integrator before making.
-- Changing the `Content-Type` minor version (e.g., from
-  `version=1.6` to `version=1.7`): tied to a CycloneDX spec bump in
-  the controller and announced as a breaking change in release notes.
+- A CycloneDX spec bump in the controller (e.g., from 1.6 to 1.7):
+  changes the body's `specVersion`, not the `Content-Type` header, and
+  is announced as a breaking change in release notes.
 
 The corresponding tests in
 [`internal/sink/webhook_test.go`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/sink/webhook_test.go)
-lock the constants. If a test in that file fails on a header
-constant, the corresponding row of the table above also needs to
-change in the same commit.
+check the header names and the `Content-Type` value as written in this
+document. If a test in that file fails on a header, the corresponding
+row of the table above also needs to change in the same commit.

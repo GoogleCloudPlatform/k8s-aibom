@@ -115,15 +115,19 @@ func TestWebhookSink_HappyPath_SetsAllProtocolHeaders(t *testing.T) {
 
 	// Headers — these are the customer-facing protocol; if any of these
 	// assertions need updating, the corresponding entry in
-	// docs/webhook-sink-protocol.md also needs updating.
+	// docs/webhook-sink-protocol.md also needs updating. Names and the
+	// Content-Type value are the literals from that document, not the
+	// constants: comparing a constant with itself passes for any value,
+	// which is how the document came to give a Content-Type the sink
+	// never sent.
 	cases := map[string]string{
-		"Content-Type":             WebhookContentType,
-		WebhookHeaderDocumentHash:  "sha256:" + doc.SHA256,
-		WebhookHeaderWorkloadKind:  meta.WorkloadKind,
-		WebhookHeaderWorkloadNS:    meta.WorkloadNamespace,
-		WebhookHeaderWorkloadName:  meta.WorkloadName,
-		WebhookHeaderCategory:      meta.WorkloadCategory,
-		WebhookHeaderControllerVer: "0.1.0-test",
+		"Content-Type":               "application/json",
+		"X-Aibom-Document-Hash":      "sha256:" + doc.SHA256,
+		"X-Aibom-Workload-Kind":      meta.WorkloadKind,
+		"X-Aibom-Workload-Namespace": meta.WorkloadNamespace,
+		"X-Aibom-Workload-Name":      meta.WorkloadName,
+		"X-Aibom-Workload-Category":  meta.WorkloadCategory,
+		"X-Aibom-Controller-Version": "0.1.0-test",
 	}
 	for h, want := range cases {
 		if got := receivedReq.Header.Get(h); got != want {
