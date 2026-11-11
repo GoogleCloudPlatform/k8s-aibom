@@ -462,11 +462,12 @@ controller restart, and sinks are write-only. So after a restart, for an
 AIBOM whose document is external or truncated and whose stored input
 hash does not prove it had no pool facts, published membership cannot
 be determined while the view is unavailable. The controller then leaves
-that document unchanged and retries (logged at info) rather than risk
-removing facts; it is updated as soon as the view is readable. With the
-CRD absent for good, such a document is not updated until the CRD is
-installed again. Inline documents (the default up to 256 KiB) are not
-affected.
+that document unchanged and retries (logged at V(1)) rather than risk
+removing facts; it is updated as soon as the view is readable. If the
+CRD has been absent since startup, such a document waits until the CRD
+is installed. A subsequently confirmed removal instead clears the
+previous membership without deferring. Inline documents (the default
+up to 256 KiB) are not affected by the restart limitation.
 
 **Not read:** `spec.targetPorts`, the rest of `spec.endpointPickerRef`,
 `status.*`; the older `inference.networking.x-k8s.io` group (any
