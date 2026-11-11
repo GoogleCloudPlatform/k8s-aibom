@@ -202,13 +202,18 @@ type ModelSummary struct {
 	// "env_var", "container_arg", "workload_annotation"). Matches the
 	// EvidenceSource enum in internal/scraper.
 	Source string `json:"source,omitempty"`
-	// Confidence is the per-attribute confidence ("declared" or
-	// "inferred"). Never "unresolved" — unresolved attributes are not
+	// Confidence is the per-attribute confidence: "declared",
+	// "inferred", or "verified" when the model's signature verified
+	// (see Signed). Never "unresolved" — unresolved attributes are not
 	// summarized.
 	Confidence string `json:"confidence,omitempty"`
 	// Signed encodes signature presence and verification. One of
-	// "unsigned", "claimed", "verified". v1 never emits "verified"
-	// (see docs/schema-divergences.md D-001).
+	// "unsigned", "claimed", "verified"; empty when the workload
+	// declares no signature reference, which readers treat as
+	// "unsigned". "verified" requires spec.verification in
+	// AIBOMControllerConfig and a signature that verifies against an
+	// operator trust root with a signer-identity constraint (Design
+	// 002); otherwise a signature reference is "claimed".
 	Signed string `json:"signed,omitempty"`
 }
 
