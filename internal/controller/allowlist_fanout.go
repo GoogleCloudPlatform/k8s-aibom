@@ -150,6 +150,13 @@ func (f *AllowlistFanout) Trigger(allowed config.WorkloadKindSet) {
 // it under its root context so shutdown never waits on a fan-out
 // (Design 004 amendment A5).
 func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.WorkloadKindSet) {
+	f.trigger(parent, allowed, "", "re-enqueued workloads after workloadKinds change")
+}
+
+// trigger re-enqueues every workload of every reporting kind, in ns
+// only when ns is set (an InferencePool change, Design 007 §2), and logs
+// each kind's count as what.
+func (f *AllowlistFanout) trigger(parent context.Context, allowed config.WorkloadKindSet, ns, what string) {
 	f.slotOnce.Do(func() { f.slot = make(chan struct{}, 1) })
 	select {
 	case f.slot <- struct{}{}:
@@ -164,6 +171,9 @@ func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	log := ctrl.Log.WithName("allowlist-fanout").WithValues("workloadKinds", allowed.String())
+	if ns != "" {
+		log = log.WithValues("namespace", ns)
+	}
 
 	f.mu.Lock()
 	kinds := append([]*fanoutKind{}, f.kinds...)
@@ -177,7 +187,7 @@ func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.
 		if k.supervised && (!allowed.Allows(k.gk) || inactive[k.gk]) {
 			continue
 		}
-		sent, err := f.fanOutKind(ctx, k)
+		sent, err := f.fanOutKind(ctx, k, ns)
 		if err != nil {
 			log.Info("fan-out incomplete", "kind", k.gk.String(), "enqueued", sent, "err", err.Error())
 			if ctx.Err() != nil {
@@ -185,16 +195,20 @@ func (f *AllowlistFanout) TriggerContext(parent context.Context, allowed config.
 			}
 			continue
 		}
-		log.Info("re-enqueued workloads after workloadKinds change", "kind", k.gk.String(), "count", sent)
+		log.Info(what, "kind", k.gk.String(), "count", sent)
 	}
 }
 
-func (f *AllowlistFanout) fanOutKind(ctx context.Context, k *fanoutKind) (int, error) {
+func (f *AllowlistFanout) fanOutKind(ctx context.Context, k *fanoutKind, ns string) (int, error) {
 	sent := 0
 	var continueToken string
 	for {
 		list := k.list()
-		if err := f.Reader.List(ctx, list, client.Limit(fanoutPageSize), client.Continue(continueToken)); err != nil {
+		opts := []client.ListOption{client.Limit(fanoutPageSize), client.Continue(continueToken)}
+		if ns != "" {
+			opts = append(opts, client.InNamespace(ns))
+		}
+		if err := f.Reader.List(ctx, list, opts...); err != nil {
 			return sent, err
 		}
 		for _, obj := range k.items(list) {

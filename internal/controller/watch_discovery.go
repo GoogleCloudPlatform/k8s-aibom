@@ -554,7 +554,7 @@ func (s *WatchSupervisor) setRunnerActive(kind string, active bool) {
 		return
 	}
 	for _, w := range s.Watches {
-		if w.Name == kind {
+		if w.Name == kind && w.Run == nil {
 			s.Fanout.SetActive(schema.GroupKind{Group: w.GVK.Group, Kind: w.GVK.Kind}, active)
 			return
 		}

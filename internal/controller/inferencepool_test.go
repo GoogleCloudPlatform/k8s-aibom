@@ -1,0 +1,382 @@
+/*
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	"context"
+	"reflect"
+	"sync"
+	"testing"
+	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	toolscache "k8s.io/client-go/tools/cache"
+
+	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/bom"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/config"
+	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
+)
+
+// Design 007 §2 (Part 2a), unit level: matching, the view's state
+// machine, reading back published facts, the unavailable-view decision,
+// and the supervisor's auxiliary-candidate path.
+
+func pool(ns, name string, sel map[string]string, picker string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(InferencePoolGVK)
+	u.SetNamespace(ns)
+	u.SetName(name)
+	if sel != nil {
+		m := map[string]interface{}{}
+		for k, v := range sel {
+			m[k] = v
+		}
+		_ = unstructured.SetNestedMap(u.Object, m, "spec", "selector", "matchLabels")
+	}
+	if picker != "" {
+		_ = unstructured.SetNestedField(u.Object, picker, "spec", "endpointPickerRef", "name")
+	}
+	return u
+}
+
+// usableView returns a running view that has listed pools.
+func usableView(t *testing.T, pools ...*unstructured.Unstructured) *InferencePoolView {
+	t.Helper()
+	v := &InferencePoolView{}
+	v.begin()
+	list := make([]interface{}, 0, len(pools))
+	for _, p := range pools {
+		list = append(list, p)
+	}
+	if err := (poolStore{v}).Replace(list, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if st := v.State(); st != PoolViewUsable {
+		t.Fatalf("state %s, want usable", st)
+	}
+	v.take() // drop the sync's request
+	return v
+}
+
+func TestInferencePoolLookup_Matching(t *testing.T) {
+	v := usableView(t,
+		// AND within the selector.
+		pool("ns", "both", map[string]string{"app": "vllm", "tier": "decode"}, "both-epp"),
+		// Matches one template only: OR across templates.
+		pool("ns", "prefill-only", map[string]string{"role": "prefill"}, ""),
+		// Each pair is on a different template: never combined.
+		pool("ns", "mixed", map[string]string{"role": "prefill", "tier": "decode"}, ""),
+		// Same selector, other namespace: never matched.
+		pool("other", "both", map[string]string{"app": "vllm"}, ""),
+		// Empty and absent selectors match nothing.
+		pool("ns", "empty", map[string]string{}, ""),
+		pool("ns", "absent", nil, ""),
+		// Value mismatch.
+		pool("ns", "wrong-value", map[string]string{"app": "sglang"}, ""),
+		// Name sorts before "both": ordering is by name.
+		pool("ns", "a-first", map[string]string{"app": "vllm"}, ""),
+	)
+	templates := []map[string]string{
+		{"app": "vllm", "tier": "decode"},
+		{"app": "vllm", "role": "prefill"},
+	}
+	got, st := v.Lookup("ns", templates)
+	if st != PoolViewUsable {
+		t.Fatalf("state %s", st)
+	}
+	want := []scraper.InferencePoolMembership{
+		{Pool: "ns/a-first"}, // matches both templates, recorded once
+		{Pool: "ns/both", EndpointPicker: "both-epp"},
+		{Pool: "ns/prefill-only"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Lookup = %v, want %v", got, want)
+	}
+	if got, _ := v.Lookup("ns", nil); got != nil {
+		t.Errorf("a workload with no template labels matched %v", got)
+	}
+	if got, _ := v.Lookup("third", templates); got != nil {
+		t.Errorf("a namespace with no pools matched %v", got)
+	}
+	var nilView *InferencePoolView
+	if got, st := nilView.Lookup("ns", templates); got != nil || st != PoolViewInactive {
+		t.Errorf("nil view: %v %s", got, st)
+	}
+}
+
+func pending(v *InferencePoolView) (bool, []string) { return v.take() }
+
+func TestInferencePoolView_StateAndRequests(t *testing.T) {
+	v := &InferencePoolView{}
+	if st := v.State(); st != PoolViewInactive {
+		t.Fatalf("new view %s", st)
+	}
+	if got, _ := v.Lookup("ns", []map[string]string{{"a": "b"}}); got != nil {
+		t.Fatal("inactive view returned facts")
+	}
+	v.begin()
+	if st := v.State(); st != PoolViewUnsynced {
+		t.Fatalf("running, unlisted: %s", st)
+	}
+	// Events before the first list neither count nor enqueue.
+	s := poolStore{v}
+	_ = s.Add(pool("ns", "p", map[string]string{"a": "b"}, ""))
+	if all, nss := pending(v); all || nss != nil {
+		t.Fatalf("pre-sync add enqueued %v %v", all, nss)
+	}
+	// A failed list before the first sync: still unsynced; a watch
+	// alone cannot make an unlisted view usable.
+	v.failed(apierrors.NewForbidden(schema.GroupResource{Group: InferencePoolGVK.Group, Resource: "inferencepools"}, "", nil), func() {})
+	v.watchEstablished()
+	if st := v.State(); st != PoolViewUnsynced {
+		t.Fatalf("forbidden list: %s", st)
+	}
+	// First list: usable, every namespace re-enqueued.
+	_ = s.Replace([]interface{}{pool("ns", "p", map[string]string{"a": "b"}, "")}, "1")
+	if st := v.State(); st != PoolViewUsable {
+		t.Fatalf("after list: %s", st)
+	}
+	if all, _ := pending(v); !all {
+		t.Fatal("initial sync must re-enqueue every namespace")
+	}
+	// A no-op update enqueues nothing; a change enqueues its namespace.
+	_ = s.Update(pool("ns", "p", map[string]string{"a": "b"}, ""))
+	if all, nss := pending(v); all || nss != nil {
+		t.Fatalf("no-op update enqueued %v %v", all, nss)
+	}
+	_ = s.Update(pool("ns", "p", map[string]string{"a": "c"}, ""))
+	_ = s.Add(pool("ns2", "q", map[string]string{"a": "b"}, ""))
+	if all, nss := pending(v); all || !reflect.DeepEqual(nss, []string{"ns", "ns2"}) {
+		t.Fatalf("changes enqueued %v %v", all, nss)
+	}
+	_ = s.Delete(toolsTombstone(pool("ns2", "q", nil, "")))
+	if _, nss := pending(v); !reflect.DeepEqual(nss, []string{"ns2"}) {
+		t.Fatalf("delete enqueued %v", nss)
+	}
+	_ = s.Delete(pool("ns2", "never-seen", nil, ""))
+	if all, nss := pending(v); all || nss != nil {
+		t.Fatalf("delete of an unknown pool enqueued %v %v", all, nss)
+	}
+	// A relist of a usable view enqueues only changed namespaces.
+	_ = s.Replace([]interface{}{pool("ns", "p", map[string]string{"a": "c"}, ""), pool("ns3", "r", nil, "")}, "2")
+	if all, nss := pending(v); all || !reflect.DeepEqual(nss, []string{"ns3"}) {
+		t.Fatalf("relist enqueued %v %v", all, nss)
+	}
+	// A watch failure makes the view unsynced; NotFound asks discovery
+	// to re-read the CRD.
+	rechecked := false
+	v.failed(apierrors.NewNotFound(schema.GroupResource{Resource: "inferencepools"}, ""), func() { rechecked = true })
+	if !rechecked {
+		t.Error("an absence-shaped error must recheck the CRD")
+	}
+	if st := v.State(); st != PoolViewUnsynced {
+		t.Fatalf("after failure: %s", st)
+	}
+	if got, _ := v.Lookup("ns", []map[string]string{{"a": "c"}}); got != nil {
+		t.Fatal("an unsynced view returned facts")
+	}
+	// A watch resuming after a list recovers and re-enqueues all.
+	v.watchEstablished()
+	if st := v.State(); st != PoolViewUsable {
+		t.Fatalf("after recovery: %s", st)
+	}
+	if all, _ := pending(v); !all {
+		t.Fatal("recovery must re-enqueue every namespace")
+	}
+	// Stopping leaves the view inactive and re-enqueues all.
+	v.end()
+	if st := v.State(); st != PoolViewInactive {
+		t.Fatalf("after end: %s", st)
+	}
+	if all, _ := pending(v); !all {
+		t.Fatal("stopping must re-enqueue every namespace")
+	}
+}
+
+func toolsTombstone(obj interface{}) interface{} {
+	return toolscache.DeletedFinalStateUnknown{Key: "ns2/q", Obj: obj}
+}
+
+// publishedInferencePools reads back exactly what the builder wrote.
+func TestPublishedInferencePools_RoundTrip(t *testing.T) {
+	facts := []scraper.InferencePoolMembership{{Pool: "ns/a", EndpointPicker: "a-epp"}, {Pool: "ns/b"}}
+	a := aibomWithDoc(t, facts)
+	got, ok := publishedInferencePools(a)
+	if !ok || !reflect.DeepEqual(got, facts) {
+		t.Errorf("read back %v %v, want %v", got, ok, facts)
+	}
+	none, ok := publishedInferencePools(aibomWithDoc(t, nil))
+	if !ok || none != nil {
+		t.Errorf("document without pools: %v %v", none, ok)
+	}
+	if _, ok := publishedInferencePools(&aibomv1beta1.AIBOM{}); ok {
+		t.Error("no inline document must be unknown")
+	}
+	ext := &aibomv1beta1.AIBOM{Status: aibomv1beta1.AIBOMStatus{BOMDocument: &aibomv1beta1.BOMDocumentRef{}}}
+	if _, ok := publishedInferencePools(ext); ok {
+		t.Error("an external document must be unknown")
+	}
+}
+
+func aibomWithDoc(t *testing.T, facts []scraper.InferencePoolMembership) *aibomv1beta1.AIBOM {
+	t.Helper()
+	doc, err := bom.NewBuilder().Build(&scraper.BOMInputs{ScraperName: "inference.spec", Confidence: scraper.ConfidenceInferred},
+		bom.BuildOptions{WorkloadKind: "Deployment", WorkloadName: "w", WorkloadNamespace: "ns", InferencePools: facts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &aibomv1beta1.AIBOM{Status: aibomv1beta1.AIBOMStatus{
+		BOMDocument: &aibomv1beta1.BOMDocumentRef{Inline: &aibomv1beta1.InlineBOM{Data: doc.JSON}},
+	}}
+}
+
+// The unavailable-view decision: no new facts, published ones kept,
+// defer only when unknowable and the watch is starting or recovering.
+func TestInferencePoolFacts_Decision(t *testing.T) {
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "w"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "vllm"}}}},
+	}
+	req := WorkloadReconcileRequest{Workload: scraper.Workload{Namespace: "ns", Name: "w", Object: dep}}
+	inputs := func() *scraper.BOMInputs {
+		return &scraper.BOMInputs{ScraperName: "inference.spec", Confidence: scraper.ConfidenceInferred, Category: scraper.CategoryInference}
+	}
+	published := []scraper.InferencePoolMembership{{Pool: "ns/old"}}
+	inline := aibomWithDoc(t, published)
+	external := &aibomv1beta1.AIBOM{}
+	noPoolHash, _ := scraper.HashBOMInputs(inputs())
+	externalNoPools := &aibomv1beta1.AIBOM{Status: aibomv1beta1.AIBOMStatus{InputHash: noPoolHash}}
+
+	usable := usableView(t, pool("ns", "new", map[string]string{"app": "vllm"}, ""))
+	unsynced := &InferencePoolView{}
+	unsynced.begin()
+	inactive := &InferencePoolView{}
+
+	cases := []struct {
+		name      string
+		view      *InferencePoolView
+		category  scraper.WorkloadCategory
+		existing  *aibomv1beta1.AIBOM
+		want      []scraper.InferencePoolMembership
+		wantDefer bool
+	}{
+		{"feature off", nil, scraper.CategoryInference, inline, nil, false},
+		{"not inference", usable, scraper.CategoryAgent, inline, nil, false},
+		// Usable: recomputed, the stale "ns/old" fact is dropped.
+		{"usable recomputes", usable, scraper.CategoryInference, inline, []scraper.InferencePoolMembership{{Pool: "ns/new"}}, false},
+		{"unsynced keeps inline facts", unsynced, scraper.CategoryInference, inline, published, false},
+		{"inactive keeps inline facts", inactive, scraper.CategoryInference, inline, published, false},
+		{"unavailable, first document: none", unsynced, scraper.CategoryInference, nil, nil, false},
+		{"unavailable, hash proves none", unsynced, scraper.CategoryInference, externalNoPools, nil, false},
+		{"unsynced, unknowable: defer", unsynced, scraper.CategoryInference, external, nil, true},
+		{"inactive, unknowable: proceed", inactive, scraper.CategoryInference, external, nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &WorkloadReconciler{Pools: tc.view}
+			in := inputs()
+			in.Category = tc.category
+			got, deferred, err := r.inferencePoolFacts(req, in, tc.existing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) || deferred != tc.wantDefer {
+				t.Errorf("got %v defer=%v, want %v defer=%v", got, deferred, tc.want, tc.wantDefer)
+			}
+		})
+	}
+}
+
+// The InferencePool candidate is driven by discovery like a workload
+// kind but is not one: no health entry, no TrackedKinds membership, no
+// allowlist effect, no sweep.
+func TestApplyAux_InferencePoolLifecycle(t *testing.T) {
+	s := newApplyTestSupervisor(t)
+	var mu sync.Mutex
+	var log []string
+	rec := func(e string) { mu.Lock(); log = append(log, e); mu.Unlock() }
+	events := func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), log...) }
+	started := make(chan struct{}, 8)
+	aux := ThirdPartyWatch{Name: inferencePoolName, GVK: InferencePoolGVK, CRD: InferencePoolCRD,
+		Run: func(ctx context.Context, recheck func()) {
+			rec("start")
+			started <- struct{}{}
+			<-ctx.Done()
+			rec("stop")
+		}}
+	s.Watches = []ThirdPartyWatch{aux}
+	s.crdWorkers = map[string]*crdWorker{}
+	observe := func(obs crdObservation) {
+		s.crd.Lock()
+		s.crd.obs[inferencePoolName] = obs
+		s.crd.Unlock()
+		// An allowlist that excludes everything has no effect on it.
+		s.apply(config.NewWorkloadKindSet(gkDeployment))
+	}
+	waitStart := func() {
+		t.Helper()
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("runner did not start: %v", events())
+		}
+	}
+	t.Cleanup(func() {
+		for _, r := range s.runners {
+			r.cancel()
+			<-r.done
+		}
+	})
+
+	observe(crdObservation{}) // unknown: nothing
+	if len(s.runners) != 0 {
+		t.Fatal("unknown CRD started the view")
+	}
+	observe(crdObservation{state: crdStateReady, uid: "u1", late: true})
+	waitStart()
+	observe(crdObservation{state: crdStateReady, uid: "u1"}) // no-op update
+	observe(crdObservation{state: crdStateUnservable, uid: "u1", reason: "v1 not served"})
+	observe(crdObservation{state: crdStateReady, uid: "u1"})
+	waitStart()
+	observe(crdObservation{state: crdStateReady, uid: "u2"}) // re-created
+	waitStart()
+	observe(crdObservation{state: crdStateRemoved, uid: "u2"})
+	observe(crdObservation{state: crdStateRemoved, uid: "u2"})
+
+	want := []string{"start", "stop", "start", "stop", "start", "stop"}
+	if got := events(); !reflect.DeepEqual(got, want) {
+		t.Errorf("lifecycle %v, want %v", got, want)
+	}
+	if _, ok := s.Health.Status(inferencePoolName); ok {
+		t.Error("the InferencePool view must have no watch health entry")
+	}
+	if s.Tracked.Has(schema.GroupKind{Group: InferencePoolGVK.Group, Kind: inferencePoolName}) {
+		t.Error("InferencePool must never be a tracked kind")
+	}
+	select {
+	case <-s.fanoutReq:
+		t.Error("the InferencePool view must not request an allowlist fan-out")
+	default:
+	}
+}

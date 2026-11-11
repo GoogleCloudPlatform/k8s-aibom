@@ -124,6 +124,11 @@ type WorkloadReconciler struct {
 	// namespace and emits the NamespaceObserved event (#106). Shared
 	// by every kind's reconciler. nil disables the event.
 	Observer *NamespaceObserver
+
+	// Pools is the InferencePool view (Design 007 §2): inference
+	// workloads whose Pod templates match a same-namespace pool's
+	// selector record the pool on their document. nil records none.
+	Pools *InferencePoolView
 }
 
 // WorkloadReconcileRequest carries everything the kind-neutral reconcile
@@ -295,16 +300,38 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	// whose descendants changed must rebuild even if its own spec and
 	// pods did not.
 	inputs.OwnedWorkloads = ownedStrings(req.Owned)
-	inputHash, err := scraper.HashBOMInputs(inputs)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("hash inputs: %w", err)
-	}
 	aibomKey := types.NamespacedName{
 		Name:      req.AIBOMName,
 		Namespace: req.Workload.Namespace,
 	}
 	var existing aibomv1beta1.AIBOM
 	existingErr := r.Get(ctx, aibomKey, &existing)
+	if existingErr != nil && !apierrors.IsNotFound(existingErr) {
+		// Real Get error (not "doesn't exist yet"). Surface it.
+		return ctrl.Result{}, fmt.Errorf("get existing AIBOM: %w", existingErr)
+	}
+	// InferencePool membership (Design 007 §2): only the sorted facts
+	// enter the hash, never the view's availability, so a pool change
+	// rebuilds the document and a watch flap alone does not.
+	var prior *aibomv1beta1.AIBOM
+	if existingErr == nil {
+		prior = &existing
+	}
+	pools, deferPools, err := r.inferencePoolFacts(req, inputs, prior)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("inference pool membership: %w", err)
+	}
+	if deferPools {
+		logger.V(1).Info("InferencePool view not readable yet and previously published membership unknown; deferring",
+			"workload_namespace", req.Workload.Namespace, "workload_name", req.Workload.Name)
+		return ctrl.Result{RequeueAfter: InferencePoolDeferRequeue}, nil
+	}
+	inputs.InferencePools = pools
+	req.BOMBuildOptions.InferencePools = pools
+	inputHash, err := scraper.HashBOMInputs(inputs)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("hash inputs: %w", err)
+	}
 	if existingErr == nil {
 		// Dedup fast path: input hash matches the previously-emitted BOM's
 		// hash. Touch LastReconciled + ObservedGeneration only.
@@ -361,10 +388,6 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			)
 			return ctrl.Result{RequeueAfter: BootstrapRaceRequeueAfter}, nil
 		}
-	}
-	if existingErr != nil && !apierrors.IsNotFound(existingErr) {
-		// Real Get error (not "doesn't exist yet"). Surface it.
-		return ctrl.Result{}, fmt.Errorf("get existing AIBOM: %w", existingErr)
 	}
 
 	// Build the BOM. Absorbed workloads (Design 005) ride on the
