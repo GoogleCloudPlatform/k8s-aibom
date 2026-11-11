@@ -239,6 +239,16 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **The AIBOM CRD no longer says models are never `verified`** (#377).
+  The `status.summary.models[].signed` description, which `kubectl
+  explain` shows, said "v1 never emits `verified`", and the `confidence`
+  description listed only `declared` and `inferred`. With signature
+  verification (Design 002, v1.5.0) a model's signature can be
+  `verified`, and since #328 its confidence follows. Both descriptions
+  now give `verified` and when it appears, and
+  `docs/schema-divergences.md` marks D-001, the "never emits `verified`"
+  entry, as retired by Design 002. Documentation only; no schema change.
+
 - **Pod digests resolve for workloads whose selector uses
   `matchExpressions`.** Deployment, StatefulSet, DaemonSet and Job
   reconcilers listed the workload's pods by `selector.matchLabels`

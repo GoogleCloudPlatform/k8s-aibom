@@ -135,14 +135,19 @@ Each divergence entry should follow this template:
 The following divergences are already decided in design and will be filled in
 as the corresponding code lands.
 
-- **D-001: Signature confidence tiering.** v1 reports OMS signatures as one of
-  `unsigned` / `claimed` / `verified`, encoded via CycloneDX
-  `evidence.identity.methods[].confidence`. v1 will never emit `verified`
-  because v1 does not perform Rekor lookup or artifact verification. Auditors
-  reading a v1 BOM can trust `claimed` to mean "we saw an annotation or
-  attestation reference but did not validate it cryptographically." See PRD
-  FR2.5 and the `internal/scraper` SignatureVerifier interface (with
-  `NoopVerifier` v1 implementation; `RekorVerifier` is the v2 plug-in point).
+- **D-001: Signature confidence tiering.** *Retired by Design 002
+  (v1.5.0).* This entry said v1 would never emit `verified` because it did
+  not verify signatures. The controller now verifies them when
+  `spec.verification` is enabled in `AIBOMControllerConfig`. The tiers
+  are reported in the `k8s-aibom:security:signing:status` property
+  (`signature.status` before v1.7.0; see the active entry D-003 above)
+  and in `status.summary.models[].signed`, not in
+  `evidence.identity.methods[].confidence`. A signature that verifies against an
+  operator trust root with a signer-identity constraint is `verified`,
+  and since v1.7.0 also raises the model's `k8s-aibom:confidence` to
+  `verified`; any other signature reference stays `claimed`, which
+  still means "we saw a signature reference but did not verify it
+  against a constrained trust root."
 
 - **D-002: Per-attribute evidence sourcing.** Every BOM attribute carries
   metadata identifying the specific source it was extracted from
