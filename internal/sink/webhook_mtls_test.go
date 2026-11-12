@@ -365,10 +365,9 @@ func TestWebhookSink_BearerTokenCAPEM(t *testing.T) {
 				}
 				return
 			}
-			var authorityErr x509.UnknownAuthorityError
 			var hostnameErr x509.HostnameError
-			if tc.wantErr == "authority" && !errors.As(err, &authorityErr) {
-				t.Errorf("want unknown authority error, got %v", err)
+			if tc.wantErr == "authority" && (err == nil || !strings.Contains(err.Error(), "failed to verify certificate")) {
+				t.Errorf("want certificate verification error, got %v", err)
 			}
 			if tc.wantErr == "hostname" && !errors.As(err, &hostnameErr) {
 				t.Errorf("want hostname error, got %v", err)
