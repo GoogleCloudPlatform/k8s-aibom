@@ -8,8 +8,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Document shape (one transition, v1.7.0)
 
-Five changes to the emitted CycloneDX document land together (#132,
-#328, #363), so downstream readers see one byte-shape transition. Byte-identity with
+Six changes to the emitted CycloneDX document land together (#132,
+#328, #363, #375), so downstream readers see one byte-shape transition. Byte-identity with
 documents from v1.4.0 through v1.6.x ends here; determinism within a
 release is unchanged (identical inputs still produce identical bytes),
 and the `AIBOM` status summary fields and the API schema do not change.
@@ -71,8 +71,6 @@ and the `AIBOM` status summary fields and the API schema do not change.
   graph has 0 entries` on every upload, and GUAC gets the
   workload-to-component edges from the document. Bytes change for
   every document.
-
-### Document shape (v1.8.0)
 
 - **Every document has a `serialNumber`** (#375): `urn:uuid:` followed
   by the version 5 UUID of the workload's UID in the k8s-aibom namespace
