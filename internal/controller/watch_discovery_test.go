@@ -291,6 +291,7 @@ func TestThirdPartyWatchCRDNames_MatchFixturesAndRBAC(t *testing.T) {
 		(&NIMServiceReconciler{}).Watch(),
 		(&LeaderWorkerSetReconciler{}).Watch(),
 		(&DisaggregatedSetReconciler{}).Watch(),
+		(&InferencePoolView{}).Watch(),
 	}
 	fixtures := map[string]map[string]interface{}{}
 	dir := filepath.Join("..", "..", "config", "crd", "external")
@@ -338,16 +339,20 @@ func TestThirdPartyWatchCRDNames_MatchFixturesAndRBAC(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !hasReadOnlyCRDRule(t, string(b)) {
+		if !hasReadOnlyRule(t, string(b), "apiextensions.k8s.io", "customresourcedefinitions") {
 			t.Errorf("%s: want exactly get/list/watch on apiextensions.k8s.io customresourcedefinitions", path)
+		}
+		// Design 007 §2: InferencePools are read, never written.
+		if !hasReadOnlyRule(t, string(b), "inference.networking.k8s.io", "inferencepools") {
+			t.Errorf("%s: want exactly get/list/watch on inference.networking.k8s.io inferencepools", path)
 		}
 	}
 }
 
-// hasReadOnlyCRDRule finds the customresourcedefinitions rule in a
+// hasReadOnlyRule finds the single rule for group/resource in a
 // ClusterRole (Helm template lines stripped) and checks its verbs are
 // exactly get, list, watch.
-func hasReadOnlyCRDRule(t *testing.T, doc string) bool {
+func hasReadOnlyRule(t *testing.T, doc, group, resource string) bool {
 	t.Helper()
 	var lines []string
 	for _, l := range strings.Split(doc, "\n") {
@@ -369,11 +374,11 @@ func hasReadOnlyCRDRule(t *testing.T, doc string) bool {
 	found := 0
 	for _, r := range role.Rules {
 		for _, res := range r.Resources {
-			if res != "customresourcedefinitions" {
+			if res != resource {
 				continue
 			}
 			found++
-			if len(r.APIGroups) != 1 || r.APIGroups[0] != "apiextensions.k8s.io" || len(r.Resources) != 1 {
+			if len(r.APIGroups) != 1 || r.APIGroups[0] != group || len(r.Resources) != 1 {
 				return false
 			}
 			verbs := map[string]bool{}

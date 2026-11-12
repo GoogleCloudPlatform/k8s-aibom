@@ -52,6 +52,7 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:dependency` | A remote model API the workload calls | `machine-learning-model` components |
 | `k8s-aibom:security:signing` | Model signature claim and verification outcome, relative to the project's published verification process | `machine-learning-model` components |
 | `k8s-aibom:rollup` | Workloads absorbed into this document under the ownership roll-up | `metadata.properties` |
+| `k8s-aibom:routing` | Configured routing objects whose selector matches the workload's Pod templates | `metadata.component` |
 | `k8s-aibom:kserve`, `k8s-aibom:dynamo`, `k8s-aibom:nim`, `k8s-aibom:lws`, `k8s-aibom:disaggregatedset` | Facts specific to a watched third-party kind | components |
 
 ## `k8s-aibom:workload`
@@ -128,6 +129,20 @@ of a model in isolation.
 | Property | Description |
 |----------|-------------|
 | `k8s-aibom:rollup:owned:<i>` | `Kind/name` of a tracked workload absorbed into this document because the subject owns it (Design 005). Sorted; MAY occur once per absorbed workload. |
+
+## `k8s-aibom:routing`
+
+| Property | Description |
+|----------|-------------|
+| `k8s-aibom:routing:inferencePool:<i>` | `<namespace>/<name>` of a Gateway API Inference Extension `InferencePool` (`inference.networking.k8s.io/v1`) in the workload's namespace whose `spec.selector.matchLabels` all match the labels of one Pod template the workload declares (Design 007 §2). Sorted by namespace and name, deduplicated, numbered from zero; MAY occur once per matching pool. |
+| `k8s-aibom:routing:inferencePool:<i>:endpointPicker` | The pool's `spec.endpointPickerRef.name`. Present only when the pool declares one. |
+
+A routing property records the pool's own configured selector match and
+nothing else: it does not attribute pods, models, digests or identity
+to the workload, and does not assert that a Gateway routes to the pool,
+that the Endpoint Picker is healthy, or that traffic flows. Live Pods
+and the workload's own `metadata.labels` are never matched. These
+properties are new in v1.7 and have no pre-v1.7 dotted name.
 
 ## Kind-specific sub-namespaces
 

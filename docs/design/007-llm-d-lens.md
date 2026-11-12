@@ -199,6 +199,15 @@ Transient watch errors alone are not proof of CRD removal (the #226
 rule). Avoid deleting unrelated AIBOMs or changing the underlying
 workload's runtime/model/digest facts.
 
+*Clarified during review of #356 (2026-11-11):* "unavailable" means the
+view cannot be read, not that the CRD is known to be gone. A confirmed
+removal of a previously observed CRD generation, as established by the
+discovery mechanism under the #226 rule, is positive evidence that no
+InferencePool exists, and the published pool facts are cleared and the
+affected documents reconciled. Absent-at-startup, Unservable, unsynced
+and permission-denied views remain "unavailable" and preserve
+previously published facts as described above.
+
 **Part 2b — summary and plugin (v1.8, separate PR).** Extend
 `AIBOM.status.summary` additively with sorted pool names (namespace
 is already in `summary.workload`) and an

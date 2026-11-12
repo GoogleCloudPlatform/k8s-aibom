@@ -49,6 +49,12 @@ type BuildOptions struct {
 	// Emitted as k8s-aibom:rollup:owned:<i> metadata properties; empty
 	// for documents that absorb nothing.
 	OwnedWorkloads []string
+	// InferencePools lists the InferencePools whose selector matches one
+	// of the workload's Pod templates (Design 007 §2, Part 2a), already
+	// sorted and deduplicated. Emitted on metadata.component as
+	// k8s-aibom:routing:inferencePool:<i> (and :endpointPicker); empty
+	// for workloads no pool matches (byte-identical to before).
+	InferencePools []scraper.InferencePoolMembership
 }
 
 // Builder converts a *scraper.BOMInputs (plus per-workload metadata) into
@@ -181,6 +187,7 @@ func buildRootComponent(opts BuildOptions) *cdx.Component {
 		prop("aibom.workload.uid", opts.WorkloadUID),
 		prop("aibom.workload.category", opts.WorkloadCategory),
 	}
+	props = append(props, routingProperties(opts.InferencePools)...)
 	c := &cdx.Component{
 		BOMRef:     workloadBOMRef(opts),
 		Type:       cdx.ComponentTypeApplication,
@@ -189,6 +196,29 @@ func buildRootComponent(opts BuildOptions) *cdx.Component {
 		Properties: filterProps(props),
 	}
 	return c
+}
+
+// Routing property names (Design 007 §2, Part 2a; the accepted
+// k8s-aibom:routing sub-namespace of docs/cyclonedx-property-taxonomy.md).
+const (
+	RoutingInferencePoolPrefix  = "k8s-aibom:routing:inferencePool:"
+	routingEndpointPickerSuffix = ":endpointPicker"
+)
+
+// routingProperties renders InferencePool membership as indexed root
+// properties: k8s-aibom:routing:inferencePool:<i> = <namespace>/<name>,
+// and :endpointPicker when the pool names one. The input is already
+// sorted, so the numbering is deterministic.
+func routingProperties(pools []scraper.InferencePoolMembership) []cdx.Property {
+	var out []cdx.Property
+	for i, p := range pools {
+		name := fmt.Sprintf("%s%d", RoutingInferencePoolPrefix, i)
+		out = append(out, cdx.Property{Name: name, Value: p.Pool})
+		if p.EndpointPicker != "" {
+			out = append(out, cdx.Property{Name: name + routingEndpointPickerSuffix, Value: p.EndpointPicker})
+		}
+	}
+	return out
 }
 
 // buildMetadataProperties packs scrape-time provenance and the aggregate

@@ -82,6 +82,18 @@ type ThirdPartyWatch struct {
 	CRD        string
 	Reconciler reconcile.Reconciler
 	Base       *WorkloadReconciler
+	// Run, when set, makes this an auxiliary candidate rather than a
+	// workload kind (the InferencePool view, Design 007 §2): discovery
+	// treats its CRD exactly like a workload kind's, and Run is called
+	// while the CRD is Ready, until its context ends. It gets no health
+	// entry, no TrackedKinds membership, no allowlist filtering, no
+	// fan-out source and no AIBOM sweep; Reconciler and Base are unused.
+	// recheck asks discovery to re-read the CRD.
+	Run func(ctx context.Context, recheck func())
+	// OnRemoved is called for an auxiliary candidate only when discovery
+	// confirms removal of a previously observed CRD generation. It is
+	// not called for an unservable CRD or an initial absent CRD.
+	OnRemoved func()
 }
 
 // WatchSupervisor runs third-party kinds in isolation from the manager's
@@ -307,6 +319,10 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 		if s.rootCtx.Err() != nil {
 			return
 		}
+		if w.Run != nil {
+			s.applyAux(w, obs)
+			continue
+		}
 		if obs.lagSeq > s.lagReported[w.Name] && obs.lagErr != nil {
 			// Ready CRD the RESTMapper still cannot resolve after
 			// CacheSyncTimeout (amendment A4): visible, not started.
@@ -373,6 +389,51 @@ func (s *WatchSupervisor) apply(allowed config.WorkloadKindSet) {
 				s.markUnservable(w, cur.reason)
 			}
 		}
+	}
+}
+
+// applyAux runs an auxiliary candidate (ThirdPartyWatch.Run) while
+// discovery confirms its CRD Ready, and stops it on Unservable, on a
+// confirmed removal and before a new generation (the same rows as a
+// workload kind, minus health, allowlist, roll-up and sweep). A
+// mapping lag is logged only.
+func (s *WatchSupervisor) applyAux(w ThirdPartyWatch, obs crdObservation) {
+	if obs.lagSeq > s.lagReported[w.Name] && obs.lagErr != nil {
+		s.lagReported[w.Name] = obs.lagSeq
+		ctrl.Log.WithName("watch-supervisor").WithValues("kind", w.Name).Info("CRD Ready but not resolvable; not started", "err", obs.lagErr.Error())
+	}
+	cur := s.life[w.Name]
+	_, running := s.runners[w.Name]
+	switch obs.state {
+	case crdStateReady:
+		if running && obs.uid != cur.uid {
+			s.stopRunner(w)
+			running = false
+		}
+		s.life[w.Name] = kindLife{state: crdStateReady, uid: obs.uid}
+		if running {
+			return
+		}
+		kctx, cancel := context.WithCancel(s.rootCtx)
+		r := &watchRunner{cancel: cancel, done: make(chan struct{})}
+		s.runners[w.Name] = r
+		recheck := func() {
+			if k, ok := s.crdWorkers[w.Name]; ok {
+				k.poke()
+			}
+		}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer close(r.done)
+			w.Run(kctx, recheck)
+		}()
+	case crdStateUnservable, crdStateRemoved:
+		s.stopRunner(w)
+		if obs.state == crdStateRemoved && cur.state != crdStateRemoved && w.OnRemoved != nil {
+			w.OnRemoved()
+		}
+		s.life[w.Name] = kindLife{state: obs.state, uid: obs.uid, reason: obs.reason}
 	}
 }
 
