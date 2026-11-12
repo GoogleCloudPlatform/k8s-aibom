@@ -100,6 +100,14 @@ rules:
   - get
   - list
 - apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - leaderworkerset.x-k8s.io
   resources:
   - leaderworkersets

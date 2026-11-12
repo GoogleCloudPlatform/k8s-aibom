@@ -72,6 +72,8 @@ type envTestEnv struct {
 	// recorder receives the supervisor's controller-Pod events when
 	// envTestOptions.events is set; nil otherwise.
 	recorder *record.FakeRecorder
+	// pools is the InferencePool view wired into every reconciler.
+	pools *InferencePoolView
 }
 
 // envTestOptions varies startEnvTestWith for the late-CRD-discovery
@@ -89,6 +91,8 @@ type envTestOptions struct {
 	// installed and before the manager (and so the supervisor) starts,
 	// to set up cluster state the supervisor must find at startup.
 	beforeManager func(t *testing.T, c client.Client)
+	// pools adjusts the InferencePool view before the manager starts.
+	pools func(*InferencePoolView)
 }
 
 // startEnvTest starts an envtest API server, registers schemes, applies
@@ -209,6 +213,13 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 	tracked.Follow(configStore)
 	fanout := &AllowlistFanout{Reader: mgr.GetAPIReader()}
 	fanout.Bind(configStore)
+	pools := NewInferencePoolView(mgr.GetConfig(), fanout, configStore)
+	if opts.pools != nil {
+		opts.pools(pools)
+	}
+	if err := mgr.Add(pools); err != nil {
+		t.Fatalf("add InferencePool view: %v", err)
+	}
 	observer := newNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom"), testNamespaceObservationSettle, 5*testNamespaceObservationSettle) //nolint:staticcheck
 	inferenceBase := WorkloadReconciler{
 		Client:            mgr.GetClient(),
@@ -222,6 +233,7 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 		Tracked:           tracked,
 		Fanout:            fanout,
 		Observer:          observer,
+		Pools:             pools,
 	}
 	// KServe needs its own scraper; everything else shared.
 	kserveBase := inferenceBase
@@ -276,6 +288,7 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 		(&NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
 		(&LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
 		(&DisaggregatedSetReconciler{WorkloadReconciler: dsetBase}).Watch(),
+		pools.Watch(),
 	}, tune); err != nil {
 		t.Fatalf("RegisterThirdPartyWatches: %v", err)
 	}
@@ -314,6 +327,7 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 		observer:    observer,
 		tracked:     tracked,
 		recorder:    fakeRecorder,
+		pools:       pools,
 	}
 }
 

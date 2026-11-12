@@ -1,0 +1,83 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ⚠ TEST-ONLY CRD. ⚠
+#
+# Real clusters install the Gateway API Inference Extension's full CRD
+# (v1.6.2 or later) from kubernetes-sigs/gateway-api-inference-extension.
+# This minimal version exists solely so envtest can create InferencePools
+# with the fields k8s-aibom reads. Do NOT apply this file to a real
+# cluster.
+#
+# The fields this CRD explicitly schemas are (Design 007 §2, Part 2a):
+#   - spec.selector.matchLabels       (all pairs required to match)
+#   - spec.endpointPickerRef.name     (optional; recorded, never fetched)
+#
+# Everything else is permitted via x-kubernetes-preserve-unknown-fields.
+# Only inference.networking.k8s.io/v1 is supported; the older
+# inference.networking.x-k8s.io group is not read — see
+# docs/external-crd-versions.md.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: inferencepools.inference.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: "unapproved, k8s-aibom test fixture (minimal subset)"
+spec:
+  group: inference.networking.k8s.io
+  scope: Namespaced
+  names:
+    plural: inferencepools
+    singular: inferencepool
+    kind: InferencePool
+    listKind: InferencePoolList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                selector:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                endpointPickerRef:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    name:
+                      type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

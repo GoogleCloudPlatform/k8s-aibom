@@ -58,8 +58,14 @@ rules:
 - apiGroups: ["disaggregatedset.x-k8s.io"]
   resources: ["disaggregatedsets"]
   verbs: ["get", "list", "watch"]
+# Gateway API Inference Extension InferencePools (Design 007 §2, #137):
+# read only, to record which pools' selectors match a workload's Pod
+# templates. Not a reported kind; watched only while the CRD is Ready.
+- apiGroups: ["inference.networking.k8s.io"]
+  resources: ["inferencepools"]
+  verbs: ["get", "list", "watch"]
 # CRD discovery (Design 004 amendment, #226): one metadata-only CRD
-# informer whose event handlers filter six candidate names; GET each
+# informer whose event handlers filter seven candidate names; GET each
 # candidate on change,
 # to read Established and served versions. Read-only; never writes a CRD.
 - apiGroups: ["apiextensions.k8s.io"]

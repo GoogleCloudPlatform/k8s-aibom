@@ -257,6 +257,14 @@ type BOMInputs struct {
 	// a change in what a root owns rebuilds its document. omitempty
 	// keeps the hash byte-identical for roots that absorb nothing.
 	OwnedWorkloads []string `json:"ownedWorkloads,omitempty"`
+	// InferencePools lists the InferencePools whose selector matches one
+	// of the workload's Pod templates (Design 007 §2, Part 2a), sorted
+	// and deduplicated. Set by the reconciler, not by scrapers. Only the
+	// membership facts are hashed, never whether the pool view was
+	// available, so a watch flap alone does not rebuild the document.
+	// omitempty keeps the hash byte-identical for workloads no pool
+	// matches.
+	InferencePools []InferencePoolMembership `json:"inferencePools,omitempty"`
 }
 
 // Deduplicate removes duplicate components and services from the inputs,

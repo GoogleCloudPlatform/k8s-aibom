@@ -410,6 +410,75 @@ locator roots must move with it.
 templates and integers, decoded into `corev1` types already in the
 dependency graph.
 
+### Gateway API Inference Extension `inference.networking.k8s.io/v1.InferencePool`
+
+**Not a reported kind.** Design 007 §2 (Part 2a). An InferencePool has
+no AIBOM of its own, never enters `TrackedKinds` or
+`spec.discovery.workloadKinds`, and takes no part in ownership roll-up.
+
+**View:** `internal/controller/inferencepool.go` (`InferencePoolView`).
+A read-only list/watch started and stopped by the WatchSupervisor's CRD
+discovery (#226) as an auxiliary candidate: CRD absent at startup,
+installed later, Unservable, removed and re-created are decided exactly
+as for a workload kind. It gets no `aibom_watch_healthy` series and no
+watch events; its CRD reads count toward the `CRDDiscovery` aggregate.
+
+**Field paths read:**
+
+| Path | Used as |
+|---|---|
+| `metadata.namespace`, `metadata.name` | `k8s-aibom:routing:inferencePool:<i>` = `<namespace>/<name>` on the root `metadata.component` of each same-namespace inference workload a pool matches |
+| `spec.selector.matchLabels` | Matched against each Pod template the workload's scraper reads (AND within the selector, OR across templates, never combining templates); an empty or malformed selector matches nothing |
+| `spec.endpointPickerRef.name` (optional) | `k8s-aibom:routing:inferencePool:<i>:endpointPicker`; never fetched or validated |
+
+Only the Pod templates already read by the scrapers count: the apps/v1
+and batch templates, LeaderWorkerSet leader/worker templates, each
+DisaggregatedSet role's templates and each Dynamo component's (and
+component role's) `podTemplate`. Live Pods, labels a webhook adds to
+Pods, and the workload's own `metadata.labels` never count. KServe
+InferenceService and NIMService declare no Pod template the scraper
+reads and so never match. A match records the pool's configured
+selector only: no pod ownership, model identity, digest, Gateway route,
+Endpoint Picker health or traffic is inferred.
+
+**Unavailable view.** When the CRD was absent at startup, is not Ready,
+or the list/watch has not synced or is failing (including a persistent
+403), no new pool facts are created and published ones are preserved.
+Once a list succeeds, membership is recomputed and stale facts are
+removed. A *confirmed removal* of a previously observed CRD generation
+is different: its pools are known to be gone, so published routing
+facts are cleared and affected documents reconciled, even when the
+previous document is external or truncated. Published facts during
+temporary unavailability are read back from the inline document; for an
+external or truncated document, from the controller's in-memory record
+of the document it last wrote or confirmed (matched by the document's
+SHA-256); or they are known to be none when the stored input hash
+equals the hash without pool facts. Membership facts, never the view's
+availability, enter the input hash, so temporary availability changes
+alone re-emit nothing; confirmed removal changes the membership facts.
+
+**Known limitation.** The in-memory record does not survive a
+controller restart, and sinks are write-only. So after a restart, for an
+AIBOM whose document is external or truncated and whose stored input
+hash does not prove it had no pool facts, published membership cannot
+be determined while the view is unavailable. The controller then leaves
+that document unchanged and retries (logged at V(1)) rather than risk
+removing facts; it is updated as soon as the view is readable. If the
+CRD has been absent since startup, such a document waits until the CRD
+is installed. A subsequently confirmed removal instead clears the
+previous membership without deferring. Inline documents (the default
+up to 256 KiB) are not affected by the restart limitation.
+
+**Not read:** `spec.targetPorts`, the rest of `spec.endpointPickerRef`,
+`status.*`; the older `inference.networking.x-k8s.io` group (any
+version).
+
+**Test-only minimal CRD:** [`config/crd/external/inference.networking.k8s.io_inferencepools.yaml`](../config/crd/external/inference.networking.k8s.io_inferencepools.yaml)
+
+**Upgrade obligations.** `v1` (Gateway API Inference Extension v1.6.2)
+is the only version read. A new served version or group is a design
+change, not a silent addition.
+
 ## Process for adding a new external CRD
 
 When a future phase adds a scraper for another project's CRD (llm-d,

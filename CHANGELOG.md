@@ -110,6 +110,36 @@ and the `AIBOM` status summary fields and the API schema do not change.
   but a POST of a document with a workload name, and passes
   Dependency-Track's answer back. Documentation and a test only.
 
+- **InferencePool membership as a routing fact** (#137, Design 007 §2,
+  Part 2a). An inference workload whose declared Pod template labels
+  match all of `spec.selector.matchLabels` of a Gateway API Inference
+  Extension `InferencePool` (`inference.networking.k8s.io/v1` only) in
+  the same namespace records the pool on its document's root
+  `metadata.component`: `k8s-aibom:routing:inferencePool:<i>` =
+  `<namespace>/<name>`, plus `…:<i>:endpointPicker` when the pool sets
+  `spec.endpointPickerRef.name`. Pools are deduplicated, sorted and
+  numbered from zero. Only Pod templates the scrapers already read
+  count (including DisaggregatedSet roles and Dynamo components); live
+  Pods and the workload's own labels never do, and a match attributes
+  no pod, model, digest or traffic to the workload. The pool watch is
+  started and stopped by the same CRD discovery as third-party kinds
+  (#226), so a CRD installed later needs no restart. A pool change
+  rebuilds the affected documents; while the pool view is unavailable
+  (absent at startup, not Ready, or list/watch failing) no new facts are
+  added and published ones are kept. A confirmed removal of a previously
+  observed CRD clears stale pool facts; temporary availability changes
+  alone re-emit nothing. Documents that match no pool are byte-identical
+  to before. Known limitation: after a controller restart, an AIBOM
+  whose document is external or truncated (over the inline threshold)
+  and may carry pool facts is left unchanged while the pool view is
+  unavailable, rather than risk dropping them; see
+  docs/external-crd-versions.md. **Upgrade note:** the ClusterRole
+  gains one read-only rule, `get`/`list`/`watch` on
+  `inference.networking.k8s.io/inferencepools`. Helm installs get it;
+  custom RBAC must add it, otherwise the pool list is forbidden, the
+  controller logs the 403, and no pool membership is recorded (all
+  other facts are unaffected).
+
 - **Aggregate CRD discovery health** (#226, Design 004 A6): one
   `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
   failures and candidate CRD read failures through Degraded status,

@@ -294,6 +294,14 @@ func main() {
 	// shared cache.
 	fanout := &controller.AllowlistFanout{Reader: mgr.GetAPIReader()}
 	fanout.Bind(configStore)
+	// InferencePool membership (Design 007 §2): a read-only pool view
+	// whose watch the supervisor starts while the CRD is Ready, and
+	// which re-enqueues affected workloads through the fan-out.
+	pools := controller.NewInferencePoolView(mgr.GetConfig(), fanout, configStore)
+	if err := mgr.Add(pools); err != nil {
+		log.Error(err, "unable to add InferencePool view")
+		os.Exit(1)
+	}
 
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),
@@ -307,6 +315,7 @@ func main() {
 		ControllerVersion: controllerVersion,
 		Tracked:           tracked,
 		Fanout:            fanout,
+		Pools:             pools,
 		// One observer for every kind: the NamespaceObserved event
 		// counts a namespace's workloads across kinds (#106).
 		Observer: controller.NewNamespaceObserver(mgr.GetEventRecorderFor("k8s-aibom")), //nolint:staticcheck
@@ -374,6 +383,7 @@ func main() {
 			(&controller.NIMServiceReconciler{WorkloadReconciler: nimBase}).Watch(),
 			(&controller.LeaderWorkerSetReconciler{WorkloadReconciler: lwsBase}).Watch(),
 			(&controller.DisaggregatedSetReconciler{WorkloadReconciler: dsetBase}).Watch(),
+			pools.Watch(),
 		}, nil); err != nil {
 		log.Error(err, "unable to set up third-party watches")
 		os.Exit(1)
