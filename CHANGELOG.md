@@ -269,6 +269,17 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **`training.spec` no longer claims `PyTorchJob` and `RayJob`.**
+  `HandlesKind` returned true for `kubeflow.org/PyTorchJob` and
+  `ray.io/RayJob`, but no reconciler watches either kind, so the
+  scraper never saw one; its fallback for them scraped the workload's
+  pods with locators such as `spec.containers.image` that name no
+  field of the object. `HandlesKind` now covers only `batch/Job` and
+  `batch/CronJob`, the unreachable pod fallback is removed, and any
+  other object type is an error, as in `eval.spec`, `agent.spec` and
+  `vectordb.spec`. No output changes: Job and CronJob documents are
+  scraped as before.
+
 - **`MultiScraper` keeps extraction errors from scrapers that found
   nothing.** The scraper for Deployments, StatefulSets, DaemonSets,
   Jobs and CronJobs runs inference.spec, vectordb.spec, agent.spec,

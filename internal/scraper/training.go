@@ -54,7 +54,7 @@ func (s *TrainingSpecScraper) Name() string {
 	return "training.spec"
 }
 func (s *TrainingSpecScraper) HandlesKind(k WorkloadKind) bool {
-	return k.Group == "batch" && (k.Kind == "Job" || k.Kind == "CronJob") || k.Group == "kubeflow.org" && k.Kind == "PyTorchJob" || k.Group == "ray.io" && k.Kind == "RayJob"
+	return k.Group == "batch" && (k.Kind == "Job" || k.Kind == "CronJob")
 }
 func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceConfig) (*BOMInputs, error) {
 	t := time.Now().UTC()
@@ -80,10 +80,8 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 		template = &obj.Spec.JobTemplate.Spec.Template
 		specLocator = "spec.jobTemplate.spec.template.spec"
 	default:
-		// For unstructured CRDs, fallback to scraping running Pods and de-duplicating
-		s.scrapePods(inputs, w.Pods)
-		inputs.Deduplicate()
-		return inputs, nil
+		return nil, fmt.Errorf("training.spec: unsupported object type %T for kind %s/%s/%s",
+			w.Object, w.Kind.Group, w.Kind.Version, w.Kind.Kind)
 	}
 
 	s.scrapePodTemplate(inputs, template, specLocator)
@@ -131,79 +129,6 @@ func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *cor
 		}
 		// Map Volume Mounts as training datasets (simplified logic)
 		inputs.Components = append(inputs.Components, datasetMountComponents(c, i, specLocator)...)
-	}
-
-	if isTraining {
-		inputs.Confidence = ConfidenceInferred
-		inputs.Category = CategoryTraining
-		inputs.Provenance = []Provenance{{
-			ScraperName:     s.Name(),
-			ScraperVersion:  ScraperVersion,
-			ScrapeMethod:    "spec",
-			ScrapeTimestamp: inputs.ScrapeTimestamp,
-		}}
-	}
-}
-
-func (s *TrainingSpecScraper) scrapePods(inputs *BOMInputs, pods []corev1.Pod) {
-	isTraining := false
-	for _, pod := range pods {
-		for _, c := range pod.Spec.Containers {
-			// Check for training images
-			for _, p := range DefaultTrainingImagePatterns {
-				if p.Pattern.MatchString(c.Image) {
-					isTraining = true
-					comp := Component{
-						Type:       ComponentApplication,
-						Name:       p.Name,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceImagePattern,
-							Locator: "spec.containers.image",
-						},
-						Properties: map[string]string{
-							"runtime.name":    p.Name,
-							"runtime.pattern": p.Pattern.String(),
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-				}
-			}
-			// Check Env Vars
-			for _, env := range c.Env {
-				if fwName, ok := TrainingEnvSignatures[env.Name]; ok {
-					isTraining = true
-					comp := Component{
-						Type:       ComponentApplication,
-						Name:       fwName,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceEnvVarNamePresent,
-							Locator: "spec.containers.env[" + env.Name + "]",
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-				}
-			}
-			// Map Volume Mounts as training datasets (simplified logic)
-			for _, vm := range c.VolumeMounts {
-				if vm.Name == "dataset" || vm.Name == "training-data" || vm.MountPath == "/data" {
-					comp := Component{
-						Type:       ComponentData,
-						Name:       vm.Name,
-						Confidence: ConfidenceInferred,
-						Evidence: Evidence{
-							Source:  SourceVolumeSource,
-							Locator: "spec.containers.volumeMounts[" + vm.Name + "]",
-						},
-						Properties: map[string]string{
-							"dataset.path": vm.MountPath,
-						},
-					}
-					inputs.Components = append(inputs.Components, comp)
-				}
-			}
-		}
 	}
 
 	if isTraining {
