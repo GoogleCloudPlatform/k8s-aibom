@@ -24,12 +24,15 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -294,5 +297,84 @@ func TestWebhookSink_MTLS_InvalidCertFiles_FailsConstruction(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("NewWebhookSink accepted garbage cert/key files")
+	}
+}
+
+// Bearer tokens use the same verified CAPEM transport as mTLS, without
+// presenting a client certificate or disabling hostname verification.
+func TestWebhookSink_BearerTokenCAPEM(t *testing.T) {
+	correct := generateMTLSCerts(t)
+	wrong := generateMTLSCerts(t)
+	readCA := func(path string) []byte {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	serverCert, err := tls.LoadX509KeyPair(correct.ServerCertFile, correct.ServerKeyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	authorization := make(chan string, 1)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		authorization <- r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, MinVersion: tls.VersionTLS12}
+	srv.StartTLS()
+	defer srv.Close()
+	originalBackoffs := WebhookRetryBackoffs
+	WebhookRetryBackoffs = []time.Duration{time.Millisecond}
+	t.Cleanup(func() { WebhookRetryBackoffs = originalBackoffs })
+
+	for _, tc := range []struct {
+		name     string
+		ca       []byte
+		endpoint string
+		wantErr  string
+	}{
+		{name: "correct CA", ca: readCA(correct.CAFile), endpoint: srv.URL},
+		{name: "untrusted CA", ca: readCA(wrong.CAFile), endpoint: srv.URL, wantErr: "authority"},
+		{name: "system roots", endpoint: srv.URL, wantErr: "authority"},
+		{name: "hostname mismatch", ca: readCA(correct.CAFile), endpoint: strings.Replace(srv.URL, "127.0.0.1", "localhost", 1), wantErr: "hostname"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := NewWebhookSink(WebhookSinkConfig{Endpoint: tc.endpoint, CAPEM: tc.ca, BearerToken: []byte("dummy-token")})
+			if err != nil {
+				t.Fatalf("NewWebhookSink: %v", err)
+			}
+			transport := s.client.Transport.(*http.Transport)
+			if transport.TLSClientConfig.InsecureSkipVerify || len(transport.TLSClientConfig.Certificates) != 0 {
+				t.Fatal("bearer auth must verify TLS without presenting a client certificate")
+			}
+			if tc.ca == nil && transport.TLSClientConfig.RootCAs != nil {
+				t.Fatal("absent CA must use system roots (nil RootCAs)")
+			}
+			before := requests.Load()
+			_, err = s.Emit(context.Background(), newTestWebhookDoc(), newTestWebhookMeta())
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Emit: %v", err)
+				}
+				if got := <-authorization; got != "Bearer dummy-token" {
+					t.Errorf("Authorization = %q", got)
+				}
+				return
+			}
+			var hostnameErr x509.HostnameError
+			if tc.wantErr == "authority" && (err == nil || !strings.Contains(err.Error(), "failed to verify certificate")) {
+				t.Errorf("want certificate verification error, got %v", err)
+			}
+			if tc.wantErr == "hostname" && !errors.As(err, &hostnameErr) {
+				t.Errorf("want hostname error, got %v", err)
+			}
+			if requests.Load() != before {
+				t.Fatal("TLS failure must prevent sending the bearer request")
+			}
+		})
 	}
 }

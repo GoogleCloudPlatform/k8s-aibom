@@ -238,11 +238,17 @@ type WebhookAuth struct {
 	MTLS *MTLSAuth `json:"mtls,omitempty"`
 }
 
-// BearerTokenAuth holds a bearer-token Secret reference.
+// BearerTokenAuth holds a bearer-token Secret reference and an optional
+// custom CA bundle.
 type BearerTokenAuth struct {
 	// SecretRef points at the K8s Secret containing the token.
 	// +kubebuilder:validation:Required
 	SecretRef SecretKeyRef `json:"secretRef"`
+
+	// CASecretRef optionally holds a custom CA bundle for verifying
+	// the server's certificate. If unset, system roots are used.
+	// +optional
+	CASecretRef *SecretKeyRef `json:"caSecretRef,omitempty"`
 }
 
 // MTLSAuth holds Secret references for the mTLS client cert + key,

@@ -86,8 +86,12 @@ config:
   bomGeneration:
     inlineThresholdBytes: 262144
     staleThresholdReconciles: 3
-  # External sinks (GCS, Webhook). Sinks referencing credential Secrets
-  # also need rbac.sinkSecretAccess=true. Example:
+  # External sinks (GCS, Webhook). Sinks referencing credential or CA
+  # Secrets also need rbac.sinkSecretAccess=true. Private-CA HTTPS webhooks
+  # can set auth.bearerToken.caSecretRef: {name: webhook-ca, key: ca.crt}
+  # under webhook, mirroring auth.mtls.caSecretRef; omission uses system
+  # roots. Certificate/hostname verification stays enabled; auth over
+  # plain HTTP is rejected. Example:
   #   sinks:
   #     - name: audit-archive
   #       type: GCS

@@ -24,7 +24,7 @@
 #      staticBundle trust root via the new extraVolumes support
 #   D. verification against a stale CRD — refused before any apply
 #
-# Requirements: kubectl + helm on PATH, cwd = repo root, image already
+# Requirements: kubectl + helm + openssl on PATH, cwd = repo root, image already
 # loaded into the cluster (base job), release name k8s-aibom in
 # k8s-aibom-system, chart at ./charts/k8s-aibom.
 set -euo pipefail
@@ -103,14 +103,37 @@ log "LEG A passed"
 # ---------------------------------------------------------------------------
 log "LEG B: cleartext-credential rejection + webhook sink delivery under real RBAC"
 # ---------------------------------------------------------------------------
-# Two assertions since v1.5.1:
+# Two assertions:
 #  B1: bearer token + http:// endpoint is REJECTED at config load (the
 #      G0.1/G0.2 patch's cleartext rule, verified live).
-#  B2: delivery works over http WITHOUT auth (in-cluster receiver).
-# Bearer-token delivery over TLS returns to this leg when the CRD
-# gains a CA option for bearer auth (issue #96) — the echo image
-# already serves https on 8443 for that day.
+#  B2: bearer-token delivery over HTTPS trusts a private CA Secret
+#      (#96), preserving certificate and Service hostname verification.
+# The echo image serves HTTPS on 8443 with the generated server cert.
 # ---------------------------------------------------------------------------
+# Generate short-lived test PKI for the exact Service DNS name. These
+# are disposable test credentials, not a production trust root.
+tls_dir=$(mktemp -d)
+trap 'rm -rf "$tls_dir"' EXIT
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+  -subj "/CN=matrix-e2e-ca" -addext "basicConstraints=critical,CA:TRUE" \
+  -keyout "$tls_dir/ca.key" -out "$tls_dir/ca.crt" >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes \
+  -subj "/CN=echo-sink.k8s-aibom-system.svc" \
+  -keyout "$tls_dir/tls.key" -out "$tls_dir/server.csr" >/dev/null 2>&1
+printf '%s\n' 'subjectAltName=DNS:echo-sink.k8s-aibom-system.svc' \
+  'extendedKeyUsage=serverAuth' > "$tls_dir/server.ext"
+openssl x509 -req -in "$tls_dir/server.csr" \
+  -CA "$tls_dir/ca.crt" -CAkey "$tls_dir/ca.key" -CAcreateserial -days 1 \
+  -extfile "$tls_dir/server.ext" -out "$tls_dir/tls.crt" >/dev/null 2>&1
+kubectl -n "$NS_SYS" create secret generic sink-ca \
+  --from-file=ca.crt="$tls_dir/ca.crt" --dry-run=client -o yaml \
+  | kubectl apply -f - >/dev/null
+kubectl -n "$NS_SYS" create secret tls echo-sink-tls \
+  --cert="$tls_dir/tls.crt" --key="$tls_dir/tls.key" --dry-run=client -o yaml \
+  | kubectl apply -f - >/dev/null
+rm -rf "$tls_dir"
+trap - EXIT
+
 kubectl -n "$NS_SYS" apply -f - >/dev/null <<'EOF'
 apiVersion: v1
 kind: Secret
@@ -132,7 +155,15 @@ spec:
       containers:
         - name: echo
           image: mendhak/http-https-echo:31
-          ports: [{containerPort: 8080}]
+          ports: [{containerPort: 8080}, {containerPort: 8443}]
+          env:
+            - {name: HTTPS_CERT_FILE, value: /tls/tls.crt}
+            - {name: HTTPS_KEY_FILE, value: /tls/tls.key}
+          volumeMounts:
+            - {name: tls, mountPath: /tls, readOnly: true}
+      volumes:
+        - name: tls
+          secret: {secretName: echo-sink-tls}
 ---
 apiVersion: v1
 kind: Service
@@ -140,8 +171,12 @@ metadata:
   name: echo-sink
 spec:
   selector: {app: echo-sink}
-  ports: [{port: 80, targetPort: 8080}]
+  ports:
+    - {name: http, port: 80, targetPort: 8080}
+    - {name: https, port: 443, targetPort: 8443}
 EOF
+# The echo process reads its TLS files at startup; reload them on reruns.
+kubectl -n "$NS_SYS" rollout restart deploy/echo-sink >/dev/null
 kubectl -n "$NS_SYS" rollout status deploy/echo-sink --timeout=120s >/dev/null
 
 # B1: http + bearer must be rejected at load: the config CR goes
@@ -160,12 +195,16 @@ helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
 wait_for 60 "config rejected: credentials over cleartext" \
   bash -c 'kubectl get aibomcontrollerconfig default -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].message}" 2>/dev/null | grep -qi cleartext'
 
-# B2: same endpoint, no auth — legal, and delivery must work.
+# B2: bearer delivery over HTTPS with a private CA from a Secret.
 helm upgrade "$RELEASE" "$CHART" "${HELM_BASE_ARGS[@]}" \
   --set rbac.sinkSecretAccess=true \
   --set 'config.sinks[0].name=echo' \
   --set 'config.sinks[0].type=Webhook' \
-  --set 'config.sinks[0].webhook.endpoint=http://echo-sink.k8s-aibom-system.svc/bom' \
+  --set 'config.sinks[0].webhook.endpoint=https://echo-sink.k8s-aibom-system.svc/bom' \
+  --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.name=sink-token' \
+  --set 'config.sinks[0].webhook.auth.bearerToken.secretRef.key=token' \
+  --set 'config.sinks[0].webhook.auth.bearerToken.caSecretRef.name=sink-ca' \
+  --set 'config.sinks[0].webhook.auth.bearerToken.caSecretRef.key=ca.crt' \
   --wait --timeout 2m >/dev/null
 wait_for 60 "pod Ready with sink configured" pod_ready True
 
@@ -202,6 +241,8 @@ wait_for 90 "AIBOM Ready with sink fan-out" \
 # a mysterious condition timeout.
 kubectl get aibomcontrollerconfig default -o jsonpath='{.spec.sinks}' | grep -q "echo" \
   || fail "sink not present in rendered AIBOMControllerConfig spec"
+[ "$(kubectl get aibomcontrollerconfig default -o jsonpath='{.spec.sinks[0].webhook.auth.bearerToken.caSecretRef.name}')" = sink-ca ] \
+  || fail "bearer CA Secret reference not present in rendered config"
 
 # SinkFailed is set on the sink fan-out pass, which can land after
 # Ready; wait, and on timeout dump everything needed to diagnose.
@@ -215,6 +256,10 @@ if ! try_wait 90 "SinkFailed=False under RBAC-gated Secret sink" \
   kubectl -n "$NS_SYS" logs deploy/$RELEASE --tail=120 | grep -iE "sink|secret|webhook|forbidden" >&2 || true
   fail "SinkFailed never reached False"
 fi
+# The receiver must actually see the bearer header, not just accept a
+# TLS request. The token is a fixed, synthetic e2e fixture.
+wait_for 30 "receiver saw bearer authentication" \
+  bash -c 'kubectl -n k8s-aibom-system logs deploy/echo-sink | grep -q "Bearer matrix-e2e-token"'
 log "LEG B passed"
 
 # ---------------------------------------------------------------------------

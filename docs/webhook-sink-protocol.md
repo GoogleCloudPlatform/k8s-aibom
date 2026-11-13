@@ -37,6 +37,35 @@ handling" below for the controller's interpretation.
 | `X-Aibom-Controller-Version` | always | Version of the k8s-aibom controller that produced this BOM. |
 | `Authorization` | when configured | `Bearer <token>`. Sent only when the sink sets `webhook.auth.bearerToken`. The token is the value of the Secret key named by `webhook.auth.bearerToken.secretRef` (a Secret in the controller's namespace), with surrounding whitespace trimmed; a whitespace-only value is a sink error. The chart needs `rbac.sinkSecretAccess=true` to let the controller read the Secret. Auth on an `http://` endpoint is rejected when the configuration loads, so the header is only sent over `https://`. |
 
+## TLS trust for bearer authentication
+
+For an HTTPS receiver signed by a private CA, set
+`webhook.auth.bearerToken.caSecretRef` alongside the token's `secretRef`:
+
+```yaml
+auth:
+  bearerToken:
+    secretRef:
+      name: webhook-token
+      key: token
+    caSecretRef:
+      name: webhook-ca
+      key: ca.crt
+```
+
+The CA reference has the same semantics as `webhook.auth.mtls.caSecretRef`:
+its Secret must be in the controller's namespace, and the key must contain
+a PEM-encoded CA bundle. The chart requires `rbac.sinkSecretAccess=true`.
+When set, the bundle replaces the system trust roots for this sink; when
+omitted, system roots are used. Certificate-chain and hostname verification
+remain enabled. Missing Secrets or keys, empty values, and invalid CA PEM
+cause configuration load errors. Bearer credentials over `http://` remain
+invalid even when a CA reference is set.
+
+After rotating the CA Secret, change the `AIBOMControllerConfig` spec or
+touch an annotation to reload it; changing Secret data alone does not
+trigger a reload.
+
 ## Body
 
 The request body is the **canonical JSON serialization** of the CycloneDX

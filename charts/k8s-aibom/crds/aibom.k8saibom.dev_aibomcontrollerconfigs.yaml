@@ -344,6 +344,28 @@ spec:
                                 BearerToken uses an "Authorization: Bearer <token>" header.
                                 The token is read from the referenced Secret.
                               properties:
+                                caSecretRef:
+                                  description: |-
+                                    CASecretRef optionally holds a custom CA bundle for verifying
+                                    the server's certificate. If unset, system roots are used.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
                                 secretRef:
                                   description: SecretRef points at the K8s Secret
                                     containing the token.
@@ -991,6 +1013,28 @@ spec:
                                 BearerToken uses an "Authorization: Bearer <token>" header.
                                 The token is read from the referenced Secret.
                               properties:
+                                caSecretRef:
+                                  description: |-
+                                    CASecretRef optionally holds a custom CA bundle for verifying
+                                    the server's certificate. If unset, system roots are used.
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the data key within the Secret whose value holds the
+                                        credential. Forcing the customer to be explicit about which
+                                        key matches the cert-manager / external-secrets convention.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the Secret's metadata.name.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
                                 secretRef:
                                   description: SecretRef points at the K8s Secret
                                     containing the token.

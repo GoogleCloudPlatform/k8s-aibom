@@ -96,6 +96,13 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Added
 
+- **Private-CA HTTPS for bearer-token webhook sinks** (#96): optional
+  `webhook.auth.bearerToken.caSecretRef` in both API versions reuses the
+  existing namespaced Secret lookup and mTLS CA trust handling. Omitting
+  it keeps system roots; certificate and hostname verification and the
+  rejection of bearer credentials over plain HTTP are unchanged. The
+  e2e matrix's bearer-delivery leg now uses TLS with a private CA.
+
 - **`GOVERNANCE.md` and `MAINTAINERS.md`**: roles (contributor, reviewer,
   maintainer) with entry criteria, the decision process (lazy consensus,
   design documents, votes), security and conduct handling, and how the
