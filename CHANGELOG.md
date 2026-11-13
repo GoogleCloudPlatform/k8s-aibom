@@ -269,6 +269,20 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Fixed
 
+- **`MultiScraper` keeps extraction errors from scrapers that found
+  nothing.** The scraper for Deployments, StatefulSets, DaemonSets,
+  Jobs and CronJobs runs inference.spec, vectordb.spec, agent.spec,
+  training.spec and eval.spec and merges the results it recognizes,
+  but merged `Errors` only from scrapers with a resolved result. The
+  `Scraper` contract says a field a scraper could not read goes on
+  `Errors`; one recorded by a scraper whose result was unresolved was
+  dropped with the rest of that result, so it never reached the
+  `aibom_scraper_extraction_errors_total` metric or the
+  `ExtractionErrorsPersistent` Stale condition. Errors from every
+  scraper that ran are now kept, in scraper order. None of these five
+  scrapers records extraction errors today, so no current output
+  changes.
+
 - **The webhook sink protocol gives the `Content-Type` the sink sends**
   (#376). `docs/webhook-sink-protocol.md` said every delivery carries
   `Content-Type: application/vnd.cyclonedx+json; version=1.6`; the sink
