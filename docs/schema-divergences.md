@@ -77,6 +77,29 @@ no version when no digest was resolved).
 as the owner wrote it is evidence context that the purl's lowercased,
 split form does not preserve byte-for-byte, and auditors match on it.
 
+## D-006: `serialNumber` is per workload, not per document
+
+**Status:** active, since v1.8.0
+**What we do:** `serialNumber` is `urn:uuid:<UUID v5 of the workload
+UID>` in the k8s-aibom namespace UUID
+`c8b031ec-958e-5f54-93dd-f9b3da80bfd0`, which is the UUID v5 of
+`https://github.com/GoogleCloudPlatform/k8s-aibom` in the RFC 4122 URL
+namespace. `version` is always `1`. Anyone with the workload's UID can
+compute the serial without the cluster, for example in Python:
+`uuid.uuid5(uuid.uuid5(uuid.NAMESPACE_URL, "https://github.com/GoogleCloudPlatform/k8s-aibom"), uid)`.
+A document built without a UID (only in tests) has no `serialNumber`.
+**What the spec says:** every BOM SHOULD have a unique serial number,
+even if its contents have not changed, and `version` SHOULD be
+incremented whenever an existing BOM is modified.
+**Why we diverge:** a random serial per document breaks the
+byte-identical-for-identical-inputs property, and a version counter
+would need state the controller does not keep. A serial that is a pure
+function of the workload UID keeps determinism and gives every
+workload's document a stable identity, which is what BOM-Links
+(`urn:cdx:<serial>/<version>#<bom-ref>`) and serial-keyed consumers
+(Dependency-Track project identity, GUAC) need. What changed in the
+document over time is `status.inputHash`, not `version`.
+
 ## Native fields used instead of properties
 
 Not divergences; recorded so nobody adds a property for them.
@@ -90,7 +113,7 @@ Not divergences; recorded so nobody adds a property for them.
   Project AIBOM run record) is a separate document with its own phase.
 - **Image identity is the component `purl`** (`pkg:oci`), since v1.7.0.
 - **Digests are `component.hashes`.**
-- **Workload-to-component edges are `dependencies`**, since v1.8.0: one
+- **Workload-to-component edges are `dependencies`**, since v1.7.0: one
   entry for `metadata.component` depending on every top-level
   component. No edges between components are emitted, because none are
   observed.

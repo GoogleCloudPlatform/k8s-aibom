@@ -8,8 +8,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Document shape (one transition, v1.7.0)
 
-Five changes to the emitted CycloneDX document land together (#132,
-#328, #363), so downstream readers see one byte-shape transition. Byte-identity with
+Six changes to the emitted CycloneDX document land together (#132,
+#328, #363, #375), so downstream readers see one byte-shape transition. Byte-identity with
 documents from v1.4.0 through v1.6.x ends here; determinism within a
 release is unchanged (identical inputs still produce identical bytes),
 and the `AIBOM` status summary fields and the API schema do not change.
@@ -71,6 +71,19 @@ and the `AIBOM` status summary fields and the API schema do not change.
   graph has 0 entries` on every upload, and GUAC gets the
   workload-to-component edges from the document. Bytes change for
   every document.
+
+- **Every document has a `serialNumber`** (#375): `urn:uuid:` followed
+  by the version 5 UUID of the workload's UID in the k8s-aibom namespace
+  UUID `c8b031ec-958e-5f54-93dd-f9b3da80bfd0` (itself the version 5 UUID
+  of `https://github.com/GoogleCloudPlatform/k8s-aibom` in the RFC 4122
+  URL namespace). The same workload keeps the same serial across
+  reconciles and controller restarts, so another document can BOM-Link
+  to ours (`urn:cdx:<serial>/1#<bom-ref>`) and Dependency-Track or GUAC
+  can key documents by serial. `version` stays `1`; the serial names the
+  workload's document, `status.inputHash` says what changed in it.
+  Determinism is unchanged: the serial is a pure function of the UID. A
+  workload that is deleted and recreated gets a new UID and so a new
+  serial. Bytes change for every document.
 
 ### API contract
 

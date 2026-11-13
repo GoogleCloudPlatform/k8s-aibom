@@ -26,6 +26,7 @@ import (
 	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/google/uuid"
 
 	"github.com/GoogleCloudPlatform/k8s-aibom/internal/scraper"
 )
@@ -96,9 +97,10 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 	ts := b.now().UTC().Format(time.RFC3339)
 	root := buildRootComponent(opts)
 	bom := &cdx.BOM{
-		BOMFormat:   "CycloneDX",
-		SpecVersion: cdx.SpecVersion1_6,
-		Version:     1,
+		BOMFormat:    "CycloneDX",
+		SpecVersion:  cdx.SpecVersion1_6,
+		SerialNumber: serialNumber(opts.WorkloadUID),
+		Version:      1,
 		Metadata: &cdx.Metadata{
 			Timestamp: ts,
 			// Every document is an as-deployed inventory observed from
@@ -151,6 +153,26 @@ func (b *Builder) Build(inputs *scraper.BOMInputs, opts BuildOptions) (*Document
 		SHA256:  hex.EncodeToString(sum[:]),
 		CDX:     bom,
 	}, nil
+}
+
+// serialNamespace is the UUID namespace of document serial numbers: the
+// UUID v5 of "https://github.com/GoogleCloudPlatform/k8s-aibom" in the
+// RFC 4122 URL namespace, so a peer project can derive it, and any
+// workload's serial, without the cluster (docs/schema-divergences.md).
+var serialNamespace = uuid.MustParse("c8b031ec-958e-5f54-93dd-f9b3da80bfd0")
+
+// serialNumber returns the document's CycloneDX serialNumber: a UUID v5 of
+// the workload's UID in serialNamespace, as a urn:uuid. The serial is a
+// pure function of the UID, so the same workload keeps it across
+// reconciles and controller restarts and another document can BOM-Link to
+// ours (urn:cdx:<serial>/<version>#<bom-ref>). With no UID it is empty and
+// the field is omitted, rather than one serial shared by every such
+// document.
+func serialNumber(workloadUID string) string {
+	if workloadUID == "" {
+		return ""
+	}
+	return uuid.NewSHA1(serialNamespace, []byte(workloadUID)).URN()
 }
 
 // buildRootComponent constructs the metadata.component entry that
