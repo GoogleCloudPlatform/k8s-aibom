@@ -18,6 +18,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -107,5 +108,57 @@ func TestMultiScraper_ContainerAloneStaysUnresolved(t *testing.T) {
 	}
 	if got.Confidence != ConfidenceUnresolved || len(got.Components) != 0 {
 		t.Errorf("got confidence %q with %d components, want unresolved and none", got.Confidence, len(got.Components))
+	}
+}
+
+// Extraction errors survive the merge whichever scraper recorded them.
+// A scraper that found no signal of its own can still have skipped a
+// field it could not read; the Scraper contract puts that on Errors,
+// and the reconciler counts it toward the extraction-errors metric and
+// Stale, so it must not be dropped with the rest of an unresolved result.
+func TestMultiScraper_KeepsExtractionErrorsFromUnresolvedScrapers(t *testing.T) {
+	kind := WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	errA := errors.New("a: spec.x: not a string; skipped")
+	errB := errors.New("b: spec.y: not an object; skipped")
+	errC := errors.New("c: spec.z: missing; skipped")
+	unresolved := func(name string, errs ...error) *fakeScraper {
+		return &fakeScraper{name: name, kinds: []WorkloadKind{kind}, inputs: &BOMInputs{
+			ScraperName: name, Confidence: ConfidenceUnresolved, Errors: errs,
+		}}
+	}
+	inferred := func(name string, errs ...error) *fakeScraper {
+		return &fakeScraper{name: name, kinds: []WorkloadKind{kind}, inputs: &BOMInputs{
+			ScraperName: name, Confidence: ConfidenceInferred, Category: CategoryAgent,
+			Components: []Component{{Type: ComponentApplication, Name: name, Confidence: ConfidenceInferred,
+				Evidence: Evidence{Source: SourceImagePattern, Locator: "spec.template.spec.containers[0].image"}}},
+			Errors: errs,
+		}}
+	}
+	cases := []struct {
+		name     string
+		scrapers []Scraper
+		want     []error
+	}{
+		{"unresolved before the resolved one", []Scraper{unresolved("a", errA), inferred("b", errB)}, []error{errA, errB}},
+		{"unresolved after the resolved one", []Scraper{inferred("b", errB), unresolved("a", errA)}, []error{errB, errA}},
+		{"between two resolved", []Scraper{inferred("b", errB), unresolved("a", errA), inferred("c", errC)}, []error{errB, errA, errC}},
+		{"nothing resolved", []Scraper{unresolved("a", errA), unresolved("c", errC)}, []error{errA, errC}},
+		{"no errors", []Scraper{unresolved("a"), inferred("b")}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NewMultiScraper(tc.scrapers...).Scrape(context.Background(), Workload{Kind: kind}, nil)
+			if err != nil {
+				t.Fatalf("Scrape: %v", err)
+			}
+			if len(got.Errors) != len(tc.want) {
+				t.Fatalf("Errors = %v, want %v", got.Errors, tc.want)
+			}
+			for i := range tc.want {
+				if got.Errors[i] != tc.want[i] {
+					t.Errorf("Errors[%d] = %v, want %v", i, got.Errors[i], tc.want[i])
+				}
+			}
+		})
 	}
 }

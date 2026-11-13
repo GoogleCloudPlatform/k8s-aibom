@@ -37,10 +37,17 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 	// runtime or model for it to find; the image is still what the
 	// workload runs, so it is kept once another scraper recognizes the
 	// workload. Nothing else from such a result is kept, except the
-	// count of components its own cap dropped.
+	// count of components its own cap dropped and its extraction
+	// errors.
 	var carried []Component
 	var carriedProvenance []Provenance
 	carriedTruncated := 0
+	// Extraction errors from every scraper that ran, in scraper order.
+	// A scraper that found no signal of its own can still have skipped
+	// a field it could not read, and the Scraper contract says that
+	// goes on Errors; dropping it with the rest of the result would
+	// hide it from the extraction-errors metric and from Stale.
+	var errs []error
 
 	for _, s := range m.scrapers {
 		if !s.HandlesKind(w.Kind) {
@@ -50,6 +57,7 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		if err != nil {
 			return nil, err
 		}
+		errs = append(errs, inputs.Errors...)
 		if inputs.Confidence == ConfidenceUnresolved {
 			if cs := containerComponents(inputs.Components); len(cs) > 0 {
 				carried = append(carried, cs...)
@@ -65,7 +73,6 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 				finalInputs.Components = append(finalInputs.Components, inputs.Components...)
 				finalInputs.Services = append(finalInputs.Services, inputs.Services...)
 				finalInputs.Provenance = append(finalInputs.Provenance, inputs.Provenance...)
-				finalInputs.Errors = append(finalInputs.Errors, inputs.Errors...)
 				finalInputs.TruncatedComponents += inputs.TruncatedComponents
 				// Downgrade confidence if one is inferred
 				if inputs.Confidence == ConfidenceInferred {
@@ -84,8 +91,10 @@ func (m *MultiScraper) Scrape(ctx context.Context, w Workload, cfg *InferenceCon
 		return &BOMInputs{
 			ScraperName: m.Name(),
 			Confidence:  ConfidenceUnresolved,
+			Errors:      errs,
 		}, nil
 	}
+	finalInputs.Errors = errs
 	if len(carried) > 0 {
 		// Listed first, as inference.spec runs first. Container
 		// components are not counted in the workload confidence, so
