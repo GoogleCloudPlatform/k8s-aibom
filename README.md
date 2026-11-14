@@ -90,7 +90,7 @@ Verification is configured via the `spec.verification` block of `AIBOMController
 k8s-aibom outputs are designed to serve as evidence for the following framework requirements:
 
 - **EU AI Act Article 12** — Logging requirements for high-risk AI systems. The AIBOM CR's per-workload status and the write-once BOM archive in external sinks provide the per-system inventory and logging artifacts the article requires.
-- **EU AI Act Article 50** — Transparency obligations. The model identity, runtime, and provenance attributes in each BOM support the disclosure obligations applicable to deployers of general-purpose AI systems.
+- **EU AI Act Article 50** — Transparency obligations for providers and deployers of certain AI systems. The model identity, runtime, and provenance attributes in each BOM can support the disclosure information those parties must keep accurate.
 - **NIST AI RMF (Govern, Map, Measure, Manage)** — Several measures across the framework require maintaining an inventory of AI systems and tracking changes. k8s-aibom produces and maintains that inventory automatically.
 - **ISO/IEC 42001** — AI Management System inventory and lifecycle clauses. The BOM's confidence model and evidence locators provide the auditable lineage the standard's certification path requires.
 
