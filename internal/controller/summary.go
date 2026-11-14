@@ -33,6 +33,8 @@ limitations under the License.
 package controller
 
 import (
+	"slices"
+
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -42,7 +44,7 @@ import (
 
 // buildSummary translates a finished BOM document plus per-workload
 // metadata into the auditor-facing AIBOMSummary. The summary intentionally
-// surfaces only the most-asked-about facts: workload identity, runtime,
+// surfaces only the most-asked-about facts: workload identity, runtimes,
 // model identities, and the aggregate confidence. The full per-component
 // detail lives in BOMDocumentRef.Inline (or in an external sink).
 func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSummary {
@@ -65,15 +67,17 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 	for _, c := range *doc.CDX.Components {
 		switch c.Type {
 		case cdx.ComponentTypeApplication:
-			if name := readProperty(c, bom.PropRuntimeName); name != "" && summary.Runtime == nil {
-				// First runtime wins. A workload running two different
-				// inference runtimes simultaneously is exotic and would
-				// merit a richer summary type; v1 records the first
-				// detection and the full set is in the BOM components.
-				summary.Runtime = &aibomv1beta1.RuntimeSummary{
+			if name := readProperty(c, bom.PropRuntimeName); name != "" {
+				// Every attributed runtime, in document order. Two
+				// containers running the same runtime image produce
+				// identical entries; list each one once.
+				rt := aibomv1beta1.RuntimeSummary{
 					Name:       name,
 					Version:    c.Version,
 					Confidence: readProperty(c, bom.PropConfidence),
+				}
+				if !slices.Contains(summary.Runtimes, rt) {
+					summary.Runtimes = append(summary.Runtimes, rt)
 				}
 			}
 		case cdx.ComponentTypeMachineLearningModel:
@@ -97,6 +101,11 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 				Signed: readProperty(c, bom.PropSigningStatus),
 			})
 		}
+	}
+	if len(summary.Runtimes) > 0 {
+		// Deprecated single-runtime field: the first runtime, as before.
+		first := summary.Runtimes[0]
+		summary.Runtime = &first
 	}
 	return summary
 }

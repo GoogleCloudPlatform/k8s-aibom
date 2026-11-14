@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -51,7 +52,7 @@ import (
 //     invisible here by design.
 
 type findFilter struct {
-	runtime string // exact match on status.summary.runtime.name or any runtime in the inline document
+	runtime string // exact match on any status.summary runtime or any runtime in the inline document
 	model   string // case-sensitive substring on status.summary.models[].identity
 	image   string // substring on container image.reference (inline document)
 	digest  string // sha256 hex, bare or sha256:-prefixed; exact if 64 chars, else prefix (inline document)
@@ -82,8 +83,8 @@ func isProperty(name string, names []string) bool {
 
 // containerFacts is what find needs from the inline CycloneDX document:
 // the container image references and their SHA-256 digests, and the
-// runtime names the document attributes (status.summary.runtime holds
-// only the first of them).
+// runtime names the document attributes (a controller older than
+// status.summary.runtimes summarises only the first of them).
 type containerFacts struct {
 	images   []string
 	digests  []string
@@ -225,24 +226,22 @@ func summaryModels(u *unstructured.Unstructured) (identities []string, signedSta
 // not be evaluated because the document is not inline or unreadable (the
 // row is then treated as matched and the caller warns). A row that is
 // not matched but has unavailable set passed every other filter, and
-// --runtime could only be checked against its summary runtime: the
-// caller leaves it out and names it in a warning.
+// --runtime could only be checked against an older controller's single
+// summary runtime: the caller leaves it out and names it in a warning.
 func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts containerFacts, unavailable string) {
-	get := func(fields ...string) string {
-		v, _, _ := unstructured.NestedString(u.Object, fields...)
-		return v
-	}
 	// Image/digest criteria and the runtime list need the document.
 	// Always collect facts (IMAGES and RUNTIME columns) even when no
 	// such filter is set.
 	facts, unavailable = inlineContainers(u)
 	runtimeUnchecked := false
-	if f.runtime != "" && !hasRuntime(get("status", "summary", "runtime", "name"), facts.runtimes, f.runtime) {
-		if unavailable == "" {
+	summaryRTs, summaryComplete := summaryRuntimes(u)
+	if f.runtime != "" && !hasRuntime(summaryRTs, facts.runtimes, f.runtime) {
+		if unavailable == "" || summaryComplete {
 			return false, containerFacts{}, ""
 		}
-		// The summary names one runtime, and the document that lists
-		// the others cannot be read: excluded, but not silently.
+		// An older controller's summary names one runtime, and the
+		// document that lists the others cannot be read: excluded, but
+		// not silently.
 		runtimeUnchecked = true
 	}
 	identities, states := summaryModels(u)
@@ -295,31 +294,46 @@ func findMatch(u *unstructured.Unstructured, f findFilter) (matched bool, facts 
 	return true, facts, unavailable
 }
 
-// hasRuntime reports whether want is the summary runtime or one of the
-// runtimes in the document. The summary names one runtime, the first in
-// the document, so a pod that runs vLLM next to a LiteLLM proxy has
-// summary runtime litellm; --runtime vllm must still find it. A
-// document that is not inline leaves only the summary to match.
-func hasRuntime(summary string, inDocument []string, want string) bool {
-	if summary == want {
-		return true
-	}
-	for _, rt := range inDocument {
-		if rt == want {
-			return true
+// summaryRuntimes returns the runtime names in status.summary: every
+// entry of runtimes, or the single runtime a controller older than
+// runtimes wrote. complete is true when the runtimes list is present,
+// so the summary alone names every runtime in the document.
+func summaryRuntimes(u *unstructured.Unstructured) (names []string, complete bool) {
+	if list, found, _ := unstructured.NestedSlice(u.Object, "status", "summary", "runtimes"); found {
+		for _, r := range list {
+			rm, ok := r.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if n, ok := rm["name"].(string); ok && n != "" {
+				names = append(names, n)
+			}
+		}
+		if len(names) > 0 {
+			return uniqueStrings(names), true
 		}
 	}
-	return false
+	if n, _, _ := unstructured.NestedString(u.Object, "status", "summary", "runtime", "name"); n != "" {
+		names = append(names, n)
+	}
+	return names, false
 }
 
-// rowRuntimes is the RUNTIME column: the summary runtime first, then
+// hasRuntime reports whether want is one of the summary runtimes or one
+// of the runtimes in the document. A controller older than
+// status.summary.runtimes summarises only the first runtime in the
+// document, so a pod that runs vLLM next to a LiteLLM proxy has summary
+// runtime litellm; --runtime vllm must still find it. A document that
+// is not inline leaves only the summary to match.
+func hasRuntime(summary, inDocument []string, want string) bool {
+	return slices.Contains(summary, want) || slices.Contains(inDocument, want)
+}
+
+// rowRuntimes is the RUNTIME column: the summary runtimes first, then
 // the document's other runtimes, each once.
-func rowRuntimes(summary string, inDocument []string) []string {
-	var all []string
-	if summary != "" {
-		all = append(all, summary)
-	}
-	return uniqueStrings(append(all, inDocument...))
+func rowRuntimes(summary, inDocument []string) []string {
+	all := append(slices.Clone(summary), inDocument...)
+	return uniqueStrings(all)
 }
 
 // uniqueStrings returns items without repeats, in first-seen order.
@@ -372,6 +386,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 			return v
 		}
 		identities, states := summaryModels(u)
+		summaryRTs, _ := summaryRuntimes(u)
 		images := joinTruncated(uniqueStrings(facts.images), 2)
 		if unavailable != "" {
 			images = unavailable
@@ -383,7 +398,7 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 			u.GetNamespace(),
 			orDash(get("status", "summary", "workload", "kind")),
 			u.GetName(),
-			joinTruncated(rowRuntimes(get("status", "summary", "runtime", "name"), facts.runtimes), 2),
+			joinTruncated(rowRuntimes(summaryRTs, facts.runtimes), 2),
 			joinTruncated(uniqueStrings(identities), 2),
 			images,
 			joinTruncated(uniqueStrings(states), 3),

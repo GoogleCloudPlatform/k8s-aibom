@@ -87,6 +87,23 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### API contract
 
+- **`status.summary.runtimes` lists every attributed runtime** (#336).
+  `status.summary.runtime` held only the first runtime component in the
+  document, so a workload running vLLM with a LiteLLM proxy beside it
+  summarised as `litellm` alone. The new list carries every distinct
+  runtime in document order, in the shape of `runtime`
+  (`name`, `version`, `confidence`). Additive field in both served
+  versions; CRDs regenerated in both charts. `status.summary.runtime`
+  stays as the first entry and is deprecated in the API godoc.
+  `kubectl aibom summary` shows the list, and `kubectl aibom find
+  --runtime` matches it, so a row whose document is not inline is no
+  longer excluded with a warning when its summary lists the runtime.
+  The `Runtime` printer column still shows the first runtime, since
+  CRD printer columns print only the first JSONPath result.
+  **Note for downstream readers** (dashboards, AICR health checks):
+  read `status.summary.runtimes`; `status.summary.runtime` stays
+  populated for compatibility.
+
 - **`spec.discovery.workloadKinds` is declared in `v1alpha1` as well**
   (#343). The field was `v1beta1`-only in v1.6.0, so with conversion
   `None` an apply or patch through `v1alpha1` silently removed an

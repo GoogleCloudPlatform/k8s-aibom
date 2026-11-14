@@ -265,6 +265,11 @@ func (in *AIBOMSummary) DeepCopyInto(out *AIBOMSummary) {
 		*out = new(RuntimeSummary)
 		**out = **in
 	}
+	if in.Runtimes != nil {
+		in, out := &in.Runtimes, &out.Runtimes
+		*out = make([]RuntimeSummary, len(*in))
+		copy(*out, *in)
+	}
 	if in.Models != nil {
 		in, out := &in.Models, &out.Models
 		*out = make([]ModelSummary, len(*in))

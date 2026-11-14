@@ -197,6 +197,30 @@ func TestRunSummaryTable(t *testing.T) {
 	}
 }
 
+// The RUNTIME column lists every summary runtime when the controller
+// wrote status.summary.runtimes, and falls back to the single runtime
+// an older controller wrote.
+func TestRunSummary_RuntimeColumnListsSummaryRuntimes(t *testing.T) {
+	multi := fixtureAIBOM(t, []byte(`{}`), false)
+	_ = unstructured.SetNestedField(multi.Object, "litellm", "status", "summary", "runtime", "name")
+	_ = unstructured.SetNestedSlice(multi.Object, []interface{}{
+		map[string]interface{}{"name": "litellm"},
+		map[string]interface{}{"name": "vllm", "version": "v0.6.3"},
+	}, "status", "summary", "runtimes")
+	if got := summaryRow(multi)[5]; got != "litellm,vllm" {
+		t.Errorf("RUNTIME with runtimes = %q, want litellm,vllm", got)
+	}
+
+	legacy := fixtureAIBOM(t, []byte(`{}`), false)
+	if got := summaryRow(legacy)[5]; got != "vllm" {
+		t.Errorf("RUNTIME without runtimes = %q, want the single summary runtime vllm", got)
+	}
+
+	if got := summaryRow(fixtureTruncated())[5]; got != "-" {
+		t.Errorf("RUNTIME without a summary = %q, want -", got)
+	}
+}
+
 // Zero rows is most often an install with no namespace opted in (#261):
 // the hint and the opt-in command go to stderr, the (empty) table stays
 // on stdout, and nothing is printed to stderr when rows exist.
