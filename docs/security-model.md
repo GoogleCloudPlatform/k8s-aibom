@@ -47,7 +47,8 @@ For production deployments, configure the target bucket with:
 - **Uniform bucket-level access** (UBLA). Avoids the per-object ACL
   surface entirely.
 - **Object retention policy** matching the customer's audit retention
-  requirements (e.g., 7 years for EU AI Act records). The controller
+  requirements (e.g., at least 6 months for EU AI Act Article 19 logs,
+  10 years for Article 18 technical documentation). The controller
   writes-only; the retention policy is the enforcement mechanism for
   "BOMs are not deleted before audit period ends".
 - **Object lifecycle rule** for cold-storage migration after 90 days,
