@@ -43,7 +43,7 @@ NVIDIA AICR requalified each of the three tags within a day of release.
 ## v1.7 — the interoperability release (target 2026-11-24)
 
 **Focus.** The document becomes the one other tools read, not only the
-one we write. Three changes to the document shape land together so
+one we write. Six changes to the document shape land together so
 downstream consumers see a single transition, and the two main
 consumers prove the result by ingesting it. Tracking: [#315](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/315)
 (go/no-go Fri 2026-11-14, rc.1 Mon 11-17, tag Mon 11-24).
@@ -55,7 +55,10 @@ consumers prove the result by ingesting it. Tracking: [#315](https://github.com/
   that every document is an as-deployed inventory (the CycloneDX
   maintainers' guidance on spec#990); `pkg:oci` purls on container
   components; the `k8s-aibom:` property namespace registered in the
-  CycloneDX Property Taxonomy replacing the dotted names (#144). Ends
+  CycloneDX Property Taxonomy replacing the dotted names (#144); the
+  `verified` confidence tier (#328); a `dependencies` array from the
+  workload to its components (#363); and a deterministic `serialNumber`
+  per workload so other documents can BOM-Link to ours (#375). Ends
   byte-identity to v1.4.0; determinism within a version, the summary
   CRD fields and the API schema are unchanged. CHANGELOG-led, with a
   heads-up to AICR, production-stack and KubeAI before merge.
@@ -81,7 +84,8 @@ batch watches under the Design 004 supervisor (#136); the KubeAI lens
 (#172, needs its Design 008 note first).
 
 **Not in this release:** anything that changes the API schema beyond
-#343 (that is 1.8), new workload kinds, new platforms.
+#343 and the optional CA field of #96 (that is 1.8), new workload
+kinds, new platforms.
 
 ## v1.8 — the agent-platform release (target 2027-01-26)
 
