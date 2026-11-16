@@ -9,10 +9,11 @@ All notable changes to k8s-aibom are documented here. The format follows
 ### Document shape (one transition, v1.7.0)
 
 Six changes to the emitted CycloneDX document land together (#132,
-#328, #363, #375), so downstream readers see one byte-shape transition. Byte-identity with
-documents from v1.4.0 through v1.6.x ends here; determinism within a
-release is unchanged (identical inputs still produce identical bytes),
-and the `AIBOM` status summary fields and the API schema do not change.
+#328, #363, #375), so downstream readers see one byte-shape transition.
+Byte-identity with documents from v1.4.0 through v1.6.x ends here;
+determinism within a release is unchanged (identical inputs still
+produce identical bytes), and the `AIBOM` status summary fields and the
+API schema do not change.
 
 - **`metadata.lifecycles` is `[{"phase": "operations"}]` on every
   document.** Every k8s-aibom document is an as-deployed inventory
@@ -96,40 +97,6 @@ and the `AIBOM` status summary fields and the API schema do not change.
 
 ### Added
 
-- **Private-CA HTTPS for bearer-token webhook sinks** (#96): optional
-  `webhook.auth.bearerToken.caSecretRef` in both API versions reuses the
-  existing namespaced Secret lookup and mTLS CA trust handling. Omitting
-  it keeps system roots; certificate and hostname verification and the
-  rejection of bearer credentials over plain HTTP are unchanged. The
-  e2e matrix's bearer-delivery leg now uses TLS with a private CA.
-
-- **`GOVERNANCE.md` and `MAINTAINERS.md`**: roles (contributor, reviewer,
-  maintainer) with entry criteria, the decision process (lazy consensus,
-  design documents, votes), security and conduct handling, and how the
-  document changes. Reviewer nominations are open. Documentation only.
-
-- **README names Project AIBOM as the training-side counterpart** (Red Hat
-  Research / Mass Open Cloud): reproducibility records for training and
-  inference runs, next to k8s-aibom's serving-side inventory; interop
-  (CycloneDX export, distinct short name, cross-links) agreed on their
-  tracker. Documentation only.
-
-- **Dependency-Track and GUAC walkthroughs against the v1.7 document**
-  (#313). `docs/integrations/dependency-track.md` now has a tested
-  walkthrough (Dependency-Track 4.14.6) and a list of what
-  Dependency-Track drops; the new `docs/integrations/guac.md` does the
-  same for GUAC v1.1.0. Both use documents from a kind cluster; one of
-  them is kept as `docs/integrations/fixtures/llama-cpp-chat.cdx.json`
-  and a unit test validates it against the CycloneDX 1.6 schema.
-  Corrections to the Dependency-Track page: the relay's API key also
-  needs `PROJECT_CREATION_UPLOAD`; policies cannot match `k8s-aibom:`
-  properties or the classifier in 4.x; an upload replaces the
-  component list rather than showing a diff; the webhook sink refuses
-  a relay behind a ClusterIP Service; and adding a sink does not send
-  documents that already exist. The relay example now rejects anything
-  but a POST of a document with a workload name, and passes
-  Dependency-Track's answer back. Documentation and a test only.
-
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
   Part 2a). An inference workload whose declared Pod template labels
   match all of `spec.selector.matchLabels` of a Gateway API Inference
@@ -160,58 +127,52 @@ and the `AIBOM` status summary fields and the API schema do not change.
   controller logs the 403, and no pool membership is recorded (all
   other facts are unaffected).
 
-- **Aggregate CRD discovery health** (#226, Design 004 A6): one
-  `CRDDiscovery` pseudo-kind reports metadata informer LIST/WATCH/sync
-  failures and candidate CRD read failures through Degraded status,
-  existing events and the `aibom_watch_healthy` gauge. It clears only
-  when every outstanding discovery failure recovers, without stopping
-  existing watches.
-
-- **Third-party CRDs installed after startup are watched without a
-  restart** (#226, Design 004 amendment, phase A). The supervisor now
+- **Third-party CRDs are discovered, watched and retired without a
+  controller restart** (#226, Design 004 amendment). The supervisor now
   runs on the leader whether or not any third-party CRD exists, watches
   `CustomResourceDefinition` metadata, and reads each of the six
   candidate CRDs (KServe `InferenceService`, Dynamo
   `DynamoGraphDeployment` and `DynamoComponentDeployment`, `NIMService`,
-  `LeaderWorkerSet`, `DisaggregatedSet`) by name. A kind starts once its
-  CRD is `Established` and serves the version k8s-aibom reads, so
-  installing an operator after k8s-aibom (Dynamo after the controller,
-  for example) no longer needs `kubectl rollout restart`. The first sync
-  of such a kind emits a new Normal `WatchStarted` event naming the CRD;
-  kinds whose CRD already existed at startup (even if it was still
-  establishing) and allowlist re-enables keep `WatchRecovered`. `spec.discovery.workloadKinds` still wins: a CRD
-  installed while its kind is excluded is disabled (`WatchDisabled`)
-  and not watched, and a kind whose CRD is not installed gets no health
-  entry, gauge series or event. **Upgrade note:** the ClusterRole gains
-  one read-only rule, `get`/`list`/`watch` on
-  `apiextensions.k8s.io/customresourcedefinitions`. Helm installs get it;
-  custom RBAC must add it, otherwise CRD reads are forbidden and no
-  third-party kind starts (the controller logs the 403 and keeps
-  retrying; apps/v1 and batch kinds are unaffected).
+  `LeaderWorkerSet`, `DisaggregatedSet`) by name.
 
-- **CRD lifecycle after a watch started** (#226, Design 004 amendment,
-  phase B: rows 5-9). Only a full read of the CRD by name decides; an
-  informer event, a read error, a RESTMapper error or a failing watch
-  never does. A CRD that stops serving the version k8s-aibom reads (or
-  loses `Established`) stops its watch and reports the kind Degraded
-  with the reason and one `WatchUnhealthy`; its AIBOMs are kept and its
-  children stay rolled up. When it serves again the watch restarts with
-  `WatchRecovered`. A deleted CRD stops the watch, drops the kind from
-  the roll-up owners and deletes its AIBOMs once, with one Normal
-  `WatchDisabled` event (message names `reason: crd-removed`; an
-  allowlist exclusion now names `reason: config`); workloads it had
-  absorbed are reported on their own again. A CRD re-created under a new
-  UID retires the old generation first (its sweep finishes before the
-  new watch starts), then starts the new one with `WatchStarted`.
-  `aibom_watch_healthy` stays 0 for a removed kind; nothing is Degraded.
-  No new RBAC: the phase A read-only CRD rule covers it.
+  *Late install.* A kind starts once its CRD is `Established` and serves
+  the version k8s-aibom reads, so installing an operator after k8s-aibom
+  (Dynamo after the controller, for example) no longer needs `kubectl
+  rollout restart`. The first sync of such a kind emits a new Normal
+  `WatchStarted` event naming the CRD; kinds whose CRD already existed
+  at startup (even if it was still establishing) and allowlist
+  re-enables keep `WatchRecovered`. `spec.discovery.workloadKinds` still
+  wins: a CRD installed while its kind is excluded is disabled
+  (`WatchDisabled`) and not watched, and a kind whose CRD is not
+  installed gets no health entry, gauge series or event.
 
-- **The vector-database scraper detects Vespa** (#286). Workloads running
-  `vespaengine/vespa` (or `vespaengine/vespa-generic-intel-x86_64`, the
-  same server built for older x86_64 hardware) get category
-  `vector-database` and a `vespa` component. The pattern ends at the
-  repository name, so the build, dev, system-test, pipeline, minimal and
-  tutorial images in the `vespaengine` namespace are not matched.
+  *Lifecycle after a watch started.* Only a full read of the CRD by name
+  decides; an informer event, a read error, a RESTMapper error or a
+  failing watch never does. A CRD that stops serving the version
+  k8s-aibom reads (or loses `Established`) stops its watch and reports
+  the kind Degraded with the reason and one `WatchUnhealthy`; its AIBOMs
+  are kept and its children stay rolled up, and when it serves again
+  the watch restarts with `WatchRecovered`. A deleted CRD stops the
+  watch, drops the kind from the roll-up owners and deletes its AIBOMs
+  once, with one Normal `WatchDisabled` event (message names `reason:
+  crd-removed`; an allowlist exclusion now names `reason: config`);
+  workloads it had absorbed are reported on their own again. A CRD
+  re-created under a new UID retires the old generation first (its
+  sweep finishes before the new watch starts), then starts the new one
+  with `WatchStarted`. `aibom_watch_healthy` stays 0 for a removed kind;
+  nothing is Degraded.
+
+  *Discovery health.* One `CRDDiscovery` pseudo-kind reports metadata
+  informer LIST/WATCH/sync failures and candidate CRD read failures
+  through Degraded status, the existing events and the
+  `aibom_watch_healthy` gauge. It clears only when every outstanding
+  discovery failure recovers, without stopping existing watches.
+
+  **Upgrade note:** the ClusterRole gains one read-only rule,
+  `get`/`list`/`watch` on `apiextensions.k8s.io/customresourcedefinitions`.
+  Helm installs get it; custom RBAC must add it, otherwise CRD reads are
+  forbidden and no third-party kind starts (the controller logs the 403
+  and keeps retrying; apps/v1 and batch kinds are unaffected).
 
 - **The controller says when nothing is opted in** (#261). `AIBOMControllerConfig`
   gains a `NamespacesOptedIn` condition: `False` with the exact opt-in command
@@ -248,6 +209,13 @@ and the `AIBOM` status summary fields and the API schema do not change.
   opting a namespace out and back in. No new RBAC (events
   create/patch is already granted); emitted documents are unchanged.
 
+- **The vector-database scraper detects Vespa** (#286). Workloads running
+  `vespaengine/vespa` (or `vespaengine/vespa-generic-intel-x86_64`, the
+  same server built for older x86_64 hardware) get category
+  `vector-database` and a `vespa` component. The pattern ends at the
+  repository name, so the build, dev, system-test, pipeline, minimal and
+  tutorial images in the `vespaengine` namespace are not matched.
+
 - **TensorFlow Serving runtime pattern** (#189). `tensorflow/serving`
   (GA, rc, latest, nightly and `-gpu` tags, bare and digest forms)
   attributes as runtime `tensorflow-serving`. Publisher-anchored at the
@@ -280,6 +248,40 @@ and the `AIBOM` status summary fields and the API schema do not change.
   boundary, so other users' whisper images and other registries stay
   unmatched.
 
+- **Private-CA HTTPS for bearer-token webhook sinks** (#96): optional
+  `webhook.auth.bearerToken.caSecretRef` in both API versions reuses the
+  existing namespaced Secret lookup and mTLS CA trust handling. Omitting
+  it keeps system roots; certificate and hostname verification and the
+  rejection of bearer credentials over plain HTTP are unchanged. The
+  e2e matrix's bearer-delivery leg now uses TLS with a private CA.
+
+- **Dependency-Track and GUAC walkthroughs against the v1.7 document**
+  (#313). `docs/integrations/dependency-track.md` now has a tested
+  walkthrough (Dependency-Track 4.14.6) and a list of what
+  Dependency-Track drops; the new `docs/integrations/guac.md` does the
+  same for GUAC v1.1.0. Both use documents from a kind cluster; one of
+  them is kept as `docs/integrations/fixtures/llama-cpp-chat.cdx.json`
+  and a unit test validates it against the CycloneDX 1.6 schema.
+  Corrections to the Dependency-Track page: the relay's API key also
+  needs `PROJECT_CREATION_UPLOAD`; policies cannot match `k8s-aibom:`
+  properties or the classifier in 4.x; an upload replaces the
+  component list rather than showing a diff; the webhook sink refuses
+  a relay behind a ClusterIP Service; and adding a sink does not send
+  documents that already exist. The relay example now rejects anything
+  but a POST of a document with a workload name, and passes
+  Dependency-Track's answer back. Documentation and a test only.
+
+- **`GOVERNANCE.md` and `MAINTAINERS.md`**: roles (contributor, reviewer,
+  maintainer) with entry criteria, the decision process (lazy consensus,
+  design documents, votes), security and conduct handling, and how the
+  document changes. Reviewer nominations are open. Documentation only.
+
+- **README names Project AIBOM as the training-side counterpart** (Red Hat
+  Research / Mass Open Cloud): reproducibility records for training and
+  inference runs, next to k8s-aibom's serving-side inventory; interop
+  (CycloneDX export, distinct short name, cross-links) agreed on their
+  tracker. Documentation only.
+
 ### Security
 
 - **Go 1.26.11** (GO-2026-6859): the `net/http` HTTP/1 server could
@@ -288,62 +290,6 @@ and the `AIBOM` status summary fields and the API schema do not change.
   fixed toolchain; `govulncheck` is clean again. No change in behaviour.
 
 ### Fixed
-
-- **`training.spec` no longer claims `PyTorchJob` and `RayJob`.**
-  `HandlesKind` returned true for `kubeflow.org/PyTorchJob` and
-  `ray.io/RayJob`, but no reconciler watches either kind, so the
-  scraper never saw one; its fallback for them scraped the workload's
-  pods with locators such as `spec.containers.image` that name no
-  field of the object. `HandlesKind` now covers only `batch/Job` and
-  `batch/CronJob`, the unreachable pod fallback is removed, and any
-  other object type is an error, as in `eval.spec`, `agent.spec` and
-  `vectordb.spec`. No output changes: Job and CronJob documents are
-  scraped as before.
-
-- **`MultiScraper` keeps extraction errors from scrapers that found
-  nothing.** The scraper for Deployments, StatefulSets, DaemonSets,
-  Jobs and CronJobs runs inference.spec, vectordb.spec, agent.spec,
-  training.spec and eval.spec and merges the results it recognizes,
-  but merged `Errors` only from scrapers with a resolved result. The
-  `Scraper` contract says a field a scraper could not read goes on
-  `Errors`; one recorded by a scraper whose result was unresolved was
-  dropped with the rest of that result, so it never reached the
-  `aibom_scraper_extraction_errors_total` metric or the
-  `ExtractionErrorsPersistent` Stale condition. Errors from every
-  scraper that ran are now kept, in scraper order. None of these five
-  scrapers records extraction errors today, so no current output
-  changes.
-
-- **The webhook sink protocol gives the `Content-Type` the sink sends**
-  (#376). `docs/webhook-sink-protocol.md` said every delivery carries
-  `Content-Type: application/vnd.cyclonedx+json; version=1.6`; the sink
-  has always sent `application/json`, so a receiver built to the
-  document and checking the media type refused every delivery. The
-  request shape, the headers table and the stability notes now give
-  `application/json`, with the CycloneDX version in the body's
-  `specVersion`. The envelope test now checks the header names and the
-  `Content-Type` value as the document writes them rather than against
-  the constants, which is why the drift went unnoticed. No change to
-  what the sink sends.
-
-- **The AIBOM CRD no longer says models are never `verified`** (#377).
-  The `status.summary.models[].signed` description, which `kubectl
-  explain` shows, said "v1 never emits `verified`", and the `confidence`
-  description listed only `declared` and `inferred`. With signature
-  verification (Design 002, v1.5.0) a model's signature can be
-  `verified`, and since #328 its confidence follows. Both descriptions
-  now give `verified` and when it appears, and
-  `docs/schema-divergences.md` marks D-001, the "never emits `verified`"
-  entry, as retired by Design 002. Documentation only; no schema change.
-
-- **Pod digests resolve for workloads whose selector uses
-  `matchExpressions`.** Deployment, StatefulSet, DaemonSet and Job
-  reconcilers listed the workload's pods by `selector.matchLabels`
-  only, and listed nothing when `matchLabels` was empty, so a workload
-  that selects its pods with `matchExpressions` alone never had its
-  container digests resolved from pod status. Pods are now listed by
-  the whole selector; controller ownership still decides which pods
-  count.
 
 - **A failed `AIBOMControllerConfig` status write no longer repeats
   the config event.** The controller emits the transition event
@@ -354,179 +300,34 @@ and the `AIBOM` status summary fields and the API schema do not change.
   `aibom_controller_config_reloads_total`. The state is now recorded
   as soon as the event is emitted.
 
-- **`kubectl aibom` rejects an empty `-n`, `--context` or
-  `--kubeconfig`.** A scope flag set to `""` (`-n "$NS"` with the
-  variable unset) counted as not given, so the command quietly used the
-  kubeconfig's namespace, current context or default file: `verify NAME
-  -n ""` verified a same-named AIBOM in another namespace and exited 0.
-  `-n`, `--namespace`, `--context` and `--kubeconfig` with an empty
-  value are now argument errors; leaving the flag out still uses the
-  kubeconfig default.
+- **AIBOM conditions keep their `lastTransitionTime` when their status
+  does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
+  `SinkFailed` and `Stale` with the reconcile time every time, so while
+  a sink failed and was retried every minute, `SinkFailed=True` always
+  looked less than a minute old and "failing since" could not be read
+  from the status. The full path now keeps the previous time for a
+  condition whose status is the same, as the dedup fast path and the
+  scrape/build failure path already did; a condition that flips still
+  gets the reconcile time.
 
-- **`kubectl aibom` treats `--` as the end of the flags** (#365). The
-  plugin's argument splitter read `--` as a flag taking a value, so the
-  token after it was dropped: `view -- NAME` and `verify -- NAME` failed
-  with "requires exactly one AIBOM name", and `find -- vllm` listed every
-  AIBOM unfiltered instead of reporting the stray argument. Every token
-  after `--` is now positional and goes through the usual checks.
+- **A container's digest no longer depends on the order pods are
+  listed in** (#236). When a workload's replicas ran different digests
+  (a moving tag such as `:latest`, or a rollout in progress), the
+  digest came from whichever matching pod the informer cache listed
+  first, which changes between calls. The document and its input hash
+  could change on every reconcile and be re-sent to every sink. The
+  digest the most pods report now wins, and a tie goes to the lowest
+  digest. Workloads whose pods all run one digest, and digests pinned
+  in the spec image, are unchanged.
 
-- **The scraper heuristics no longer give a six-runtime allowlist**
-  (#366). `docs/scraper-heuristics.md` said `inference.spec` matches
-  against "vllm, tgi, triton, ollama, ray-serve, llm-d" and that seven
-  named patterns match at the image-name boundary; the default
-  `runtimeImagePatterns` attribute 29 runtimes, most of them
-  boundary-matched. Both places now give examples and point at
-  `internal/scraper/v1-runtime-patterns.yaml`, with NIM and Dynamo as
-  examples of the prefix matches, and the README's runtime list says it is not the
-  full set. Documentation only.
-
-- **The README and docs name properties as v1.7.0 documents emit them**
-  (#360). Seven places still gave the name from before the taxonomy
-  rename: `aibom.redaction.applied` in the README's sanitization
-  guarantee and in the threat model, `dependency.type` in the scraper
-  heuristics, and `dynamo.component.<name>.type`, `container.name` and
-  `lws.role` (twice) in the external CRD tables. They now read
-  `k8s-aibom:redaction:applied`, `k8s-aibom:dependency:type`,
-  `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:container:name`
-  and `k8s-aibom:lws:role`. Documentation only.
-
-- **The scraper heuristics no longer say TensorRT-LLM has no pattern of
-  its own** (#358). The deferred-cases table in
-  `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
-  were covered and that a separate pattern would double-count, but
-  `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime` (v1.4.0) and
-  `nvcr.io/nvidia/tensorrt-llm/release` (v1.6.0) attribute as
-  `tensorrt-llm`. The row is marked resolved, and the runtime-patterns
-  comment that listed two forms now lists all three. Documentation only.
-
-- **Links from the documentation site to files outside `docs/` resolve**
-  (#354). The GitHub Pages site is built from `docs/` only, so relative
-  links such as `../README.md#quickstart` or
-  `../internal/scraper/v1-runtime-patterns.yaml` led to 404s there. The
-  19 such links outside `docs/design/` now point at the file on GitHub,
-  which works on the site and in the repository. Documentation only.
-
-- **`kubectl aibom find` rejects a filter given an empty value** (#352).
-  `--runtime`, `--model`, `--image`, `--digest` and `--signed` set to
-  `""` counted as no filter, so `find -A --digest "$DIGEST"` with the
-  variable unset listed every AIBOM as running that digest. Such a flag
-  is now an argument error, reported before the kubeconfig is loaded,
-  like `--digest sha256:` already was. Leaving a flag out still means no
-  filter. Plugin only.
-
-- **The Gatekeeper recipe in the policy cookbook flags namespaces that
-  were never opted in** (#333). It checked
-  `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in
-  Rego a missing label is undefined, so the rule never fired for a
-  namespace without the label (or without any labels), only for one
-  labelled with another value. It now tests for opt-in in a helper rule
-  and negates it. Documentation only.
-
-- **`kubectl aibom find --runtime` finds every runtime a workload runs**
-  (#335). The filter compared only `status.summary.runtime.name`, which
-  names the first runtime in the document. A pod running vLLM with a
-  LiteLLM proxy beside it has summary runtime `litellm`, so
-  `find --runtime vllm` printed `0 matches` for it. `--runtime` now also
-  matches the runtime components of the inline document, and the
-  RUNTIME column lists them, summary runtime first. When the document is
-  not inline, only the summary runtime can be matched; a row whose
-  summary names another runtime is left out and named in a stderr
-  warning, printed after `0 matches` too. Plugin only; the controller and
-  its documents are unchanged. `status.summary.runtime` itself stays a
-  single runtime until #336.
-
-- **An API key set from a Secret is marked as a remote API dependency**
-  (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
-  component `dependency.type: remote-api` only when the key was a
-  literal value. A key set through `valueFrom`, which is how keys are
-  normally loaded, got the component with no properties. Both forms now
-  carry `dependency.type`; the `valueFrom` component stays `unresolved`.
-  Documents for workloads that load an API key from a Secret or
-  ConfigMap change once after upgrade.
-
-- **The README's workload-type paragraphs describe what is recorded**
-  (#337). Since the initial commit they said the controller extracts
-  agent framework versions, vector-database collections and RAG
-  relationships, a Hugging Face Hub signal and framework versions for
-  training jobs, and benchmark suites for evaluation jobs. None of these
-  is extracted. The paragraphs now list the frameworks each scraper
-  recognizes and what it records, and name what it does not read.
-  Documentation only.
-
-- **The property taxonomy matches what the controller emits** (#321).
-  `docs/cyclonedx-property-taxonomy.md` listed the workload category
-  `vectordb` (it is `vector-database`) and the signing status `none`
-  (no status is written without a signature reference, and absence reads
-  as unsigned). It also gave no v1.7 name to `dependency.type`,
-  `dataset.path`, `disaggregatedset.role` or `disaggregatedset.slices`,
-  and its mapping table did not cover the kind-specific names. It now has
-  `k8s-aibom:dependency`, `k8s-aibom:dataset` and
-  `k8s-aibom:disaggregatedset`, and mapping rows for them and for
-  `kserve.*`, `dynamo.*`, `nim.*` and `lws.*`. Documentation only.
-
-- **`aibom_scraper_extraction_errors_total` keeps counting on the dedup
-  fast path** (#325). The counter was raised only when a BOM was rebuilt.
-  Extraction errors are not part of the input hash, so an unchanged
-  workload that keeps producing the same errors takes the fast path from
-  its second reconcile on: the counter rose once and then stayed flat,
-  and the dashboard's `rate()` panel read zero while the same errors
-  drove `Stale` to `True` (#223 fixed the `Stale` count, not the
-  metric). The fast path now counts the errors too.
-
-- **The `Stale` message for persistent extraction errors names the
-  errors** (#327). `ExtractionErrorsPersistent` listed evidence sources
-  only for `*scraper.ExtractionError`, which no scraper returns, so the
-  message was always just `workload produced extraction errors on N
-  consecutive reconciles`. The errors (for example `spec.env[0]: not an
-  object (string); skipped`) are not logged or stored anywhere else.
-  The message now lists the distinct error texts in scraper order, the
-  first three (each cut to 120 characters) and then `and N more`. The
-  reason, threshold and clearing are unchanged.
-
-- **`hack/full-smoke-test.yaml` works on a fresh cluster again**
-  (#316). It put every workload in `inference-test` without creating
-  that namespace or opting it in, so `kubectl apply` failed, and a
-  namespace created by hand without the opt-in label got no AIBOMs. Its
-  ragas Job ran `ragas/ragas-eval`, which the anchored ragas pattern no
-  longer matches. The file now creates the namespace with
-  `aibom.k8saibom.dev/enabled: "true"` and runs
-  `explodinggradients/ragas`, so all 15 workloads get an AIBOM. Test
-  manifest only.
-
-- **Building from source shows a multi-platform build that pushes**
-  (#317). The guide said `make image-multiarch` then `make docker-push`,
-  but `image-multiarch` has no output flag. With the classic image store,
-  the default builder refuses a multi-platform build, and a
-  `docker-container` builder leaves the result in its build cache, so
-  `make docker-push` had nothing to push or pushed an older image. Only
-  the containerd image store keeps the image for `docker push`. The guide
-  now runs `docker buildx build ... --push`, and says when the make
-  targets work. Documentation only.
-
-- **`make helm` installs Helm into `./bin`, at the CI version** (#308).
-  The target ran `get-helm-3` without `HELM_INSTALL_DIR`, so it installed
-  to `/usr/local/bin` (or failed there without root), then moved
-  `./bin/helm` onto itself and exited 0 when either step failed, leaving
-  no `./bin/helm` for `make install.yaml`. It now installs into `./bin`,
-  fails when the install fails, and installs `HELM_VERSION` (v3.22.1,
-  the version every workflow pins) instead of v3.13.0. Build tooling
-  only.
-
-- **The Terraform README shows the `cluster_location` default** (#310).
-  Its Variables table listed `cluster_name` and `cluster_location`
-  together with no default; `cluster_location` defaults to
-  `us-central1-c` in `variables.tf`, so leaving it out looks the cluster
-  up there. The row is split and shows the default. Documentation only.
-
-- **The README's config example uses `v1beta1`** (#340). The external
-  sinks example wrote the `AIBOMControllerConfig` through `v1alpha1`,
-  whose schema has no `spec.discovery.workloadKinds`, so adding an
-  allowlist to it failed strict validation or dropped the field, and
-  applying it removed an allowlist already set. The example now uses
-  `v1beta1`, and the README and the migration guide say the field is
-  `v1beta1`-only. The migration guide and roadmap no longer say the
-  chart renders the default config at `v1alpha1` (it renders `v1beta1`
-  since v1.4.0). Documentation only.
+- **Pod digests resolve for workloads whose selector uses
+  `matchExpressions`.** Deployment, StatefulSet, DaemonSet and Job
+  reconcilers listed the workload's pods by `selector.matchLabels`
+  only, and listed nothing when `matchLabels` was empty, so a workload
+  that selects its pods with `matchExpressions` alone never had its
+  container digests resolved from pod status. Pods are now listed by
+  the whole selector; controller ownership still decides which pods
+  count.
 
 - **Touching an annotation on `AIBOMControllerConfig` reloads it**
   (#304). `SecretKeyRef` documents an annotation touch as the way to make
@@ -537,101 +338,6 @@ and the `AIBOM` status summary fields and the API schema do not change.
   changes now reload the config; status-only updates are still ignored.
   The `SecretKeyRef` doc also says that re-applying an unchanged
   manifest is not a change.
-
-- **Three CRD field descriptions match current behaviour** (#306).
-  `status.summary.workload.category` said v1 always emits `inference`;
-  the scrapers also emit `agent`, `training`, `evaluation` and
-  `vector-database`. `spec.bomGeneration.inlineThresholdBytes` said an
-  oversized BOM is truncated only when no external sink is configured;
-  it is also truncated when every configured sink failed (as #301 fixed
-  for `status.bomDocument`). `spec.discovery.workloadKinds` left
-  DisaggregatedSet out of the third-party kinds whose watch stops when
-  unlisted. Regenerated CRDs; no schema change.
-
-- **`status.summary.models` no longer lists unresolved models** (#259).
-  `ModelSummary` says its confidence is never `unresolved`, but
-  `buildSummary` copied every `machine-learning-model` component, so an
-  agent Deployment that passes `OPENAI_API_KEY` (or another API-key
-  variable) through `valueFrom` got an `openai-api` entry with
-  confidence `unresolved`, which `kubectl aibom summary`, `find` and
-  `find --model` then showed. Unresolved models are now left out of the
-  summary; the component stays in the document with its locator. An
-  API key with a literal value is `inferred` and is still summarized.
-  The document and input hash are unchanged, so an existing AIBOM keeps
-  its stored summary until the workload's inputs next change (the dedup
-  fast path does not rebuild the status).
-
-- **The README's confidence examples match what the scrapers emit**
-  (#296). "The confidence model" listed an `HF_MODEL_ID` env var as
-  `declared`; env-var model claims are `inferred`, as
-  `docs/scraper-heuristics.md` says and the scraper emits. It said the
-  agent framework comes from "a `langchain` import pattern in container
-  args"; `agent.spec` does not read args, and finds LangChain through
-  env vars such as `LANGCHAIN_TRACING_V2`. And it gave `^vllm/.*` as the
-  vLLM image pattern; the pattern is anchored at `vllm/vllm-openai` and
-  its siblings, so `vllm/vllm-router`, for one, is not matched. The
-  heuristics doc's deferred-cases table quoted the same old pattern and
-  is corrected too. Documentation only.
-
-- **The chart's `config.discovery` comment describes `namespaceSelector`
-  correctly** (#299). It said the selector applies in addition to the
-  `aibom.k8saibom.dev/enabled=true` label opt-in; a selector replaces the
-  label, so its `environment: production` example inventoried every
-  production namespace, labelled or not, and dropped labelled
-  namespaces outside production. The comment now says the selector
-  replaces the opt-in, and the example keeps the label in
-  `matchLabels`. The `metrics` comment's list of reconcile outcomes also
-  gains `kind_not_allowed`. Comments only.
-
-- **`status.bomDocument` field docs match when a BOM is truncated**
-  (#301). The `external` and `truncated` descriptions (API godoc and the
-  CRD schema `kubectl explain` reads) said `truncated` means no external
-  sink is configured. The controller also truncates when sinks are
-  configured but none accepted the BOM this cycle, and says so in
-  `truncationReason`. The descriptions now say `external` is set when a
-  sink accepted the BOM and `truncated` when none did, naming both
-  causes. Regenerated CRDs; no schema change.
-
-- **KServe InferenceService BOMs are capped at 256 components** (#288).
-  The KServe scraper is called without `MultiScraper` and was the only
-  CR scraper that did not apply `MaxComponentsPerDocument`, so each
-  `model.k8saibom.dev/*` annotation added a component with no bound and
-  no `aibom.truncation.applied` property. It now caps and records the
-  drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
-  do.
-
-- **Agent and vector-database AIBOMs list the workload's containers**
-  (#290). `inference.spec` is the only scraper that builds container
-  components, and `MultiScraper` dropped its whole result when it found
-  no runtime or model, so a Qdrant or Langflow Deployment's BOM had no
-  image reference and no digest. Its container components are now kept
-  when another scraper recognizes the workload; nothing else from that
-  result is, so the confidence and category are unchanged and a
-  workload no scraper recognizes still gets no AIBOM. Existing agent and
-  vector-database AIBOMs regenerate once. Jobs and CronJobs are not read
-  by `inference.spec`, so training and evaluation BOMs are unchanged.
-
-- **The README's GCS sink example applies** (#292). It set
-  `gcs.workloadIdentity`, a field no `AIBOMControllerConfig` version has,
-  so `kubectl apply` rejected the example as an unknown field (and
-  non-strict validation dropped it silently). The field is gone, and the
-  README now says how the GCS sink authenticates: Application Default
-  Credentials with Workload Identity on the controller's ServiceAccount
-  (`serviceAccount.annotations` in the chart), or
-  `gcs.credentialsSecretRef`. `docs/security-model.md` described the
-  key-file fallback through `K8S_AIBOM_GCS_CREDENTIALS_FILE`, a v1.0
-  environment variable nothing reads; it now names
-  `gcs.credentialsSecretRef`. Documentation only.
-
-- **The webhook protocol doc names where the bearer token comes from**
-  (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
-  came from a `BearerTokenFile`, an internal setting that
-  `AIBOMControllerConfig` cannot set. It now names
-  `webhook.auth.bearerToken.secretRef` (a Secret in the controller's
-  namespace, readable with `rbac.sinkSecretAccess=true`), says the value
-  is whitespace-trimmed, and says the header is only sent over
-  `https://`, since auth on an `http://` endpoint is a configuration
-  error. Documentation only.
 
 - **`spec.logging.level` sets the controller's log level** (#279). The
   field has been a no-op since 1.0: the CRD accepted it and the chart
@@ -658,6 +364,79 @@ and the `AIBOM` status summary fields and the API schema do not change.
   a notice when it changes, which nothing logged. With the default
   `json`, the controller logs as before.
 
+- **`status.summary.models` no longer lists unresolved models** (#259).
+  `ModelSummary` says its confidence is never `unresolved`, but
+  `buildSummary` copied every `machine-learning-model` component, so an
+  agent Deployment that passes `OPENAI_API_KEY` (or another API-key
+  variable) through `valueFrom` got an `openai-api` entry with
+  confidence `unresolved`, which `kubectl aibom summary`, `find` and
+  `find --model` then showed. Unresolved models are now left out of the
+  summary; the component stays in the document with its locator. An
+  API key with a literal value is `inferred` and is still summarized.
+  The document and input hash are unchanged, so an existing AIBOM keeps
+  its stored summary until the workload's inputs next change (the dedup
+  fast path does not rebuild the status).
+
+- **`aibom_scraper_extraction_errors_total` keeps counting on the dedup
+  fast path** (#325). The counter was raised only when a BOM was rebuilt.
+  Extraction errors are not part of the input hash, so an unchanged
+  workload that keeps producing the same errors takes the fast path from
+  its second reconcile on: the counter rose once and then stayed flat,
+  and the dashboard's `rate()` panel read zero while the same errors
+  drove `Stale` to `True` (#223 fixed the `Stale` count, not the
+  metric). The fast path now counts the errors too.
+
+- **The `Stale` message for persistent extraction errors names the
+  errors** (#327). `ExtractionErrorsPersistent` listed evidence sources
+  only for `*scraper.ExtractionError`, which no scraper returns, so the
+  message was always just `workload produced extraction errors on N
+  consecutive reconciles`. The errors (for example `spec.env[0]: not an
+  object (string); skipped`) are not logged or stored anywhere else.
+  The message now lists the distinct error texts in scraper order, the
+  first three (each cut to 120 characters) and then `and N more`. The
+  reason, threshold and clearing are unchanged.
+
+- **`SinkFailed` marks a webhook receiver's body `(truncated)` only
+  when text was dropped** (#245). The marker was added to every
+  response body over 256 bytes, counted before ANSI color codes are
+  stripped, so a body shown in full (multi-byte UTF-8, or a short
+  message wrapped in color codes) still read as cut off. A
+  body of exactly 1024 bytes, the read limit, was marked too. The
+  marker now means the read limit was passed or the text was capped
+  at 256 characters.
+
+- **The cleartext-credential config error names the real field**
+  (#243). A webhook sink with `auth` and an `http://` endpoint is
+  rejected at config load, and the `ConfigInvalid` message pointed at
+  `spec.sinks[name=X].webhook.url`, a field that does not exist. It
+  now names `spec.sinks[name=X].webhook.endpoint`. The check itself is
+  unchanged.
+
+- **`training.spec` no longer claims `PyTorchJob` and `RayJob`.**
+  `HandlesKind` returned true for `kubeflow.org/PyTorchJob` and
+  `ray.io/RayJob`, but no reconciler watches either kind, so the
+  scraper never saw one; its fallback for them scraped the workload's
+  pods with locators such as `spec.containers.image` that name no
+  field of the object. `HandlesKind` now covers only `batch/Job` and
+  `batch/CronJob`, the unreachable pod fallback is removed, and any
+  other object type is an error, as in `eval.spec`, `agent.spec` and
+  `vectordb.spec`. No output changes: Job and CronJob documents are
+  scraped as before.
+
+- **`MultiScraper` keeps extraction errors from scrapers that found
+  nothing.** The scraper for Deployments, StatefulSets, DaemonSets,
+  Jobs and CronJobs runs inference.spec, vectordb.spec, agent.spec,
+  training.spec and eval.spec and merges the results it recognizes,
+  but merged `Errors` only from scrapers with a resolved result. The
+  `Scraper` contract says a field a scraper could not read goes on
+  `Errors`; one recorded by a scraper whose result was unresolved was
+  dropped with the rest of that result, so it never reached the
+  `aibom_scraper_extraction_errors_total` metric or the
+  `ExtractionErrorsPersistent` Stale condition. Errors from every
+  scraper that ran are now kept, in scraper order. None of these five
+  scrapers records extraction errors today, so no current output
+  changes.
+
 - **The per-document component cap now bounds the merged scraper
   result** (#273). `MaxComponentsPerDocument` was applied only inside
   `inference.spec` and the CRD scrapers. `agent.spec`, `vectordb.spec`,
@@ -670,36 +449,24 @@ and the `AIBOM` status summary fields and the API schema do not change.
   `aibom.truncation.applied` along with any drop a merged scraper
   recorded. Documents under the cap are unchanged.
 
-- **A model mounted from an OCI image volume is named by its image
-  reference** (#275). An `image` volume (KEP-4639) mounted at a model
-  path produced a `data` component named after the pod-local volume
-  name, with `volume.source: other`, so the image reference that
-  identifies the model was missing from the BOM. The component is now
-  named by `image.reference`, with `volume.source: image`. An image
-  volume without a reference keeps the volume name.
+- **Agent and vector-database AIBOMs list the workload's containers**
+  (#290). `inference.spec` is the only scraper that builds container
+  components, and `MultiScraper` dropped its whole result when it found
+  no runtime or model, so a Qdrant or Langflow Deployment's BOM had no
+  image reference and no digest. Its container components are now kept
+  when another scraper recognizes the workload; nothing else from that
+  result is, so the confidence and category are unchanged and a
+  workload no scraper recognizes still gets no AIBOM. Existing agent and
+  vector-database AIBOMs regenerate once. Jobs and CronJobs are not read
+  by `inference.spec`, so training and evaluation BOMs are unchanged.
 
-- **Docs: the README's AIBOM name examples include the API group**
-  (#277). "See the BOMs" used `deployment-my-workload`, but the
-  controller names an AIBOM `<group>-<kind>-<name>`, so the Deployment's
-  AIBOM is `apps-deployment-my-workload` and both commands failed with
-  `not found`. The examples use that name, and the README states the
-  naming rule.
-
-- **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
-  (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
-  failed with `flag provided but not defined: -namespace`. They now set
-  the same values and follow the same rules: `--namespace` with `-A` or
-  `--all-namespaces` is an argument error, and `--all-namespaces` does
-  not apply to `view` or `verify`.
-
-- **`kubectl aibom find` no longer fails when one AIBOM's document
-  cannot be read** (#265). Inline data that is not base64, not JSON, or
-  not a string made the whole command exit 1 with that AIBOM's error and
-  no table, even with no filter or only `--runtime`,
-  `--model` or `--signed`, which never need the document. Such a row is
-  now listed with IMAGES `unreadable` and handled like `no-document`:
-  shown (not excluded) with the stderr warning when an image or digest
-  filter cannot be evaluated for it. `view` and `verify` keep the error.
+- **KServe InferenceService BOMs are capped at 256 components** (#288).
+  The KServe scraper is called without `MultiScraper` and was the only
+  CR scraper that did not apply `MaxComponentsPerDocument`, so each
+  `model.k8saibom.dev/*` annotation added a component with no bound and
+  no `aibom.truncation.applied` property. It now caps and records the
+  drop the way the LWS, DisaggregatedSet, Dynamo and NIMService scrapers
+  do.
 
 - **NIMService `spec.args` with a non-string element is no longer
   dropped silently** (#269). One such element made the scraper ignore
@@ -710,29 +477,55 @@ and the `AIBOM` status summary fields and the API schema do not change.
   `spec.env`. A `spec.args` or `spec.env` that is not a list is recorded
   too instead of being ignored.
 
-- **Docs: the model allowlists are not configurable through the CR**
-  (#270). The header and the `modelArgFlags` comment in
-  `internal/scraper/v1-runtime-patterns.yaml`, and the `InferenceConfig`
-  godoc, said customers override `modelEnvVarNames`, `modelArgFlags` and
-  the volume-path prefixes in `AIBOMControllerConfig`. The CR exposes
-  only `spec.discovery.inferenceRuntimeImagePatterns`; the three model
-  allowlists always come from the embedded file, so a value set in the
-  CR is pruned with no effect. The comments and
-  `docs/scraper-heuristics.md` now say so and point to
-  `docs/contributing-a-pattern.md`. Docs only; a loader test now pins
-  all three allowlists across a pattern override.
+- **An API key set from a Secret is marked as a remote API dependency**
+  (#320). `agent.spec` gave the `openai-api` / `anthropic-api` / …
+  component `dependency.type: remote-api` only when the key was a
+  literal value. A key set through `valueFrom`, which is how keys are
+  normally loaded, got the component with no properties. Both forms now
+  carry `dependency.type`; the `valueFrom` component stays `unresolved`.
+  Documents for workloads that load an API key from a Secret or
+  ConfigMap change once after upgrade.
 
-- **Docs: workload categorization and the webhook `SinkFailed` body
-  match the code** (#250). `docs/scraper-heuristics.md` said a
-  workload takes the category of the first scraper that matches; every
-  scraper runs and the highest-priority category wins (`agent`,
-  `training`, `evaluation`, `vector-database`, `inference`). It also
-  gave API-key components `declared` confidence: they are `inferred`,
-  or `unresolved` for a `valueFrom` key, and an API key alone does not
-  make a workload an `agent`. `docs/webhook-sink-protocol.md` now
-  describes the `SinkFailed` body as up to 256 characters after ANSI
-  stripping, not 256 bytes, and lists `3xx`: redirects are not
-  followed or retried. Docs only.
+- **A dataset mount is reported once when a Job matches both
+  `training.spec` and `eval.spec`** (#232). Both scrapers report
+  dataset mounts since #218, and the multi-scraper appended their
+  results without deduplicating, so an lm-eval Job that logs to
+  Weights & Biases (`WANDB_API_KEY`) listed each mount twice. Merged
+  results are now deduplicated on type, name, version, evidence source
+  and locator; a single scraper's result is unchanged.
+
+- **A model mounted from an OCI image volume is named by its image
+  reference** (#275). An `image` volume (KEP-4639) mounted at a model
+  path produced a `data` component named after the pod-local volume
+  name, with `volume.source: other`, so the image reference that
+  identifies the model was missing from the BOM. The component is now
+  named by `image.reference`, with `volume.source: image`. An image
+  volume without a reference keeps the volume name.
+
+- **`kubectl aibom` rejects an empty value for a filter or a scope flag**
+  (#352). `--runtime`, `--model`, `--image`, `--digest` and `--signed`
+  set to `""` (`--digest "$DIGEST"` with the variable unset) counted as
+  no filter, so `find -A --digest ""` listed every AIBOM as running that
+  digest. `-n`, `--namespace`, `--context` and `--kubeconfig` set to
+  `""` counted as not given, so the command quietly used the
+  kubeconfig's namespace, current context or default file, and
+  `verify NAME -n ""` verified a same-named AIBOM in another namespace
+  and exited 0. Both are now argument errors, reported before the
+  kubeconfig is loaded, like `--digest sha256:` already was. Leaving a
+  flag out still means no filter, or the kubeconfig default. Plugin
+  only.
+
+- **`kubectl aibom` reads `--A` as `-A` and treats `--` as the end of
+  the flags** (#255, #365). The flag package accepts both spellings and
+  the `--` convention, but the plugin's argument splitter knew only the
+  one-dash `-A` was a boolean and read `--` as a flag taking a value, so
+  each swallowed the next argument: `find --A --runtime vllm` failed with
+  `flag needs an argument: -runtime`, `summary --A prod-jobs` listed
+  every namespace instead of rejecting `prod-jobs`, `view -- NAME` and
+  `verify -- NAME` failed with "requires exactly one AIBOM name", and
+  `find -- vllm` listed every AIBOM unfiltered. Both spellings of `-A`
+  and `--raw` now take no value, and every token after `--` is
+  positional and goes through the usual checks.
 
 - **`kubectl aibom find` and `summary` reject `-n` together with `-A`**
   (#239). With both, `-A` won and `-n` was dropped, so `find --runtime
@@ -751,41 +544,34 @@ and the `AIBOM` status summary fields and the API schema do not change.
   hint (`filters are flags, e.g. --runtime vllm`). `-n`, `--kubeconfig`
   and `--context` still apply to every subcommand.
 
-- **`kubectl aibom` reads `--A` as `-A`** (#255). The flag package
-  takes `--A` for `-A`, but the plugin's argument splitter knew only
-  the one-dash spelling was a boolean, so `--A` swallowed the next
-  argument: `find --A --runtime vllm` failed with `flag needs an
-  argument: -runtime`, and `summary --A prod-jobs` listed every
-  namespace instead of rejecting `prod-jobs`. Both spellings of `-A`
-  and `--raw` now take no value.
+- **`kubectl aibom` accepts `--namespace` and `--all-namespaces`**
+  (#267). Only `-n` and `-A` were defined, so kubectl's long spellings
+  failed with `flag provided but not defined: -namespace`. They now set
+  the same values and follow the same rules: `--namespace` with `-A` or
+  `--all-namespaces` is an argument error, and `--all-namespaces` does
+  not apply to `view` or `verify`.
 
-- **AIBOM conditions keep their `lastTransitionTime` when their status
-  does not change** (#231). A full rebuild stamped `Ready`, `Synced`,
-  `SinkFailed` and `Stale` with the reconcile time every time, so while
-  a sink failed and was retried every minute, `SinkFailed=True` always
-  looked less than a minute old and "failing since" could not be read
-  from the status. The full path now keeps the previous time for a
-  condition whose status is the same, as the dedup fast path and the
-  scrape/build failure path already did; a condition that flips still
-  gets the reconcile time.
+- **`kubectl aibom find` no longer fails when one AIBOM's document
+  cannot be read** (#265). Inline data that is not base64, not JSON, or
+  not a string made the whole command exit 1 with that AIBOM's error and
+  no table, even with no filter or only `--runtime`,
+  `--model` or `--signed`, which never need the document. Such a row is
+  now listed with IMAGES `unreadable` and handled like `no-document`:
+  shown (not excluded) with the stderr warning when an image or digest
+  filter cannot be evaluated for it. `view` and `verify` keep the error.
 
-- **A dataset mount is reported once when a Job matches both
-  `training.spec` and `eval.spec`** (#232). Both scrapers report
-  dataset mounts since #218, and the multi-scraper appended their
-  results without deduplicating, so an lm-eval Job that logs to
-  Weights & Biases (`WANDB_API_KEY`) listed each mount twice. Merged
-  results are now deduplicated on type, name, version, evidence source
-  and locator; a single scraper's result is unchanged.
-
-- **A container's digest no longer depends on the order pods are
-  listed in** (#236). When a workload's replicas ran different digests
-  (a moving tag such as `:latest`, or a rollout in progress), the
-  digest came from whichever matching pod the informer cache listed
-  first, which changes between calls. The document and its input hash
-  could change on every reconcile and be re-sent to every sink. The
-  digest the most pods report now wins, and a tie goes to the lowest
-  digest. Workloads whose pods all run one digest, and digests pinned
-  in the spec image, are unchanged.
+- **`kubectl aibom find --runtime` finds every runtime a workload runs**
+  (#335). The filter compared only `status.summary.runtime.name`, which
+  names the first runtime in the document. A pod running vLLM with a
+  LiteLLM proxy beside it has summary runtime `litellm`, so
+  `find --runtime vllm` printed `0 matches` for it. `--runtime` now also
+  matches the runtime components of the inline document, and the
+  RUNTIME column lists them, summary runtime first. When the document is
+  not inline, only the summary runtime can be matched; a row whose
+  summary names another runtime is left out and named in a stderr
+  warning, printed after `0 matches` too. Plugin only; the controller and
+  its documents are unchanged. `status.summary.runtime` itself stays a
+  single runtime until #336.
 
 - **`kubectl aibom find` lists each model and image once** (#241). The
   MODELS and IMAGES columns repeated a value once per place it was
@@ -796,12 +582,204 @@ and the `AIBOM` status summary fields and the API schema do not change.
   values in first-seen order, and `+N` counts distinct values.
   Filtering is unchanged.
 
-- **The cleartext-credential config error names the real field**
-  (#243). A webhook sink with `auth` and an `http://` endpoint is
-  rejected at config load, and the `ConfigInvalid` message pointed at
-  `spec.sinks[name=X].webhook.url`, a field that does not exist. It
-  now names `spec.sinks[name=X].webhook.endpoint`. The check itself is
-  unchanged.
+- **`kubectl aibom verify` states each model's signature once**
+  (#249). A model named in two places (`--model` and an env var) has
+  two `status.summary.models` entries, and `verify` printed
+  `model X: signature unsigned` once per entry, so one model read as
+  two. Identical lines are now printed once, in first-seen order; a
+  model whose entries record different states still shows each. The
+  digest check and the exit code are unchanged.
+
+- **The chart's `config.discovery` comment describes `namespaceSelector`
+  correctly** (#299). It said the selector applies in addition to the
+  `aibom.k8saibom.dev/enabled=true` label opt-in; a selector replaces the
+  label, so its `environment: production` example inventoried every
+  production namespace, labelled or not, and dropped labelled
+  namespaces outside production. The comment now says the selector
+  replaces the opt-in, and the example keeps the label in
+  `matchLabels`. The `metrics` comment's list of reconcile outcomes also
+  gains `kind_not_allowed`. Comments only.
+
+- **`make helm` installs Helm into `./bin`, at the CI version** (#308).
+  The target ran `get-helm-3` without `HELM_INSTALL_DIR`, so it installed
+  to `/usr/local/bin` (or failed there without root), then moved
+  `./bin/helm` onto itself and exited 0 when either step failed, leaving
+  no `./bin/helm` for `make install.yaml`. It now installs into `./bin`,
+  fails when the install fails, and installs `HELM_VERSION` (v3.22.1,
+  the version every workflow pins) instead of v3.13.0. Build tooling
+  only.
+
+- **Building from source shows a multi-platform build that pushes**
+  (#317). The guide said `make image-multiarch` then `make docker-push`,
+  but `image-multiarch` has no output flag. With the classic image store,
+  the default builder refuses a multi-platform build, and a
+  `docker-container` builder leaves the result in its build cache, so
+  `make docker-push` had nothing to push or pushed an older image. Only
+  the containerd image store keeps the image for `docker push`. The guide
+  now runs `docker buildx build ... --push`, and says when the make
+  targets work. Documentation only.
+
+- **`hack/full-smoke-test.yaml` works on a fresh cluster again**
+  (#316). It put every workload in `inference-test` without creating
+  that namespace or opting it in, so `kubectl apply` failed, and a
+  namespace created by hand without the opt-in label got no AIBOMs. Its
+  ragas Job ran `ragas/ragas-eval`, which the anchored ragas pattern no
+  longer matches. The file now creates the namespace with
+  `aibom.k8saibom.dev/enabled: "true"` and runs
+  `explodinggradients/ragas`, so all 15 workloads get an AIBOM. Test
+  manifest only.
+
+- **The Terraform README shows the `cluster_location` default** (#310).
+  Its Variables table listed `cluster_name` and `cluster_location`
+  together with no default; `cluster_location` defaults to
+  `us-central1-c` in `variables.tf`, so leaving it out looks the cluster
+  up there. The row is split and shows the default. Documentation only.
+
+- **The AIBOM CRD no longer says models are never `verified`** (#377).
+  The `status.summary.models[].signed` description, which `kubectl
+  explain` shows, said "v1 never emits `verified`", and the `confidence`
+  description listed only `declared` and `inferred`. With signature
+  verification (Design 002, v1.5.0) a model's signature can be
+  `verified`, and since #328 its confidence follows. Both descriptions
+  now give `verified` and when it appears, and
+  `docs/schema-divergences.md` marks D-001, the "never emits `verified`"
+  entry, as retired by Design 002. Documentation only; no schema change.
+
+- **Three CRD field descriptions match current behaviour** (#306).
+  `status.summary.workload.category` said v1 always emits `inference`;
+  the scrapers also emit `agent`, `training`, `evaluation` and
+  `vector-database`. `spec.bomGeneration.inlineThresholdBytes` said an
+  oversized BOM is truncated only when no external sink is configured;
+  it is also truncated when every configured sink failed (as #301 fixed
+  for `status.bomDocument`). `spec.discovery.workloadKinds` left
+  DisaggregatedSet out of the third-party kinds whose watch stops when
+  unlisted. Regenerated CRDs; no schema change.
+
+- **`status.bomDocument` field docs match when a BOM is truncated**
+  (#301). The `external` and `truncated` descriptions (API godoc and the
+  CRD schema `kubectl explain` reads) said `truncated` means no external
+  sink is configured. The controller also truncates when sinks are
+  configured but none accepted the BOM this cycle, and says so in
+  `truncationReason`. The descriptions now say `external` is set when a
+  sink accepted the BOM and `truncated` when none did, naming both
+  causes. Regenerated CRDs; no schema change.
+
+- **The README and docs name properties as v1.7.0 documents emit them**
+  (#360). Seven places still gave the name from before the taxonomy
+  rename: `aibom.redaction.applied` in the README's sanitization
+  guarantee and in the threat model, `dependency.type` in the scraper
+  heuristics, and `dynamo.component.<name>.type`, `container.name` and
+  `lws.role` (twice) in the external CRD tables. They now read
+  `k8s-aibom:redaction:applied`, `k8s-aibom:dependency:type`,
+  `k8s-aibom:dynamo:component:<name>:type`, `k8s-aibom:container:name`
+  and `k8s-aibom:lws:role`. Documentation only.
+
+- **The property taxonomy matches what the controller emits** (#321).
+  `docs/cyclonedx-property-taxonomy.md` listed the workload category
+  `vectordb` (it is `vector-database`) and the signing status `none`
+  (no status is written without a signature reference, and absence reads
+  as unsigned). It also gave no v1.7 name to `dependency.type`,
+  `dataset.path`, `disaggregatedset.role` or `disaggregatedset.slices`,
+  and its mapping table did not cover the kind-specific names. It now has
+  `k8s-aibom:dependency`, `k8s-aibom:dataset` and
+  `k8s-aibom:disaggregatedset`, and mapping rows for them and for
+  `kserve.*`, `dynamo.*`, `nim.*` and `lws.*`. Documentation only.
+
+- **The webhook sink protocol gives the `Content-Type` the sink sends**
+  (#376). `docs/webhook-sink-protocol.md` said every delivery carries
+  `Content-Type: application/vnd.cyclonedx+json; version=1.6`; the sink
+  has always sent `application/json`, so a receiver built to the
+  document and checking the media type refused every delivery. The
+  request shape, the headers table and the stability notes now give
+  `application/json`, with the CycloneDX version in the body's
+  `specVersion`. The envelope test now checks the header names and the
+  `Content-Type` value as the document writes them rather than against
+  the constants, which is why the drift went unnoticed. No change to
+  what the sink sends.
+
+- **The webhook protocol doc names where the bearer token comes from**
+  (#284). `docs/webhook-sink-protocol.md` said the `Authorization` token
+  came from a `BearerTokenFile`, an internal setting that
+  `AIBOMControllerConfig` cannot set. It now names
+  `webhook.auth.bearerToken.secretRef` (a Secret in the controller's
+  namespace, readable with `rbac.sinkSecretAccess=true`), says the value
+  is whitespace-trimmed, and says the header is only sent over
+  `https://`, since auth on an `http://` endpoint is a configuration
+  error. Documentation only.
+
+- **Workload categorization and the webhook `SinkFailed` body
+  match the code** (#250). `docs/scraper-heuristics.md` said a
+  workload takes the category of the first scraper that matches; every
+  scraper runs and the highest-priority category wins (`agent`,
+  `training`, `evaluation`, `vector-database`, `inference`). It also
+  gave API-key components `declared` confidence: they are `inferred`,
+  or `unresolved` for a `valueFrom` key, and an API key alone does not
+  make a workload an `agent`. `docs/webhook-sink-protocol.md` now
+  describes the `SinkFailed` body as up to 256 characters after ANSI
+  stripping, not 256 bytes, and lists `3xx`: redirects are not
+  followed or retried. Docs only.
+
+- **The scraper heuristics no longer give a six-runtime allowlist**
+  (#366). `docs/scraper-heuristics.md` said `inference.spec` matches
+  against "vllm, tgi, triton, ollama, ray-serve, llm-d" and that seven
+  named patterns match at the image-name boundary; the default
+  `runtimeImagePatterns` attribute 29 runtimes, most of them
+  boundary-matched. Both places now give examples and point at
+  `internal/scraper/v1-runtime-patterns.yaml`, with NIM and Dynamo as
+  examples of the prefix matches, and the README's runtime list says it is not the
+  full set. Documentation only.
+
+- **The scraper heuristics no longer say TensorRT-LLM has no pattern of
+  its own** (#358). The deferred-cases table in
+  `docs/scraper-heuristics.md` still said only Triton's `-trtllm-` images
+  were covered and that a separate pattern would double-count, but
+  `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime` (v1.4.0) and
+  `nvcr.io/nvidia/tensorrt-llm/release` (v1.6.0) attribute as
+  `tensorrt-llm`. The row is marked resolved, and the runtime-patterns
+  comment that listed two forms now lists all three. Documentation only.
+
+- **The README's workload-type paragraphs describe what is recorded**
+  (#337). Since the initial commit they said the controller extracts
+  agent framework versions, vector-database collections and RAG
+  relationships, a Hugging Face Hub signal and framework versions for
+  training jobs, and benchmark suites for evaluation jobs. None of these
+  is extracted. The paragraphs now list the frameworks each scraper
+  recognizes and what it records, and name what it does not read.
+  Documentation only.
+
+- **The README's confidence examples match what the scrapers emit**
+  (#296). "The confidence model" listed an `HF_MODEL_ID` env var as
+  `declared`; env-var model claims are `inferred`, as
+  `docs/scraper-heuristics.md` says and the scraper emits. It said the
+  agent framework comes from "a `langchain` import pattern in container
+  args"; `agent.spec` does not read args, and finds LangChain through
+  env vars such as `LANGCHAIN_TRACING_V2`. And it gave `^vllm/.*` as the
+  vLLM image pattern; the pattern is anchored at `vllm/vllm-openai` and
+  its siblings, so `vllm/vllm-router`, for one, is not matched. The
+  heuristics doc's deferred-cases table quoted the same old pattern and
+  is corrected too. Documentation only.
+
+- **The README's config example uses `v1beta1`** (#340). The external
+  sinks example wrote the `AIBOMControllerConfig` through `v1alpha1`,
+  whose schema has no `spec.discovery.workloadKinds`, so adding an
+  allowlist to it failed strict validation or dropped the field, and
+  applying it removed an allowlist already set. The example now uses
+  `v1beta1`, and the README and the migration guide say the field is
+  `v1beta1`-only. The migration guide and roadmap no longer say the
+  chart renders the default config at `v1alpha1` (it renders `v1beta1`
+  since v1.4.0). Documentation only.
+
+- **The README's GCS sink example applies** (#292). It set
+  `gcs.workloadIdentity`, a field no `AIBOMControllerConfig` version has,
+  so `kubectl apply` rejected the example as an unknown field (and
+  non-strict validation dropped it silently). The field is gone, and the
+  README now says how the GCS sink authenticates: Application Default
+  Credentials with Workload Identity on the controller's ServiceAccount
+  (`serviceAccount.annotations` in the chart), or
+  `gcs.credentialsSecretRef`. `docs/security-model.md` described the
+  key-file fallback through `K8S_AIBOM_GCS_CREDENTIALS_FILE`, a v1.0
+  environment variable nothing reads; it now names
+  `gcs.credentialsSecretRef`. Documentation only.
 
 - **The GCS sink docs describe the object paths it writes** (#257).
   The `{kind}` placeholder was documented as `Deployment`; the sink
@@ -812,22 +790,39 @@ and the `AIBOM` status summary fields and the API schema do not change.
   `/`, `\`, `.` and line breaks in workload values. Paths are
   unchanged.
 
-- **`SinkFailed` marks a webhook receiver's body `(truncated)` only
-  when text was dropped** (#245). The marker was added to every
-  response body over 256 bytes, counted before ANSI color codes are
-  stripped, so a body shown in full (multi-byte UTF-8, or a short
-  message wrapped in color codes) still read as cut off. A
-  body of exactly 1024 bytes, the read limit, was marked too. The
-  marker now means the read limit was passed or the text was capped
-  at 256 characters.
+- **The README's AIBOM name examples include the API group**
+  (#277). "See the BOMs" used `deployment-my-workload`, but the
+  controller names an AIBOM `<group>-<kind>-<name>`, so the Deployment's
+  AIBOM is `apps-deployment-my-workload` and both commands failed with
+  `not found`. The examples use that name, and the README states the
+  naming rule.
 
-- **`kubectl aibom verify` states each model's signature once**
-  (#249). A model named in two places (`--model` and an env var) has
-  two `status.summary.models` entries, and `verify` printed
-  `model X: signature unsigned` once per entry, so one model read as
-  two. Identical lines are now printed once, in first-seen order; a
-  model whose entries record different states still shows each. The
-  digest check and the exit code are unchanged.
+- **The model allowlists are not configurable through the CR**
+  (#270). The header and the `modelArgFlags` comment in
+  `internal/scraper/v1-runtime-patterns.yaml`, and the `InferenceConfig`
+  godoc, said customers override `modelEnvVarNames`, `modelArgFlags` and
+  the volume-path prefixes in `AIBOMControllerConfig`. The CR exposes
+  only `spec.discovery.inferenceRuntimeImagePatterns`; the three model
+  allowlists always come from the embedded file, so a value set in the
+  CR is pruned with no effect. The comments and
+  `docs/scraper-heuristics.md` now say so and point to
+  `docs/contributing-a-pattern.md`. Docs only; a loader test now pins
+  all three allowlists across a pattern override.
+
+- **The Gatekeeper recipe in the policy cookbook flags namespaces that
+  were never opted in** (#333). It checked
+  `ns.metadata.labels["aibom.k8saibom.dev/enabled"] != "true"`, and in
+  Rego a missing label is undefined, so the rule never fired for a
+  namespace without the label (or without any labels), only for one
+  labelled with another value. It now tests for opt-in in a helper rule
+  and negates it. Documentation only.
+
+- **Links from the documentation site to files outside `docs/` resolve**
+  (#354). The GitHub Pages site is built from `docs/` only, so relative
+  links such as `../README.md#quickstart` or
+  `../internal/scraper/v1-runtime-patterns.yaml` led to 404s there. The
+  19 such links outside `docs/design/` now point at the file on GitHub,
+  which works on the site and in the repository. Documentation only.
 
 ## [1.6.2] - 2026-10-22
 
