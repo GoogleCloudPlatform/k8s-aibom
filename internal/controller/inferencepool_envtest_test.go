@@ -19,6 +19,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -577,10 +579,31 @@ func waitEmitted(t *testing.T, ds *docSink, name string, facts []pm, wants ...st
 // emitted for name and the stored input hash does not change.
 func requireNoEmission(t *testing.T, env *envTestEnv, ds *docSink, key types.NamespacedName, name string, n int, why string) {
 	t.Helper()
-	before, err := getAIBOM(env.k8sClient, context.Background(), key)
-	if err != nil {
-		t.Fatalf("%s: %v", why, err)
+	// The sink receives a document before the reconcile that produced
+	// it has written the AIBOM status (emit, then CreateOrUpdate, then
+	// Status().Update). A caller that learned of the n-th document
+	// through the sink can therefore still read a status describing the
+	// previous one, and would mistake that in-flight status write for a
+	// hash change. Take the baseline only once the status names the
+	// last emitted document.
+	docs := ds.emitted(name)
+	if len(docs) != n {
+		t.Fatalf("%s: document re-emitted (%d emits, want %d)", why, len(docs), n)
 	}
+	sum := sha256.Sum256(docs[n-1])
+	want := hex.EncodeToString(sum[:])
+	var before *aibomv1beta1.AIBOM
+	eventually(t, 30*time.Second, 100*time.Millisecond, func() error {
+		a, err := getAIBOM(env.k8sClient, context.Background(), key)
+		if err != nil {
+			return err
+		}
+		if documentSHA(a) != want {
+			return fmt.Errorf("status still names a previous document")
+		}
+		before = a
+		return nil
+	})
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if got := len(ds.emitted(name)); got != n {

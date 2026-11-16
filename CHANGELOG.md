@@ -291,6 +291,34 @@ API schema do not change.
 
 ### Fixed
 
+- **No spurious `WatchUnhealthy` at startup on API servers without the
+  WatchList feature gate.** client-go v0.36 enables `WatchListClient` by
+  default and opens the first watch of an informer with
+  `sendInitialEvents`; API servers without the server-side `WatchList`
+  gate (the default through Kubernetes 1.33) reject it with 403 and
+  client-go falls back to a plain list on its own, but the rejection
+  reached the CRD discovery informer's error handler first and was
+  reported as a discovery outage: one `WatchUnhealthy` event, a
+  `Degraded` condition on `AIBOMControllerConfig`, and a `WatchRecovered`
+  a second later, at every controller start on such clusters (and the
+  same for the InferencePool view). Both reflectors now opt out of
+  WatchList semantics and use list+watch on every server version; the
+  lists involved are small. Affected: 1.7.0 pre-releases only (the
+  discovery informer and the client-go bump both landed after 1.6.2);
+  found by the weekly envtest matrix on 1.27 and 1.31.
+
+- **A document is not emitted twice when two reconciles overlap the
+  informer cache.** The dedup fast path compares the input hash with the
+  one in the AIBOM status read through the cache; a reconcile that ran
+  before the previous reconcile's status write had reached the cache saw
+  the old hash and emitted the same document to the sinks a second time
+  (a duplicate archive copy, never an overwrite). The reconciler now
+  also keeps a per-process record of the last hash it emitted for each
+  AIBOM, cleared on a sink failure so the retry contract holds and on
+  deletion. The InferencePool view's fan-out on recovery made the race
+  easy to hit; it has been possible since external sinks were
+  introduced.
+
 - **A failed `AIBOMControllerConfig` status write no longer repeats
   the config event.** The controller emits the transition event
   (`ConfigLoaded`, `ConfigInvalid`, `ConfigRecovered`, ...) before
