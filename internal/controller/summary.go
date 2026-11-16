@@ -33,6 +33,8 @@ limitations under the License.
 package controller
 
 import (
+	"strconv"
+
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -88,7 +90,7 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 			}
 			summary.Models = append(summary.Models, aibomv1beta1.ModelSummary{
 				Identity:   c.Name,
-				Source:     readProperty(c, bom.PropEvidenceSource),
+				Source:     modelSummarySource(c, confidence),
 				Confidence: confidence,
 				// Signed: populated by Phase 8+ signature plumbing.
 				// v1 NoopVerifier-derived value is encoded in the BOM's
@@ -99,6 +101,33 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 		}
 	}
 	return summary
+}
+
+// modelSummarySource returns the evidence source a model's summary entry
+// reports. A model named by several sources is one component (#362) whose
+// confidence is the highest tier among them; its summary Source is the
+// source that carried that tier, the first-found one on a tie. Each source
+// records its own confidence (k8s-aibom:evidence:confidence and :<i>). A
+// component from a single source has no per-source confidence and reports
+// its only source.
+func modelSummarySource(c cdx.Component, confidence string) string {
+	if readProperty(c, bom.PropEvidenceConfidence) == "" {
+		return readProperty(c, bom.PropEvidenceSource)
+	}
+	if readProperty(c, bom.PropEvidenceConfidence) == confidence {
+		return readProperty(c, bom.PropEvidenceSource)
+	}
+	for i := 1; ; i++ {
+		n := strconv.Itoa(i)
+		src := readProperty(c, bom.PropEvidenceSource+":"+n)
+		if src == "" && readProperty(c, bom.PropEvidenceLocator+":"+n) == "" {
+			break
+		}
+		if readProperty(c, bom.PropEvidenceConfidence+":"+n) == confidence {
+			return src
+		}
+	}
+	return readProperty(c, bom.PropEvidenceSource)
 }
 
 // SummaryOptions carries the workload-identity facts the summary builder

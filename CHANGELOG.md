@@ -6,6 +6,42 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### One model component per name (v1.8.0)
+
+- **A model named by several sources is one `machine-learning-model`
+  component** (#362). A model found in both `--model` and
+  `HF_MODEL_ID` gave two components that differed only in evidence;
+  Dependency-Track kept one and dropped the other's properties. The
+  component now carries every source: the first-found locator and source
+  stay in `k8s-aibom:evidence:locator` / `:source`, each further one is
+  `k8s-aibom:evidence:locator:<i>` / `:source:<i>`, and each source's
+  confidence is `k8s-aibom:evidence:confidence[:<i>]`. The component's
+  `k8s-aibom:confidence` is the highest tier among its sources, and the
+  identity properties of every source are kept. Only top-level models
+  are merged; other components and models named once are byte-identical.
+  The document's aggregate confidence is unchanged.
+- **API contract (behaviour, not schema): `status.summary.models` has
+  one entry per model.** `Source` and `Confidence` come from the
+  highest-tier source (the first-found one on a tie). The `Models`
+  godoc changed in both served versions:
+
+  ```diff
+  -// Models is the set of declared/inferred model identities. Multiple
+  -// entries are emitted when different evidence sources name the same
+  -// model with different confidence (e.g., --model arg + HF_MODEL_ID
+  -// env var) so auditors see both signals.
+  +// Models is the set of declared/inferred model identities, one entry
+  +// per model. A model named by several evidence sources (e.g., --model
+  +// arg + HF_MODEL_ID env var) is one entry whose Source and Confidence
+  +// come from the highest-tier source (verified > declared > inferred),
+  +// the first-found one on a tie. Every source and its locator stay on
+  +// the model's component in the BOM document.
+  ```
+
+  CRD descriptions regenerated in both charts. **Note for downstream
+  readers:** a workload whose model was listed twice (arg + env var) now
+  has one summary entry; read the document for every source.
+
 ### Document shape (one transition, v1.7.0)
 
 Six changes to the emitted CycloneDX document land together (#132,

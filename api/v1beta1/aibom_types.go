@@ -153,10 +153,12 @@ type AIBOMSummary struct {
 	// Runtime is the detected inference runtime, if any.
 	Runtime *RuntimeSummary `json:"runtime,omitempty"`
 
-	// Models is the set of declared/inferred model identities. Multiple
-	// entries are emitted when different evidence sources name the same
-	// model with different confidence (e.g., --model arg + HF_MODEL_ID
-	// env var) so auditors see both signals.
+	// Models is the set of declared/inferred model identities, one entry
+	// per model. A model named by several evidence sources (e.g., --model
+	// arg + HF_MODEL_ID env var) is one entry whose Source and Confidence
+	// come from the highest-tier source (verified > declared > inferred),
+	// the first-found one on a tie. Every source and its locator stay on
+	// the model's component in the BOM document.
 	Models []ModelSummary `json:"models,omitempty"`
 
 	// Confidence is the workload-level aggregated confidence. One of
