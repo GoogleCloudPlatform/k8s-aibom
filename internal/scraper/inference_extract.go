@@ -352,12 +352,122 @@ func (s *InferenceSpecScraper) extractArgModelsAt(specLocator string, c corev1.C
 	if init {
 		listKey = "initContainers"
 	}
-	return argModels(c.Args, c.Name, fmt.Sprintf("%s.%s[%d]", specLocator, listKey, idx), cfg)
+	return argModels(c.Args, c.Env, c.Name, fmt.Sprintf("%s.%s[%d]", specLocator, listKey, idx), cfg)
+}
+
+// expandVarRefs expands the $(VAR_NAME) references in s the way the
+// kubelet expands container args and env values (see Container.args in
+// the Kubernetes API): "$$" becomes "$", "$(NAME)" becomes lookup(NAME),
+// and any other "$", including an unterminated "$(", is kept. A
+// reference lookup cannot resolve is kept as written and ok is false.
+func expandVarRefs(s string, lookup func(string) (string, bool)) (expanded string, ok bool) {
+	if strings.IndexByte(s, '$') < 0 {
+		return s, true
+	}
+	ok = true
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '$' || i+1 == len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		switch s[i+1] {
+		case '$':
+			b.WriteByte('$')
+			i++
+		case '(':
+			end := strings.IndexByte(s[i+2:], ')')
+			if end < 0 {
+				b.WriteString("$(")
+				i++
+				continue
+			}
+			name := s[i+2 : i+2+end]
+			if v, found := lookup(name); found {
+				b.WriteString(v)
+			} else {
+				b.WriteString(s[i : i+3+end])
+				ok = false
+			}
+			i += 2 + end
+		default:
+			b.WriteByte('$')
+		}
+	}
+	return b.String(), ok
+}
+
+// specEnvValues returns the env vars whose values the container spec
+// states, resolved in order as the kubelet resolves them: each value is
+// expanded against the entries before it, and a later entry replaces an
+// earlier one of the same name. An entry set through valueFrom, or whose
+// value refers to a name not resolved this way, is left out: its value
+// is not in the spec.
+func specEnvValues(env []corev1.EnvVar) map[string]string {
+	vars := make(map[string]string, len(env))
+	lookup := func(name string) (string, bool) {
+		v, found := vars[name]
+		return v, found
+	}
+	for _, e := range env {
+		if e.ValueFrom != nil {
+			delete(vars, e.Name)
+			continue
+		}
+		v, ok := expandVarRefs(e.Value, lookup)
+		if !ok {
+			delete(vars, e.Name)
+			continue
+		}
+		vars[e.Name] = v
+	}
+	return vars
+}
+
+// expandArgs returns args as the kubelet passes them to the container,
+// with $(VAR_NAME) references expanded from the container's env, and
+// the indices of args that refer to a variable whose value the spec does
+// not state (valueFrom, envFrom, a Service variable, or none at all).
+// Such an arg cannot name a model: the BOM would record the reference
+// text, not the model the runtime is started with. Args without a "$"
+// are returned as they are.
+func expandArgs(args []string, env []corev1.EnvVar) ([]string, map[int]bool) {
+	var out []string
+	var unresolved map[int]bool
+	var vars map[string]string
+	lookup := func(name string) (string, bool) {
+		v, found := vars[name]
+		return v, found
+	}
+	for i, a := range args {
+		if strings.IndexByte(a, '$') < 0 {
+			continue
+		}
+		if out == nil {
+			out = append([]string(nil), args...)
+			vars = specEnvValues(env)
+		}
+		v, ok := expandVarRefs(a, lookup)
+		out[i] = v
+		if !ok {
+			if unresolved == nil {
+				unresolved = map[int]bool{}
+			}
+			unresolved[i] = true
+		}
+	}
+	if out == nil {
+		return args, nil
+	}
+	return out, unresolved
 }
 
 // argModels is the list-level form of extractArgModelsAt; see
-// envVarModels for the locatorBase / containerName conventions.
-func argModels(args []string, containerName, locatorBase string, cfg *InferenceConfig) []Component {
+// envVarModels for the locatorBase / containerName conventions. env is
+// the env list of the same container, used to expand $(VAR_NAME)
+// references in args; an arg whose reference it cannot resolve names no
+// model.
+func argModels(args []string, env []corev1.EnvVar, containerName, locatorBase string, cfg *InferenceConfig) []Component {
 	var out []Component
 	withContainer := func(props map[string]string) map[string]string {
 		if containerName != "" {
@@ -365,13 +475,14 @@ func argModels(args []string, containerName, locatorBase string, cfg *InferenceC
 		}
 		return props
 	}
+	args, unresolved := expandArgs(args, env)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		// --flag=value form
 		if eq := strings.IndexByte(arg, '='); eq >= 0 {
 			flag := arg[:eq]
 			value := strings.ReplaceAll(strings.ReplaceAll(arg[eq+1:], "\n", " "), "\r", " ")
-			if cfg.IsModelArgFlag(flag) && value != "" && !strings.HasPrefix(value, "--") {
+			if cfg.IsModelArgFlag(flag) && value != "" && !strings.HasPrefix(value, "--") && !unresolved[i] {
 				out = append(out, Component{
 					Type:       ComponentMLModel,
 					Name:       TruncateString(value, MaxComponentNameLength),
@@ -392,6 +503,10 @@ func argModels(args []string, containerName, locatorBase string, cfg *InferenceC
 		if cfg.IsModelArgFlag(arg) && i+1 < len(args) {
 			value := strings.ReplaceAll(strings.ReplaceAll(args[i+1], "\n", " "), "\r", " ")
 			if value == "" || strings.HasPrefix(value, "--") {
+				continue
+			}
+			if unresolved[i+1] {
+				i++ // the flag's value, but not one the spec states
 				continue
 			}
 			out = append(out, Component{

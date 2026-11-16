@@ -250,6 +250,132 @@ func TestInferenceSpecScraper_ImageVolumeModelNamedByReference(t *testing.T) {
 	}, "expected data component named by the image volume reference")
 }
 
+// A model arg that refers to an env var with $(VAR_NAME), as GKE's vLLM
+// and TGI serving samples write it (--model=$(MODEL_ID) with MODEL_ID
+// set in env), names the model the kubelet passes after expanding the
+// reference, not the reference text. A reference whose value the spec
+// does not state (valueFrom, envFrom, undefined) names no model.
+func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
+	lit := func(name, value string) corev1.EnvVar { return corev1.EnvVar{Name: name, Value: value} }
+	fromSecret := func(name string) corev1.EnvVar {
+		return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "hf-secret"}, Key: "hf_api_token",
+		}}}
+	}
+	fromConfigMap := func(name string) corev1.EnvVar {
+		return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "models"}, Key: "id",
+		}}}
+	}
+	const locator = "spec.template.spec.containers[0].args"
+	cases := []struct {
+		name        string
+		args        []string
+		env         []corev1.EnvVar
+		wantModel   string // "" = no model component
+		wantLocator string
+	}{
+		{
+			name:        "GKE sample, joined form",
+			args:        []string{"--model=$(MODEL_ID)", "--tensor-parallel-size=1"},
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b"), fromSecret("HUGGING_FACE_HUB_TOKEN")},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[0](--model=)",
+		},
+		{
+			name:        "positional form",
+			args:        []string{"--model-id", "$(MODEL_ID)", "--num-shard", "1"},
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2b-it")},
+			wantModel:   "google/gemma-2b-it",
+			wantLocator: locator + "[0 1](--model-id)",
+		},
+		{
+			name:        "reference inside a path",
+			args:        []string{"--model=/models/$(MODEL_DIR)"},
+			env:         []corev1.EnvVar{lit("MODEL_DIR", "gemma-2-2b")},
+			wantModel:   "/models/gemma-2-2b",
+			wantLocator: locator + "[0](--model=)",
+		},
+		{
+			name:        "env value refers to an earlier env var",
+			args:        []string{"--model=$(MODEL_ID)"},
+			env:         []corev1.EnvVar{lit("ORG", "google"), lit("MODEL_ID", "$(ORG)/gemma-2-2b")},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[0](--model=)",
+		},
+		{
+			name:        "escaped reference is passed as written",
+			args:        []string{"--model=$$(MODEL_ID)"},
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b")},
+			wantModel:   "$(MODEL_ID)",
+			wantLocator: locator + "[0](--model=)",
+		},
+		{
+			name:        "literal model is unchanged",
+			args:        []string{"--model", "meta-llama/Llama-3.1-8B-Instruct"},
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b")},
+			wantModel:   "meta-llama/Llama-3.1-8B-Instruct",
+			wantLocator: locator + "[0 1](--model)",
+		},
+		{
+			name: "value from a ConfigMap",
+			args: []string{"--model=$(MODEL_ID)"},
+			env:  []corev1.EnvVar{fromConfigMap("MODEL_ID")},
+		},
+		{
+			name: "undefined variable (envFrom, Service links or none)",
+			args: []string{"--model", "$(MODEL_ID)", "--port", "8000"},
+		},
+		{
+			name: "later valueFrom replaces an earlier literal",
+			args: []string{"--model=$(MODEL_ID)"},
+			env:  []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b"), fromConfigMap("MODEL_ID")},
+		},
+		{
+			name: "env value refers to a later env var",
+			args: []string{"--model=$(MODEL_ID)"},
+			env:  []corev1.EnvVar{lit("MODEL_ID", "$(ORG)/gemma-2-2b"), lit("ORG", "google")},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "vllm-gemma-deployment", Namespace: "ns"},
+				Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "inference-server",
+						Image: "vllm/vllm-openai:v0.10.0",
+						Args:  tc.args,
+						Env:   tc.env,
+					}},
+				}}},
+			}
+			w := Workload{Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, Name: dep.Name, Namespace: dep.Namespace, Object: dep}
+			got, err := newScraper().Scrape(context.Background(), w, testConfig())
+			if err != nil {
+				t.Fatalf("Scrape: %v", err)
+			}
+			models := componentsOf(got.Components, ComponentMLModel)
+			if tc.wantModel == "" {
+				if len(models) != 0 {
+					t.Fatalf("want no model component, got:\n%s", dumpComponents(models))
+				}
+				return
+			}
+			if len(models) != 1 {
+				t.Fatalf("want one model component %q, got:\n%s", tc.wantModel, dumpComponents(models))
+			}
+			m := models[0]
+			if m.Name != tc.wantModel || m.Confidence != ConfidenceDeclared ||
+				m.Evidence.Source != SourceContainerArg || m.Evidence.Locator != tc.wantLocator {
+				t.Errorf("model = %s %s {%s %s}, want %s declared {%s %s}",
+					m.Name, m.Confidence, m.Evidence.Source, m.Evidence.Locator,
+					tc.wantModel, SourceContainerArg, tc.wantLocator)
+			}
+		})
+	}
+}
+
 func TestInferenceSpecScraper_DigestUnresolvedWhenNoReadyPod(t *testing.T) {
 	s := newScraper()
 	dep := &appsv1.Deployment{

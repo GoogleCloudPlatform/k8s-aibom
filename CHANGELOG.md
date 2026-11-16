@@ -291,6 +291,20 @@ API schema do not change.
 
 ### Fixed
 
+- **A model arg that refers to an env var names the model, not the
+  reference** (#391). `--model=$(MODEL_ID)` with `MODEL_ID` set in the
+  container's `env`, the form GKE's vLLM and TGI serving samples use,
+  produced a `declared` model component named `$(MODEL_ID)`, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references before the server starts, so args are
+  now expanded from the container's `env` (or a NIMService's
+  `spec.env`) the same way. A reference whose value the spec does not
+  state (`valueFrom`, `envFrom`, a Service link, undefined) names no
+  model. A workload whose only signal was such a reference, with no
+  runtime image or other model claim, is now unresolved and gets no
+  AIBOM, so an existing one is removed. Args without a `$` are read as
+  before.
+
 - **A failed `AIBOMControllerConfig` status write no longer repeats
   the config event.** The controller emits the transition event
   (`ConfigLoaded`, `ConfigInvalid`, `ConfigRecovered`, ...) before
