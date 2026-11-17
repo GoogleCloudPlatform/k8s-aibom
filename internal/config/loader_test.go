@@ -435,6 +435,35 @@ func TestLoad_NilDiscovery_DefaultsApplied(t *testing.T) {
 	}
 }
 
+// An explicit empty selector ({}) is honoured as written: it matches
+// every namespace, unlike an absent selector, which falls back to the
+// opt-in label. The API doc comment states this; the test pins it.
+func TestLoad_EmptyNamespaceSelector_MatchesEverything(t *testing.T) {
+	cr := &aibomv1beta1.AIBOMControllerConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: DefaultConfigName, Generation: 1},
+		Spec: aibomv1beta1.AIBOMControllerConfigSpec{
+			Discovery: aibomv1beta1.DiscoveryConfig{
+				NamespaceSelector: &metav1.LabelSelector{},
+			},
+		},
+	}
+	l := newLoader(t, nil, cr)
+	result, _ := l.Load(context.Background())
+	if result.HasErrors() {
+		t.Fatalf("unexpected errors: %s", result.AggregateMessage())
+	}
+	snap := result.Snapshot
+	if !snap.NamespaceSelector.Matches(labelSet("team=platform")) {
+		t.Errorf("explicit {} selector should match a namespace without the opt-in label")
+	}
+	if !snap.NamespaceSelector.Matches(labels.Set{}) {
+		t.Errorf("explicit {} selector should match a namespace with no labels at all")
+	}
+	if snap.NamespaceSelector.String() != labels.Everything().String() {
+		t.Errorf("explicit {} selector = %q, want labels.Everything()", snap.NamespaceSelector.String())
+	}
+}
+
 func TestLoad_BOMGeneration_InlineThresholdClamping(t *testing.T) {
 	cases := []struct {
 		name       string

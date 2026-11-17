@@ -16,7 +16,7 @@ module "k8s_aibom" {
   project_id       = "my-project"
   cluster_name     = "my-cluster"
   cluster_location = "us-central1-c"
-  # chart_version = "1.5.0"   # optional; defaults to the current release
+  # chart_version = "1.7.0"   # optional; defaults to the current release
 }
 ```
 

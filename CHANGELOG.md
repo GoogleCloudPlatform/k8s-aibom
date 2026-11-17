@@ -95,6 +95,17 @@ API schema do not change.
   schema-identical again. Upgrade note: a `v1alpha1` apply no longer
   drops the allowlist, and a `v1alpha1` manifest may now set it.
 
+- **Two field descriptions now say what the controller does** (no
+  behaviour change, descriptions regenerated in both served versions).
+  `spec.discovery.namespaceSelector`: an explicit empty selector (`{}`)
+  matches every namespace, which the loader has always honoured on
+  purpose; only an absent selector falls back to the opt-in label.
+  `spec.discovery.inferenceRuntimeImagePatterns`: setting any pattern
+  replaces the compiled-in list rather than adding to it, and
+  `status.effectiveInferenceRuntimeImagePatterns` shows the list in
+  force. The contributor guide and scraper-heuristics page carry the
+  same warning.
+
 ### Added
 
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
@@ -302,6 +313,21 @@ API schema do not change.
   IPv6 forms of the `127.*`, `0.0.0.0` and `169.254.*` checks already
   there, so the config is rejected with `ConfigInvalid` instead.
   `AIBOM_DISABLE_SSRF_CHECKS=true` still turns the check off.
+
+- **Documentation matches the 1.7.0 tree.** The Dependency-Track and
+  GUAC fixture carries the v1.7.0 `serialNumber`; D-006 in
+  `schema-divergences.md` says v1.7.0, not v1.8.0; `VERSIONING.md`
+  records the one-time document-shape transition under the public
+  contract it affects; the README no longer suggests
+  `go install ...@latest` for the plugin (the root module's `replace`
+  directive for the verifier breaks it; krew and the attested release
+  binaries are the supported paths), no longer shows the webhook sink
+  posting to GUAC (GUAC collects files, see the walkthrough), and notes
+  that the sink refuses endpoints resolving to private addresses;
+  `llms.txt` lists `find`; the overview deck's confidence examples and
+  roadmap panel match the README; the Terraform example names the
+  current chart version; Design 002 marks its verification metrics as
+  deferred.
 
 - **Two code comments no longer cite the retired D-001 rule.** #377
   retired schema-divergences entry D-001 ("v1 never emits `verified`")

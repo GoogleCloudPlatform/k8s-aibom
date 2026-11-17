@@ -10,7 +10,7 @@ Key facts:
 - Measured cost: ~1.17 mCPU and ~63 MiB at 1,001 tracked workloads, with signature verification enabled, on live GKE.
 - Ships in NVIDIA AI Cluster Runtime as a qualified component (default-on in the stock GKE H100 inference recipe since AICR v0.20); runs on any conformant Kubernetes, with install docs for GKE, EKS, and AKS.
 - Releases are digest-pinned with provenance and SBOM attestations; the Helm chart is on ghcr.io (`oci://ghcr.io/googlecloudplatform/charts/k8s-aibom`).
-- A kubectl plugin (`kubectl aibom`) provides summary, view, and verify subcommands.
+- A kubectl plugin (`kubectl aibom`) provides summary, find, view, and verify subcommands.
 
 ## Docs
 

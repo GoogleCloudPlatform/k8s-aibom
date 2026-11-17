@@ -189,7 +189,10 @@ The three model allowlists used below (`modelEnvVarNames`,
 controller from
 [`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml).
 The `AIBOMControllerConfig` CR does not expose them: it overrides only
-the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`).
+the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`),
+and setting that field replaces the compiled-in list rather than
+extending it; `status.effectiveInferenceRuntimeImagePatterns` shows the
+list in force.
 Extending an allowlist is a PR to that file; see
 [contributing a pattern](contributing-a-pattern.md).
 

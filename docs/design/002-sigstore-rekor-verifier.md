@@ -214,7 +214,9 @@ downstream; verification must not move it in the steady state.
   reference change, TTL expiry, or trust-root rotation.
 - Metrics: `aibom_verification_attempts_total{outcome}`,
   `aibom_verification_duration_seconds`,
-  `aibom_verification_cache_hits_total`.
+  `aibom_verification_cache_hits_total`. (Deferred, #400: not implemented
+  as of v1.7.0; verification outcomes are visible per workload in the
+  document's signature status, not yet as aggregate metrics.)
 - The measurement methodology from the perf re-baseline reruns with
   verification enabled before release; numbers go in the README with
   version + environment + sampling labels, per current policy.
