@@ -79,7 +79,7 @@ split form does not preserve byte-for-byte, and auditors match on it.
 
 ## D-006: `serialNumber` is per workload, not per document
 
-**Status:** active, since v1.8.0
+**Status:** active, since v1.7.0
 **What we do:** `serialNumber` is `urn:uuid:<UUID v5 of the workload
 UID>` in the k8s-aibom namespace UUID
 `c8b031ec-958e-5f54-93dd-f9b3da80bfd0`, which is the UUID v5 of

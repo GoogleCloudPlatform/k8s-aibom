@@ -169,7 +169,10 @@ after #364 added explicit dependencies. This regeneration replayed
 the walkthrough's Deployment spec and kubelet-observed image digest
 through an envtest Kubernetes API; it did not run the model or repeat
 the consumer walkthrough. The fixture is byte for byte as
-`kubectl aibom view --raw` printed it. Tests validate the CycloneDX
+`kubectl aibom view --raw` printed it, plus the `serialNumber` that
+#381 added afterwards (`urn:uuid:` of the workload UID, see
+[D-006](../schema-divergences.md#d-006-serialnumber-is-per-workload-not-per-document)),
+so it matches the v1.7.0 document shape. Tests validate the CycloneDX
 1.6 schema and check that the workload depends on every top-level
 component.
 

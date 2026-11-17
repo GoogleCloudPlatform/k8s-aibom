@@ -215,12 +215,12 @@ body.notes #notes{display:block}
     <div class="tier card">
       <span class="tag acc" style="align-self:flex-start">declared</span>
       <div class="def">The customer wrote it into the spec.</div>
-      <div class="ex">Example: a <code>--model</code> container arg, or an <code>HF_MODEL_ID</code> env var.</div>
+      <div class="ex">Example: a <code>--model</code> container arg, or a <code>model.k8saibom.dev/name</code> annotation.</div>
     </div>
     <div class="tier card">
       <span class="tag" style="align-self:flex-start">inferred</span>
       <div class="def">Derived by heuristic.</div>
-      <div class="ex">Example: runtime <code>vllm</code>, from matching the image against a pattern.</div>
+      <div class="ex">Example: runtime <code>vllm</code> from an image pattern, or a model from an <code>HF_MODEL_ID</code> env var.</div>
     </div>
     <div class="tier card">
       <span class="tag" style="align-self:flex-start">unresolved</span>
@@ -233,7 +233,7 @@ body.notes #notes{display:block}
 </section>
 
 <section class="slide" id="s5" aria-label="Slide 5 of 10">
-  <div class="kicker">New in v1.5.0</div>
+  <div class="kicker">Since v1.5.0</div>
   <h2>The <span class="acc">verified</span> tier — Sigstore-backed, and deliberately calibrated.</h2>
   <p class="body" style="margin:-14px 0 26px;max-width:980px">Model signature claims are checked against operator-configured trust roots (Sigstore public-good via TUF, self-hosted TUF mirror, or a static trusted-root file for air-gapped clusters) plus Rekor transparency-log inclusion.</p>
   <div class="cal grow" style="align-content:start">
@@ -340,7 +340,7 @@ model pkg:npm/sigstore@1.3.0: signature verified</pre>
     </div>
     <div class="side">
       <div><h3>Repo</h3><p><a href="https://github.com/GoogleCloudPlatform/k8s-aibom"><code>github.com/GoogleCloudPlatform/k8s-aibom</code></a></p></div>
-      <div><h3>Roadmap</h3><p>v1.6 train: CronJob coverage, workload-kind allowlist, NIM-operator/LeaderWorkerSet scrapers under design review.</p></div>
+      <div><h3>Roadmap</h3><p>v1.7 (24 Nov 2026), the interoperability release: one CycloneDX byte-shape transition, Dependency-Track and GUAC ingestion, InferencePool membership. v1.8 (Jan 2027): kagent and agent-sandbox lenses, OperatorHub.</p></div>
     </div>
   </div>
   <p class="close">Designed and reviewed in public — <span class="acc">contributions welcome.</span></p>
