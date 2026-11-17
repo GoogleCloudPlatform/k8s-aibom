@@ -91,6 +91,21 @@ type WorkloadReconciler struct {
 	// recorder simply skip Event emission.
 	Recorder record.EventRecorder
 
+	// emitted records, per AIBOM, the input hash of the last document
+	// this process emitted with every sink succeeding. The dedup fast
+	// path reads the previous hash from the AIBOM status through the
+	// informer cache, and a reconcile that runs before the previous
+	// reconcile's status write has reached that cache sees the old hash
+	// and would emit the same document a second time; the InferencePool
+	// view's fan-out on recovery made that race easy to hit. The map is
+	// consulted after the status hash, only ever prevents a repeat of a
+	// document this process already emitted, is cleared when a sink
+	// fails (so the retry contract holds) or the AIBOM is deleted, and is
+	// empty after a restart, so the status stays the durable record.
+	// A pointer, created on first use, because tests and cmd/manager
+	// build reconcilers as struct literals and copy them.
+	emitted *emittedHashes
+
 	// ConfigStore holds the live AIBOMControllerConfig-derived Snapshot.
 	// Read once at the top of reconcileWorkload; the loaded *Snapshot is
 	// threaded through every downstream call site for the duration of
@@ -361,6 +376,20 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			}
 			return ctrl.Result{}, nil
 		}
+		// Stale cache: this process already emitted exactly this document
+		// and wrote its hash, but the informer cache has not delivered
+		// that status yet, so existing still carries the previous hash.
+		// Emitting again would duplicate the document in every sink and
+		// writing status from this stale copy would only conflict. Wait
+		// for the cache; the next reconcile takes the fast path above.
+		if r.emittedBefore(aibomKey, inputHash) {
+			logger.V(1).Info("AIBOM status not yet caught up with the last emission, deferring briefly",
+				"workload_namespace", req.Workload.Namespace,
+				"workload_name", req.Workload.Name,
+				"input_hash", inputHash[:12],
+			)
+			return ctrl.Result{RequeueAfter: BootstrapRaceRequeueAfter}, nil
+		}
 		// Bootstrap race: the AIBOM exists (a prior reconcile's
 		// CreateOrUpdate landed) but its Status hasn't propagated
 		// through the cache yet (the prior reconcile's
@@ -480,6 +509,11 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 	}
 	r.Pools.remember(aibom, pools)
 	if sinkFailed {
+		r.emittedStore().forget(aibomKey)
+	} else {
+		r.emittedStore().record(aibomKey, inputHash)
+	}
+	if sinkFailed {
 		// Deterministic self-heal: without this, a re-emit would wait
 		// for the next watch event, which for a quiet workload may
 		// never come. Bounded cadence; SinkFailed=True remains the
@@ -487,6 +521,54 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{RequeueAfter: SinkRetryRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// emittedBefore reports whether this process already emitted a document
+// with this input hash for the AIBOM and recorded it (see emitted). It
+// covers the window between a status write and the informer cache
+// catching up to it: the reconcile defers briefly instead of emitting
+// the same document a second time or writing status from a stale copy.
+func (r *WorkloadReconciler) emittedBefore(key types.NamespacedName, inputHash string) bool {
+	if inputHash == "" {
+		return false
+	}
+	return r.emittedStore().is(key, inputHash)
+}
+
+// emittedHashes is the per-process record behind emittedBefore.
+type emittedHashes struct {
+	mu sync.Mutex
+	m  map[types.NamespacedName]string
+}
+
+func (e *emittedHashes) record(key types.NamespacedName, hash string) {
+	e.mu.Lock()
+	e.m[key] = hash
+	e.mu.Unlock()
+}
+
+func (e *emittedHashes) forget(key types.NamespacedName) {
+	e.mu.Lock()
+	delete(e.m, key)
+	e.mu.Unlock()
+}
+
+func (e *emittedHashes) is(key types.NamespacedName, hash string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.m[key] == hash
+}
+
+// emittedInitMu guards the lazy creation of WorkloadReconciler.emitted.
+var emittedInitMu sync.Mutex
+
+func (r *WorkloadReconciler) emittedStore() *emittedHashes {
+	emittedInitMu.Lock()
+	defer emittedInitMu.Unlock()
+	if r.emitted == nil {
+		r.emitted = &emittedHashes{m: map[types.NamespacedName]string{}}
+	}
+	return r.emitted
 }
 
 // countExtractionErrors adds this scrape's extraction errors to
@@ -789,6 +871,7 @@ func (r *WorkloadReconciler) deleteWorkloadAIBOM(ctx context.Context, req Worklo
 		return fmt.Errorf("delete %s AIBOM: %w", why, err)
 	}
 	r.Pools.forget(client.ObjectKeyFromObject(aibom))
+	r.emittedStore().forget(client.ObjectKeyFromObject(aibom))
 	return nil
 }
 

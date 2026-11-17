@@ -302,7 +302,7 @@ func (v *InferencePoolView) run(ctx context.Context, recheck func()) {
 	}
 	expected := &unstructured.Unstructured{}
 	expected.SetGroupVersionKind(InferencePoolGVK)
-	r := toolscache.NewReflectorWithOptions(toolscache.ToListWatcherWithWatchListSemantics(lw, dc), expected, poolStore{v},
+	r := toolscache.NewReflectorWithOptions(toolscache.ToListWatcherWithWatchListSemantics(lw, listWatchOnly{}), expected, poolStore{v},
 		toolscache.ReflectorOptions{Name: "inferencepool-view", TypeDescription: InferencePoolGVK.String()})
 	r.RunWithContext(ctx)
 	log.Info("InferencePool watch stopped; published pool membership is retained unless discovery confirms CRD removal")
