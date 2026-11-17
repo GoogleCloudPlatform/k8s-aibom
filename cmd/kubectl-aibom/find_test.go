@@ -414,6 +414,41 @@ func TestFind_RuntimeWithoutDocumentWarns(t *testing.T) {
 	}
 }
 
+// summaryRuntimesList is status.summary.runtimes as the controller
+// writes it since #336, one map per runtime.
+func summaryRuntimesList(names ...string) []interface{} {
+	out := make([]interface{}, 0, len(names))
+	for _, n := range names {
+		out = append(out, map[string]interface{}{"name": n})
+	}
+	return out
+}
+
+// A summary that carries runtimes names every runtime, so a row whose
+// document cannot be read is matched on the full list: found when any
+// summary runtime matches, and a non-match is a real non-match that
+// needs no warning.
+func TestFind_RuntimeWithoutDocumentUsesSummaryRuntimes(t *testing.T) {
+	big := fixtureTruncated()
+	_ = unstructured.SetNestedField(big.Object, "litellm", "status", "summary", "runtime", "name")
+	_ = unstructured.SetNestedSlice(big.Object, summaryRuntimesList("litellm", "vllm"), "status", "summary", "runtimes")
+	items := []unstructured.Unstructured{*big}
+
+	out, errOut := runFindCapture(t, items, findFilter{runtime: "vllm"})
+	if !strings.Contains(out, "big") || errOut != "" {
+		t.Fatalf("--runtime vllm must match the second summary runtime:\n%s\nstderr: %q", out, errOut)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if got := strings.Fields(lines[1])[3]; got != "litellm,vllm" {
+		t.Errorf("RUNTIME = %q, want both summary runtimes", got)
+	}
+
+	out, errOut = runFindCapture(t, items, findFilter{runtime: "triton"})
+	if strings.TrimSpace(out) != "0 matches" || errOut != "" {
+		t.Fatalf("complete summary: want a silent 0 matches, got %q stderr %q", out, errOut)
+	}
+}
+
 // The names find reads are the ones the builder emits; the second entry
 // of each list is the pre-v1.7.0 spelling, kept so a newer plugin reads
 // documents written by an older controller.

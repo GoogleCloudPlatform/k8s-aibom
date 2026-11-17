@@ -410,7 +410,12 @@ spec:
                       type: object
                     type: array
                   runtime:
-                    description: Runtime is the detected inference runtime, if any.
+                    description: |-
+                      Runtime is deprecated in favour of Runtimes and is kept, as the
+                      first entry of Runtimes, for readers written before Runtimes
+                      existed. A workload that runs more than one runtime (vLLM with a
+                      LiteLLM proxy beside it, say) has only the first, in document
+                      order, here.
                     properties:
                       confidence:
                         description: |-
@@ -429,6 +434,32 @@ spec:
                     required:
                     - name
                     type: object
+                  runtimes:
+                    description: |-
+                      Runtimes lists every runtime attributed in the BOM document, in
+                      document order (sorted by component name), each distinct entry
+                      once. Runtime equals the first entry.
+                    items:
+                      description: RuntimeSummary describes a detected inference runtime.
+                      properties:
+                        confidence:
+                          description: |-
+                            Confidence is the per-attribute confidence. v1 emits "inferred"
+                            for image-pattern-derived runtimes; never "declared".
+                          type: string
+                        name:
+                          description: Name is the runtime identifier (e.g., "vllm",
+                            "triton", "tgi").
+                          type: string
+                        version:
+                          description: |-
+                            Version is the runtime version, populated only when the image tag
+                            is semver-shaped (see docs/scraper-heuristics.md). Empty otherwise.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
                   workload:
                     description: Workload identifies the workload the BOM describes.
                     properties:
@@ -844,7 +875,12 @@ spec:
                       type: object
                     type: array
                   runtime:
-                    description: Runtime is the detected inference runtime, if any.
+                    description: |-
+                      Runtime is deprecated in favour of Runtimes and is kept, as the
+                      first entry of Runtimes, for readers written before Runtimes
+                      existed. A workload that runs more than one runtime (vLLM with a
+                      LiteLLM proxy beside it, say) has only the first, in document
+                      order, here.
                     properties:
                       confidence:
                         description: |-
@@ -863,6 +899,32 @@ spec:
                     required:
                     - name
                     type: object
+                  runtimes:
+                    description: |-
+                      Runtimes lists every runtime attributed in the BOM document, in
+                      document order (sorted by component name), each distinct entry
+                      once. Runtime equals the first entry.
+                    items:
+                      description: RuntimeSummary describes a detected inference runtime.
+                      properties:
+                        confidence:
+                          description: |-
+                            Confidence is the per-attribute confidence. v1 emits "inferred"
+                            for image-pattern-derived runtimes; never "declared".
+                          type: string
+                        name:
+                          description: Name is the runtime identifier (e.g., "vllm",
+                            "triton", "tgi").
+                          type: string
+                        version:
+                          description: |-
+                            Version is the runtime version, populated only when the image tag
+                            is semver-shaped (see docs/scraper-heuristics.md). Empty otherwise.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
                   workload:
                     description: Workload identifies the workload the BOM describes.
                     properties:
