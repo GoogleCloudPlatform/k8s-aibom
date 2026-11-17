@@ -180,6 +180,41 @@ func TestNIMServiceScraper_DeclaredArgs(t *testing.T) {
 	}
 }
 
+// The operator hands spec.env and spec.args to the NIM container, so a
+// $(VAR_NAME) reference in spec.args names the spec.env value. One the
+// spec does not state is not a declared model, and the image path still
+// names the model.
+func TestNIMServiceScraper_ArgVariableReferences(t *testing.T) {
+	u := nimService("ns", "args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		map[string]interface{}{"name": "SERVED_MODEL", "value": "org/served-model"},
+	}, "spec", "env")
+	_ = unstructured.SetNestedStringSlice(u.Object, []string{"--model", "$(SERVED_MODEL)"}, "spec", "args")
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "org/served-model" || models[0].Confidence != ConfidenceDeclared ||
+		models[0].Evidence.Locator != "spec.args[0 1](--model)" {
+		t.Fatalf("models = %+v, want org/served-model declared from spec.args[0 1]", models)
+	}
+	if got := models[0].Properties["identity.envVarName"]; got != "SERVED_MODEL" {
+		t.Errorf("identity.envVarName = %q, want SERVED_MODEL", got)
+	}
+
+	u = nimService("ns", "args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedStringSlice(u.Object, []string{"--model=$(SERVED_MODEL)"}, "spec", "args")
+	got, err = newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models = componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "meta/llama-3.1-8b-instruct" || models[0].Confidence != ConfidenceInferred {
+		t.Fatalf("models = %+v, want only the image-path model", models)
+	}
+}
+
 // A NIMService pointing at a non-NIM registry (mirror, custom build):
 // the kind still declares the runtime, but no model is invented.
 func TestNIMServiceScraper_NonNIMRegistry_NoModel(t *testing.T) {
