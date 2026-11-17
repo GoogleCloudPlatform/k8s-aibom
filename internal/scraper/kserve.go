@@ -66,8 +66,7 @@ type KServeInferenceServiceScraper struct {
 }
 
 // NewKServeInferenceServiceScraper constructs a scraper. Pass nil
-// verifier for NoopVerifier (the v1 default; see
-// docs/schema-divergences.md D-001).
+// verifier for NoopVerifier.
 func NewKServeInferenceServiceScraper(verifier SignatureVerifier) *KServeInferenceServiceScraper {
 	if verifier == nil {
 		verifier = NoopVerifier{}

@@ -303,6 +303,17 @@ API schema do not change.
   there, so the config is rejected with `ConfigInvalid` instead.
   `AIBOM_DISABLE_SSRF_CHECKS=true` still turns the check off.
 
+- **Two code comments no longer cite the retired D-001 rule.** #377
+  retired schema-divergences entry D-001 ("v1 never emits `verified`")
+  in the CRD descriptions and docs, but the comment on
+  `ModelSummary.Signed` in `internal/controller/summary.go` still said
+  the value was a NoopVerifier-derived
+  `k8s-aibom:identity:confidence=claimed`, a property the builder never
+  writes, and `NewKServeInferenceServiceScraper` still pointed at D-001
+  for its nil-verifier default. The summary comment now names the
+  `k8s-aibom:security:signing:status` property it reads and when it is
+  `verified`. Comments only; no behaviour change.
+
 - **No spurious `WatchUnhealthy` at startup on API servers without the
   WatchList feature gate.** client-go v0.36 enables `WatchListClient` by
   default and opens the first watch of an informer with
