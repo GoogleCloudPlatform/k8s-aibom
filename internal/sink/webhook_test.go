@@ -84,6 +84,39 @@ func TestWebhookSinkConfig_Validate(t *testing.T) {
 	}
 }
 
+// TestWebhookSinkConfig_Validate_RejectsLocalEndpoints covers the
+// config-load half of the SSRF guard, which TestMain turns off for the
+// rest of this file. url.URL.Hostname drops the brackets around an
+// IPv6 literal, so the IPv6 forms must be matched by address, not as
+// "[::1]".
+func TestWebhookSinkConfig_Validate_RejectsLocalEndpoints(t *testing.T) {
+	t.Setenv("AIBOM_DISABLE_SSRF_CHECKS", "")
+	cases := []struct {
+		endpoint string
+		wantErr  bool
+	}{
+		{"https://localhost/sink", true},
+		{"https://127.0.0.1:8443/sink", true},
+		{"https://0.0.0.0/sink", true},
+		{"https://169.254.169.254/sink", true},
+		{"https://[::1]:8443/sink", true},
+		{"https://[::]/sink", true},
+		{"https://[fe80::1]/sink", true},
+		{"https://[::ffff:127.0.0.1]/sink", true},
+		{"https://example.com/sink", false},
+		{"https://[2001:db8::1]/sink", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.endpoint, func(t *testing.T) {
+			cfg := WebhookSinkConfig{Endpoint: tc.endpoint}
+			err := cfg.Validate()
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Validate() err=%v, wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestWebhookSink_HappyPath_SetsAllProtocolHeaders(t *testing.T) {
 	// Captures the request the sink makes and asserts every documented
 	// header is present with the expected value.

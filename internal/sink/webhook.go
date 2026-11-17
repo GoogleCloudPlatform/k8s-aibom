@@ -98,7 +98,12 @@ func (c *WebhookSinkConfig) Validate() error {
 	disableSSRFChecks := os.Getenv("AIBOM_DISABLE_SSRF_CHECKS") == "true"
 	if !disableSSRFChecks {
 		h := strings.ToLower(u.Hostname())
-		if h == "localhost" || strings.HasPrefix(h, "127.") || h == "[::1]" || h == "0.0.0.0" || strings.HasPrefix(h, "169.254.") {
+		// Hostname drops the brackets around an IPv6 literal, so the
+		// IPv6 loopback, unspecified and link-local forms ("::1",
+		// "::", "fe80::1", "::ffff:127.0.0.1") are matched by address.
+		ip := net.ParseIP(h)
+		if h == "localhost" || strings.HasPrefix(h, "127.") || h == "0.0.0.0" || strings.HasPrefix(h, "169.254.") ||
+			(ip != nil && (ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast())) {
 			return errors.New("webhook sink: endpoint URL points to loopback/private interface")
 		}
 	}
