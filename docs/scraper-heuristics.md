@@ -223,7 +223,11 @@ the way the kubelet expands them, so `--model=$(MODEL_ID)` with
 `MODEL_ID: google/gemma-2-2b` in `env` records `google/gemma-2-2b`. A
 reference whose value the spec does not state (a `valueFrom` variable,
 one only `envFrom` or a Service link could define, or an undefined one)
-emits nothing, rather than the reference text as a model.
+emits nothing, rather than the reference text as a model. When a
+reference was expanded, the component also carries
+`identity.envVarName` with the referenced name (several names
+comma-separated, in order of first appearance), so the evidence leads
+from the arg locator to the variable.
 
 Confidence: `declared`. The workload owner explicitly invoked the runtime
 with this model identity.

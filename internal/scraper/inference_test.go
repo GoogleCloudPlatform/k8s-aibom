@@ -274,6 +274,7 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 		env         []corev1.EnvVar
 		wantModel   string // "" = no model component
 		wantLocator string
+		wantEnvVar  string // identity.envVarName; "" = not set
 	}{
 		{
 			name:        "GKE sample, joined form",
@@ -281,6 +282,7 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b"), fromSecret("HUGGING_FACE_HUB_TOKEN")},
 			wantModel:   "google/gemma-2-2b",
 			wantLocator: locator + "[0](--model=)",
+			wantEnvVar:  "MODEL_ID",
 		},
 		{
 			name:        "positional form",
@@ -288,6 +290,7 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2b-it")},
 			wantModel:   "google/gemma-2b-it",
 			wantLocator: locator + "[0 1](--model-id)",
+			wantEnvVar:  "MODEL_ID",
 		},
 		{
 			name:        "reference inside a path",
@@ -295,6 +298,15 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 			env:         []corev1.EnvVar{lit("MODEL_DIR", "gemma-2-2b")},
 			wantModel:   "/models/gemma-2-2b",
 			wantLocator: locator + "[0](--model=)",
+			wantEnvVar:  "MODEL_DIR",
+		},
+		{
+			name:        "several references in one arg",
+			args:        []string{"--model=$(ORG)/$(NAME)-$(ORG)"},
+			env:         []corev1.EnvVar{lit("ORG", "google"), lit("NAME", "gemma-2-2b")},
+			wantModel:   "google/gemma-2-2b-google",
+			wantLocator: locator + "[0](--model=)",
+			wantEnvVar:  "ORG,NAME",
 		},
 		{
 			name:        "env value refers to an earlier env var",
@@ -302,6 +314,7 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 			env:         []corev1.EnvVar{lit("ORG", "google"), lit("MODEL_ID", "$(ORG)/gemma-2-2b")},
 			wantModel:   "google/gemma-2-2b",
 			wantLocator: locator + "[0](--model=)",
+			wantEnvVar:  "MODEL_ID",
 		},
 		{
 			name:        "escaped reference is passed as written",
@@ -371,6 +384,86 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 				t.Errorf("model = %s %s {%s %s}, want %s declared {%s %s}",
 					m.Name, m.Confidence, m.Evidence.Source, m.Evidence.Locator,
 					tc.wantModel, SourceContainerArg, tc.wantLocator)
+			}
+			if got := m.Properties["identity.envVarName"]; got != tc.wantEnvVar {
+				t.Errorf("identity.envVarName = %q, want %q", got, tc.wantEnvVar)
+			}
+		})
+	}
+}
+
+func TestExpandVarRefs(t *testing.T) {
+	vars := map[string]string{"A": "x", "EMPTY": ""}
+	lookup := func(name string) (string, bool) {
+		v, found := vars[name]
+		return v, found
+	}
+	cases := []struct {
+		in, want string
+		wantOK   bool
+	}{
+		{"no reference", "no reference", true},
+		{"$(A)", "x", true},
+		{"pre-$(A)-post", "pre-x-post", true},
+		{"$(A)$(EMPTY)$(A)", "xx", true},
+		{"$(A", "$(A", true},            // unterminated
+		{"$(A $(A)", "$(A $(A)", false}, // the name runs to the first ")"
+		{"a$b", "a$b", true},            // lone $
+		{"abc$", "abc$", true},          // trailing $
+		{"$", "$", true},                // only $
+		{"$()", "$()", false},           // empty name is never defined
+		{"$$", "$", true},               // escape
+		{"$$(A)", "$(A)", true},         // escaped reference
+		{"$$$(A)", "$x", true},          // escape, then reference
+		{"$(MISSING)", "$(MISSING)", false},
+		{"$(A)-$(MISSING)", "x-$(MISSING)", false},
+	}
+	for _, tc := range cases {
+		got, ok := expandVarRefs(tc.in, lookup)
+		if got != tc.want || ok != tc.wantOK {
+			t.Errorf("expandVarRefs(%q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.wantOK)
+		}
+	}
+}
+
+func TestSpecEnvValues(t *testing.T) {
+	lit := func(name, value string) corev1.EnvVar { return corev1.EnvVar{Name: name, Value: value} }
+	from := func(name string) corev1.EnvVar {
+		return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+		}}
+	}
+	cases := []struct {
+		name string
+		env  []corev1.EnvVar
+		want map[string]string
+	}{
+		{"no env", nil, map[string]string{}},
+		{"later literal overrides an earlier one",
+			[]corev1.EnvVar{lit("A", "1"), lit("A", "2")}, map[string]string{"A": "2"}},
+		{"later literal overrides an earlier valueFrom",
+			[]corev1.EnvVar{from("A"), lit("A", "2")}, map[string]string{"A": "2"}},
+		{"later valueFrom drops an earlier literal",
+			[]corev1.EnvVar{lit("A", "1"), from("A")}, map[string]string{}},
+		{"reference to an earlier entry",
+			[]corev1.EnvVar{lit("B", "1"), lit("A", "$(B)/x")}, map[string]string{"A": "1/x", "B": "1"}},
+		{"reference to a later entry is not resolved",
+			[]corev1.EnvVar{lit("A", "$(B)"), lit("B", "1")}, map[string]string{"B": "1"}},
+		{"reference to the earlier value of the same name",
+			[]corev1.EnvVar{lit("A", "1"), lit("A", "$(A)2")}, map[string]string{"A": "12"}},
+		{"reference to a valueFrom entry is not resolved",
+			[]corev1.EnvVar{from("B"), lit("A", "$(B)")}, map[string]string{}},
+		{"escaped reference",
+			[]corev1.EnvVar{lit("B", "1"), lit("A", "$$(B)")}, map[string]string{"A": "$(B)", "B": "1"}},
+		{"unterminated, lone and trailing $",
+			[]corev1.EnvVar{lit("A", "$(B"), lit("C", "a$b$")}, map[string]string{"A": "$(B", "C": "a$b$"}},
+		{"empty reference",
+			[]corev1.EnvVar{lit("A", "$()")}, map[string]string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := specEnvValues(tc.env); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("specEnvValues = %v, want %v", got, tc.want)
 			}
 		})
 	}

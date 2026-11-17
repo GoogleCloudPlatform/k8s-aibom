@@ -199,6 +199,9 @@ func TestNIMServiceScraper_ArgVariableReferences(t *testing.T) {
 		models[0].Evidence.Locator != "spec.args[0 1](--model)" {
 		t.Fatalf("models = %+v, want org/served-model declared from spec.args[0 1]", models)
 	}
+	if got := models[0].Properties["identity.envVarName"]; got != "SERVED_MODEL" {
+		t.Errorf("identity.envVarName = %q, want SERVED_MODEL", got)
+	}
 
 	u = nimService("ns", "args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
 	_ = unstructured.SetNestedStringSlice(u.Object, []string{"--model=$(SERVED_MODEL)"}, "spec", "args")
