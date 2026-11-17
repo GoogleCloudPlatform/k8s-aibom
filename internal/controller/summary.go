@@ -90,10 +90,11 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 				Identity:   c.Name,
 				Source:     readProperty(c, bom.PropEvidenceSource),
 				Confidence: confidence,
-				// Signed: populated by Phase 8+ signature plumbing.
-				// v1 NoopVerifier-derived value is encoded in the BOM's
-				// component properties as "k8s-aibom:identity:confidence=claimed";
-				// see docs/schema-divergences.md D-001.
+				// Signed: the component's k8s-aibom:security:signing:status
+				// property. "claimed" for a signature reference, or
+				// "verified" when spec.verification is enabled and the
+				// signature verifies (Design 002); empty when the
+				// workload declares no signature reference.
 				Signed: readProperty(c, bom.PropSigningStatus),
 			})
 		}
