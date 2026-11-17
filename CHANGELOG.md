@@ -291,6 +291,18 @@ API schema do not change.
 
 ### Fixed
 
+- **A webhook endpoint on an IPv6 loopback or link-local address is
+  rejected at config load.** The SSRF check in the webhook sink's
+  config validation compared the endpoint host with `[::1]`, but the
+  host it reads has no brackets (`::1`), so `https://[::1]:8443/` passed,
+  as did `[::]`, `[fe80::1]` and `[::ffff:127.0.0.1]`. The sink was
+  built and reported ready, and every emission then failed at dial time,
+  where the private-IP guard does block these addresses. IPv6 literals
+  are now matched by address (loopback, unspecified, link-local), the
+  IPv6 forms of the `127.*`, `0.0.0.0` and `169.254.*` checks already
+  there, so the config is rejected with `ConfigInvalid` instead.
+  `AIBOM_DISABLE_SSRF_CHECKS=true` still turns the check off.
+
 - **No spurious `WatchUnhealthy` at startup on API servers without the
   WatchList feature gate.** client-go v0.36 enables `WatchListClient` by
   default and opens the first watch of an informer with
