@@ -166,6 +166,48 @@ The image digest is printed in the release notes. Admission policies can verify 
 - **Amazon EKS, Azure AKS, OpenShift, on-prem** — identical install; cloud-specific notes in [Installing on EKS, AKS, and other conformant clusters](docs/install-eks-aks.md).
 - **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
 
+### Verify it works in sixty seconds
+
+Label a namespace, deploy a single-container `llama.cpp` Deployment (matching the [Dependency-Track walkthrough](docs/integrations/dependency-track.md#walkthrough) spec), and inspect the emitted AI-BOM:
+
+```bash
+kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace demo aibom.k8saibom.dev/enabled=true
+
+kubectl apply -n demo -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chat
+  template:
+    metadata:
+      labels:
+        app: chat
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/ggml-org/llama.cpp:server
+          env:
+            - name: HF_MODEL_ID
+              value: ggml-org/gemma-3-1b-it-GGUF
+EOF
+
+kubectl aibom summary -n demo
+kubectl aibom view apps-deployment-chat -n demo
+```
+
+Within ~1 minute (and once the pod pulls its image), the generated CycloneDX 1.6 document records:
+- **Runtime:** `llama.cpp` (`inferred` from the container image)
+- **Model:** `ggml-org/gemma-3-1b-it-GGUF` (`inferred` from `HF_MODEL_ID`)
+- **Container:** `ghcr.io/ggml-org/llama.cpp:server` with its SHA-256 digest (`declared` from `pod_status`) and `pkg:oci` purl (`pkg:oci/llama.cpp@sha256:...`)
+
+See [docs/integrations/fixtures/llama-cpp-chat.cdx.json](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the full expected document shape.
+
 ### Opt in a namespace
 
 The controller is installed cluster-wide but inactive until you opt in at least one namespace:
