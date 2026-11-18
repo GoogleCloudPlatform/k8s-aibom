@@ -1,0 +1,32 @@
+{{- /*
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+k8s-aibom is installed in the {{ .Release.Namespace }} namespace.
+
+By default nothing is inventoried until a namespace opts in with a label:
+
+  kubectl label namespace <namespace> aibom.k8saibom.dev/enabled=true
+
+See the results:
+
+  kubectl get aibom -A
+  kubectl aibom summary -A   # kubectl plugin: kubectl krew install aibom
+
+Sinks and discovery settings (including a namespaceSelector, which replaces
+the label) are set through this chart's config.* values and end up on the
+AIBOMControllerConfig named "default". Sinks that read credentials from a
+Secret also need --set rbac.sinkSecretAccess=true (off by default).
+
+Docs: https://github.com/GoogleCloudPlatform/k8s-aibom#readme
