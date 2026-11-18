@@ -18,12 +18,11 @@ k8s-aibom installed in namespace {{ .Release.Namespace }}.
 Nothing is inventoried until a namespace opts in:
   kubectl label namespace <namespace> aibom.k8saibom.dev/enabled=true
 
-View recorded AI-BOMs:
+View recorded AIBOMs:
   kubectl get aibom -A
   kubectl aibom summary -A
 
-Configure sinks and discovery on AIBOMControllerConfig "default":
-  kubectl get aibomcontrollerconfig default -o yaml
+Configure sinks and discovery via the chart's config.* values (rendered into AIBOMControllerConfig "default").
 Note: rbac.sinkSecretAccess is off (false) by default; enable it only if a sink reads Secrets in {{ .Release.Namespace }}.
 
 Docs: https://github.com/GoogleCloudPlatform/k8s-aibom#readme
