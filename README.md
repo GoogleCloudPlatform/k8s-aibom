@@ -168,7 +168,7 @@ The image digest is printed in the release notes. Admission policies can verify 
 
 ### Verify it works in sixty seconds
 
-Label a namespace, deploy a single-container `llama.cpp` Deployment (matching the [Dependency-Track walkthrough](docs/integrations/dependency-track.md#walkthrough) spec), and inspect the emitted AI-BOM:
+With the controller and kubectl plugin installed, create an opted-in namespace and deploy the [walkthrough's](docs/integrations/dependency-track.md#walkthrough) `chat` workload:
 
 ```bash
 kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
@@ -177,36 +177,23 @@ kubectl label namespace demo aibom.k8saibom.dev/enabled=true
 kubectl apply -n demo -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: chat
+metadata: {name: chat}
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: chat
+  selector: {matchLabels: {app: chat}}
   template:
-    metadata:
-      labels:
-        app: chat
+    metadata: {labels: {app: chat}}
     spec:
       containers:
         - name: server
           image: ghcr.io/ggml-org/llama.cpp:server
-          env:
-            - name: HF_MODEL_ID
-              value: ggml-org/gemma-3-1b-it-GGUF
+          env: [{name: HF_MODEL_ID, value: ggml-org/gemma-3-1b-it-GGUF}]
 EOF
-
 kubectl aibom summary -n demo
 kubectl aibom view apps-deployment-chat -n demo
 ```
 
-Within ~1 minute (and once the pod pulls its image), the generated CycloneDX 1.6 document records:
-- **Runtime:** `llama.cpp` (`inferred` from the container image)
-- **Model:** `ggml-org/gemma-3-1b-it-GGUF` (`inferred` from `HF_MODEL_ID`)
-- **Container:** `ghcr.io/ggml-org/llama.cpp:server` with its SHA-256 digest (`declared` from `pod_status`) and `pkg:oci` purl (`pkg:oci/llama.cpp@sha256:...`)
-
-See [docs/integrations/fixtures/llama-cpp-chat.cdx.json](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the full expected document shape.
+Allow time for reconciliation and the image pull, then retry the view if needed. The CycloneDX 1.6 document contains the inferred `llama.cpp` runtime and `HF_MODEL_ID` model, the declared container digest and `pkg:oci` purl from pod status, and a `serialNumber` (v1.7.0+). See the [fixture](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the expected shape; namespace, digest, and serial number reflect your workload.
 
 ### Opt in a namespace
 
