@@ -35,9 +35,8 @@ import (
 // TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive locks
 // both halves of the input-hash dedup property:
 //
-//  1. Cosmetic spec change (an annotation the scraper doesn't extract)
-//     produces a fast-path reconcile: ObservedGeneration advances,
-//     LastReconciled is bumped, sink is NOT re-invoked, BOMHash and
+//  1. Changing minReadySeconds advances ObservedGeneration through a
+//     fast-path reconcile. The sink is NOT re-invoked, BOMHash and
 //     InputHash are unchanged, and the Ready condition's
 //     LastTransitionTime is NOT touched.
 //
@@ -61,7 +60,8 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	nsName := "dedup-test"
 	depName := "vllm-dedup"
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, nsName)
-	mustCreate(t, env.k8sClient, ctx, vllmDeployment(nsName, depName))
+	dep := vllmDeployment(nsName, depName)
+	mustCreate(t, env.k8sClient, ctx, dep)
 
 	aibomKey := types.NamespacedName{
 		Name:      "apps-deployment-" + depName,
@@ -91,48 +91,11 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	if first.Status.LastReconciled == nil {
 		t.Fatal("Phase A: LastReconciled is nil")
 	}
-	initialLastReconciled := first.Status.LastReconciled.Time
 	initialReadyTransition := mustFindCondition(t, first.Status.Conditions, aibomv1beta1.ConditionReady).LastTransitionTime
 
 	// ---------- Phase B: cosmetic change → dedup fast path ----------
-	// Annotation key is intentionally NOT under model.k8saibom.dev/ so the
-	// scraper doesn't pick it up as a model claim. BOMInputs is
-	// therefore unchanged → input hash matches → dedup hits.
-	//
-	// metav1.Time wire-serializes at second precision. Two reconciles
-	// within the same second produce identical Status.LastReconciled
-	// values even though in-memory times differ; sleep past the
-	// second boundary so the "LastReconciled advanced" assertion is
-	// observable. Not a controller behavior — a test-side
-	// accommodation for K8s's standard time type.
-	time.Sleep(1100 * time.Millisecond)
-
-	mustUpdateDeploymentWithAnnotation(t, env.k8sClient, ctx, depName, nsName,
-		"k8s-aibom.test/cosmetic", "1")
-
-	// Wait directly for the dedup reconcile to fire by polling on
-	// LastReconciled advancement. K8s does NOT bump metadata.generation
-	// for metadata.annotations updates, so polling on ObservedGeneration
-	// (a previous version of this test) was racy — the loop could exit
-	// against the Phase A Status before the dedup reconcile had fired,
-	// then the subsequent LastReconciled-advanced assertion happened to
-	// pass only because of fortunate scheduling. The LastReconciled
-	// signal is the deterministic one: the dedup reconcile's
-	// Status().Update is exactly what advances it.
-	var afterCosmetic aibomv1beta1.AIBOM
-	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
-		if err := env.k8sClient.Get(ctx, aibomKey, &afterCosmetic); err != nil {
-			return err
-		}
-		if afterCosmetic.Status.LastReconciled == nil {
-			return errors.New("LastReconciled nil after cosmetic change")
-		}
-		if !afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
-			return fmt.Errorf("LastReconciled (%v) not yet after initial (%v); waiting for dedup reconcile",
-				afterCosmetic.Status.LastReconciled.Time, initialLastReconciled)
-		}
-		return nil
-	})
+	afterCosmetic := patchAndWaitForObservedGeneration(t, env.k8sClient, ctx, dep,
+		`{"spec":{"minReadySeconds":1}}`, aibomKey)
 
 	// Phase B assertions:
 	if got := rs.emitCount(); got != 1 {
@@ -145,11 +108,6 @@ func TestIntegration_FastReconcile_DedupsCosmeticThenReemitsSubstantive(t *testi
 	if afterCosmetic.Status.BOMHash != initialBOMHash {
 		t.Errorf("Phase B: BOMHash changed on cosmetic change: %q -> %q",
 			initialBOMHash, afterCosmetic.Status.BOMHash)
-	}
-	if afterCosmetic.Status.LastReconciled == nil ||
-		!afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
-		t.Errorf("Phase B: LastReconciled did not advance: %v -> %v",
-			initialLastReconciled, afterCosmetic.Status.LastReconciled)
 	}
 	ready2 := mustFindCondition(t, afterCosmetic.Status.Conditions, aibomv1beta1.ConditionReady)
 	if !ready2.LastTransitionTime.Time.Equal(initialReadyTransition.Time) {
@@ -202,19 +160,30 @@ func mustFindCondition(t *testing.T, conds []metav1.Condition, condType string) 
 	return metav1.Condition{}
 }
 
-func mustUpdateDeploymentWithAnnotation(t *testing.T, c client.Client, ctx context.Context, name, namespace, annKey, annVal string) {
+// Patch an untracked spec field so the API server increments generation
+// without changing the BOM inputs. Waiting for that generation distinguishes
+// a completed fast-path reconcile from a stale read of the initial status.
+func patchAndWaitForObservedGeneration(t *testing.T, c client.Client, ctx context.Context, workload client.Object, specPatch string, key types.NamespacedName) aibomv1beta1.AIBOM {
 	t.Helper()
-	var dep appsv1.Deployment
-	if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &dep); err != nil {
-		t.Fatalf("get deployment for cosmetic update: %v", err)
+	previous := workload.GetGeneration()
+	if err := c.Patch(ctx, workload, client.RawPatch(types.MergePatchType, []byte(specPatch))); err != nil {
+		t.Fatalf("patch workload: %v", err)
 	}
-	if dep.Annotations == nil {
-		dep.Annotations = map[string]string{}
+	want := workload.GetGeneration()
+	if want <= previous {
+		t.Fatalf("workload generation after patch = %d, want greater than %d", want, previous)
 	}
-	dep.Annotations[annKey] = annVal
-	if err := c.Update(ctx, &dep); err != nil {
-		t.Fatalf("update deployment with cosmetic annotation: %v", err)
-	}
+	var aibom aibomv1beta1.AIBOM
+	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
+		if err := c.Get(ctx, key, &aibom); err != nil {
+			return err
+		}
+		if aibom.Status.ObservedGeneration != want {
+			return fmt.Errorf("observed generation = %d, want %d", aibom.Status.ObservedGeneration, want)
+		}
+		return nil
+	})
+	return aibom
 }
 
 func mustUpdateDeploymentImage(t *testing.T, c client.Client, ctx context.Context, name, namespace, newImage string) {

@@ -23,6 +23,12 @@ All notable changes to k8s-aibom are documented here. The format follows
   no digest. The release dry-run exercises the script's paths against a
   stub. No change to published artefacts.
 
+- **Repeated pod events on an unchanged workload refresh AIBOM status at
+  most once every five minutes** (#409). In a fake-client test with one
+  vLLM Deployment reconciled every 30 seconds for eight simulated minutes,
+  status writes fell from 17 to 2, including the initial write. Inventory,
+  generation and extraction-error updates are still written immediately.
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)

@@ -192,7 +192,7 @@ type WorkloadReconcileRequest struct {
 //  2. Scrape via the configured scraper.Scraper.
 //  3. Skip if BOMInputs.Confidence is Unresolved (no inference signal).
 //  4. Compute input hash; consult existing AIBOM CR for dedup.
-//     - Match -> fast path: BuildFastPathStatus + Status().Update.
+//     - Match -> fast path: update status changes or refresh an overdue timestamp.
 //     - Bootstrap race (AIBOM exists, Status.LastReconciled nil) -> defer.
 //  5. Build the BOM.
 //  6. Fan out to external sinks in parallel (see emitToExternalSinks).
@@ -302,8 +302,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 
 	// Compute the input hash and consult any existing AIBOM CR to see
 	// whether this reconcile would produce content-identical output.
-	// If so, take the fast path: touch LastReconciled + ObservedGeneration
-	// only, skipping BOM build and external sink emission entirely.
+	// If so, take the fast path, skipping the BOM build and external sink emission.
 	if string(inputs.Category) != "" {
 		req.SummaryOptions.WorkloadCategory = string(inputs.Category)
 		req.BOMBuildOptions.WorkloadCategory = string(inputs.Category)
@@ -353,8 +352,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("hash inputs: %w", err)
 	}
 	if existingErr == nil {
-		// Dedup fast path: input hash matches the previously-emitted BOM's
-		// hash. Touch LastReconciled + ObservedGeneration only.
+		// Dedup fast path: input hash matches the previously-emitted BOM's hash.
 		if existing.Status.InputHash != "" && existing.Status.InputHash == inputHash {
 			logger.V(1).Info("BOM inputs unchanged since last reconcile, skipping emit",
 				"workload_namespace", req.Workload.Namespace,
@@ -364,9 +362,13 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			// The document is unchanged, so it carries exactly these facts.
 			r.Pools.remember(&existing, pools)
 			r.countExtractionErrors(inputs.Errors)
-			prevErrors := existing.Status.ConsecutiveErrors
-			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
-			recordExtractionErrors(&existing.Status, prevErrors, inputs.Errors, snap.StaleThresholdReconciles)
+			next := r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
+			recordExtractionErrors(&next, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
+			// Bootstrap detection below needs a non-nil lastReconciled, regardless of its age.
+			if skipFastPathStatusTouch(&existing.Status, &next) {
+				return ctrl.Result{}, nil
+			}
+			existing.Status = next
 			if err := r.Status().Update(ctx, &existing); err != nil {
 				if apierrors.IsConflict(err) {
 					return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
