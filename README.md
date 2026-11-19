@@ -187,13 +187,14 @@ spec:
       containers:
         - name: server
           image: ghcr.io/ggml-org/llama.cpp:server
+          command: ["sleep", "infinity"]
           env: [{name: HF_MODEL_ID, value: ggml-org/gemma-3-1b-it-GGUF}]
 EOF
 kubectl aibom summary -n demo
 kubectl aibom view apps-deployment-chat -n demo
 ```
 
-Allow time for reconciliation and the image pull, then retry the view if needed. The CycloneDX 1.6 document contains the inferred `llama.cpp` runtime and `HF_MODEL_ID` model, the declared container digest and `pkg:oci` purl from pod status, and a `serialNumber` (v1.7.0+). See the [fixture](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the expected shape; namespace, digest, and serial number reflect your workload.
+The container stays idle; no model is downloaded. Allow time for reconciliation and the image pull, then retry the view if needed. The CycloneDX 1.6 document contains the inferred `llama.cpp` runtime and `HF_MODEL_ID` model, the declared container digest and `pkg:oci` purl from pod status, and a `serialNumber` (v1.7.0+). See the [fixture](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the expected shape; namespace, digest, and serial number reflect your workload. Use `kubectl aibom view apps-deployment-chat -n demo --raw` for the canonical bytes when comparing with the fixture.
 
 ### Opt in a namespace
 
