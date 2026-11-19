@@ -95,7 +95,8 @@ func buildSummary(doc *bom.Document, opts SummaryOptions) *aibomv1beta1.AIBOMSum
 				// "verified" when spec.verification is enabled and the
 				// signature verifies (Design 002); empty when the
 				// workload declares no signature reference.
-				Signed: readProperty(c, bom.PropSigningStatus),
+				Signed:     readProperty(c, bom.PropSigningStatus),
+				ServedName: readProperty(c, bom.PropIdentityServedModelName),
 			})
 		}
 	}

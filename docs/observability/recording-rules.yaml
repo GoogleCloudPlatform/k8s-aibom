@@ -1,0 +1,41 @@
+# Proof-of-concept recording rules: resource usage attributed to model identity.
+# The only new input is aibom_pod_info (from the AIBOM resource); everything
+# else is cAdvisor / kube-state / DCGM metrics that clusters already have.
+groups:
+- name: aibom-attribution
+  interval: 30s
+  rules:
+  # CPU cores per model (sum over every pod serving that model)
+  - record: aibom:model_cpu_cores:rate2m
+    expr: |
+      sum by (model, runtime) (
+        rate(container_cpu_usage_seconds_total{container!="",pod!=""}[2m])
+        * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+      )
+  # Working-set memory per model
+  - record: aibom:model_memory_working_set_bytes
+    expr: |
+      sum by (model, runtime) (
+        container_memory_working_set_bytes{container!="",pod!=""}
+        * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+      )
+  # GPU utilisation per model (DCGM exporter; GPU phase of the PoC)
+  - record: aibom:model_gpu_util:avg
+    expr: |
+      avg by (model, runtime) (
+        DCGM_FI_DEV_GPU_UTIL
+        * on (namespace, pod) group_left (model, runtime)
+          label_replace(aibom_pod_info, "exported_pod", "$1", "pod", "(.*)")
+      )
+  # GPUs allocated per model (one DCGM series per GPU per pod)
+  - record: aibom:model_gpus_allocated
+    expr: |
+      count by (model, runtime) (
+        DCGM_FI_DEV_GPU_UTIL
+        * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+      )
+  # Workloads and pods per model
+  - record: aibom:model_workloads
+    expr: count by (model) (aibom_workload_info)
+  - record: aibom:model_pods
+    expr: count by (model) (aibom_pod_info)

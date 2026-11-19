@@ -561,6 +561,55 @@ func argModels(args []string, env []corev1.EnvVar, containerName, locatorBase st
 	return out
 }
 
+// servedModelNameFlag is vLLM's alias flag: the name its metrics and
+// OpenAI-compatible API publish the model under, when set.
+const servedModelNameFlag = "--served-model-name"
+
+// servedModelName returns the first value of --served-model-name in args
+// (vLLM accepts several; the first is the one its metrics carry), after
+// $(VAR) expansion against env, or "" when the flag is absent, empty,
+// or references a variable the spec does not state.
+func servedModelName(args []string, env []corev1.EnvVar) string {
+	expanded := expandArgs(args, env)
+	xs, unresolved := expanded.args, expanded.unresolved
+	for i := 0; i < len(xs); i++ {
+		arg := xs[i]
+		if strings.HasPrefix(arg, servedModelNameFlag+"=") {
+			v := strings.TrimPrefix(arg, servedModelNameFlag+"=")
+			if v == "" || unresolved[i] {
+				return ""
+			}
+			return TruncateString(strings.Fields(v)[0], MaxComponentNameLength)
+		}
+		if arg == servedModelNameFlag && i+1 < len(xs) {
+			v := xs[i+1]
+			if v == "" || strings.HasPrefix(v, "--") || unresolved[i+1] {
+				return ""
+			}
+			return TruncateString(v, MaxComponentNameLength)
+		}
+	}
+	return ""
+}
+
+// applyServedModelName records the alias on every ML-model component in
+// comps. A no-op when name is empty, so documents without the flag are
+// byte-identical to before.
+func applyServedModelName(comps []Component, name string) {
+	if name == "" {
+		return
+	}
+	for i := range comps {
+		if comps[i].Type != ComponentMLModel {
+			continue
+		}
+		if comps[i].Properties == nil {
+			comps[i].Properties = map[string]string{}
+		}
+		comps[i].Properties["identity.servedModelName"] = name
+	}
+}
+
 // extractVolumeMountModelsAt emits data-class Components for volume mounts
 // whose paths match the configured model-volume-path allowlist. The
 // Component identifies the underlying volume source (PVC name, configMap

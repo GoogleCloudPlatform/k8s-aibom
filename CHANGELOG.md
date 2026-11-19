@@ -108,6 +108,23 @@ API schema do not change.
 
 ### Added
 
+- **Model identity as a metrics dimension** (#411, Design 011). Two info
+  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
+  per workload per model: namespace, kind, name, category, runtime and
+  version, model, model confidence, served model) and `aibom_pod_info`
+  (one per owned pod per model), always `1`, refreshed on every
+  reconcile including the unchanged-input fast path, and removed when
+  the AIBOM is deleted, including by owner garbage collection. They let
+  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
+  read per model with one PromQL join. The inference scraper records
+  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
+  on the container's model components and as `servedName` on the status
+  summary (additive, both served API versions), so the identity exposed
+  equals the `model_name` on vLLM's own metrics. Reference recording
+  rules and a Grafana dashboard ship under `docs/observability/` and as
+  chart toggles `metrics.rules.enabled` and `metrics.dashboard.enabled`,
+  both off by default. Documents without the flag are byte-identical.
+
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
   Part 2a). An inference workload whose declared Pod template labels
   match all of `spec.selector.matchLabels` of a Gateway API Inference

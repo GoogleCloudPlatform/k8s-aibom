@@ -1,0 +1,33 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if and .Values.metrics.enabled .Values.metrics.dashboard.enabled }}
+# Design 011 reference dashboard for the Grafana sidecar (label selected
+# by metrics.dashboard.label). Off by default; a ConfigMap only.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k8s-aibom.fullname" . }}-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k8s-aibom.labels" . | nindent 4 }}
+    {{ .Values.metrics.dashboard.label }}: {{ .Values.metrics.dashboard.labelValue | quote }}
+  {{- with .Values.metrics.dashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  aibom-attribution.json: |-
+{{ .Files.Get "files/aibom-attribution-dashboard.json" | indent 4 }}
+{{- end }}

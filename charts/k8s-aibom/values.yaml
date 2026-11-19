@@ -122,7 +122,8 @@ readiness:
 # outcomes by kind (not_opted_in / kind_not_allowed / unmatched / matched / rolled_up / rollup_unresolved) — the signal that
 # separates "opted in, nothing recognized" from a broken controller —
 # plus tracked-workload gauge, sink failures, extraction errors, status
-# persist failures, and config reloads.
+# persist failures, config reloads, and the model-identity info metrics
+# aibom_workload_info / aibom_pod_info (Design 011).
 metrics:
   enabled: false
   port: 8080
@@ -135,6 +136,24 @@ metrics:
     interval: 30s
     scrapeTimeout: 10s
     labels: {}
+  # Design 011: aibom_workload_info and aibom_pod_info are always exported
+  # with the other metrics; they carry each AI workload's (and each owned
+  # pod's) runtime and model identity so cAdvisor, DCGM and OpenCost series
+  # attribute to a model with one PromQL join. The two toggles below ship
+  # the reference join as a PrometheusRule (recording rules by model) and
+  # a Grafana dashboard ConfigMap for the Grafana sidecar; both are plain
+  # templates with no RBAC and are off by default. See
+  # docs/observability/per-model-utilisation.md.
+  rules:
+    # Requires the Prometheus Operator CRDs (monitoring.coreos.com/v1).
+    enabled: false
+    labels: {}
+  dashboard:
+    enabled: false
+    # Label the Grafana sidecar selects dashboards by.
+    label: grafana_dashboard
+    labelValue: "1"
+    annotations: {}
 
 podAnnotations: {}
 

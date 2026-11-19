@@ -390,6 +390,13 @@ spec:
                             Identity is the model identifier as it appeared in the source
                             (env var value, arg value, annotation value). NOT normalized.
                           type: string
+                        servedName:
+                          description: |-
+                            ServedName is the alias the serving engine was told to publish the
+                            model under (vLLM --served-model-name), when the container args set
+                            one; the name the engine's own metrics carry as model_name. Empty
+                            when the args set no alias.
+                          type: string
                         signed:
                           description: |-
                             Signed encodes signature presence and verification. One of
@@ -823,6 +830,13 @@ spec:
                           description: |-
                             Identity is the model identifier as it appeared in the source
                             (env var value, arg value, annotation value). NOT normalized.
+                          type: string
+                        servedName:
+                          description: |-
+                            ServedName is the alias the serving engine was told to publish the
+                            model under (vLLM --served-model-name), when the container args set
+                            one; the name the engine's own metrics carry as model_name. Empty
+                            when the args set no alias.
                           type: string
                         signed:
                           description: |-

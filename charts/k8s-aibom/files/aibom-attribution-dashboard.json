@@ -1,0 +1,299 @@
+{
+ "uid": "aibom-attrib",
+ "title": "AI workloads: resource use by model (k8s-aibom)",
+ "tags": [
+  "k8s-aibom"
+ ],
+ "timezone": "utc",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-30m",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "CPU cores by model",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (model) (rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[2m]) * on (namespace,pod) group_left (model,runtime) aibom_pod_info)",
+     "legendFormat": "{{model}}",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Share of AI CPU by model",
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (model) (rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[2m]) * on (namespace,pod) group_left (model,runtime) aibom_pod_info) / ignoring(model) group_left sum(rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[2m]) * on (namespace,pod) group_left (model,runtime) aibom_pod_info)",
+     "legendFormat": "{{model}}",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "Working-set memory by model",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (model) (container_memory_working_set_bytes{container!=\"\",pod!=\"\"} * on (namespace,pod) group_left (model,runtime) aibom_pod_info)",
+     "legendFormat": "{{model}}",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "CPU cores by runtime",
+   "gridPos": {
+    "x": 12,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (runtime) (rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[2m]) * on (namespace,pod) group_left (model,runtime) aibom_pod_info)",
+     "legendFormat": "{{runtime}}",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "GPU utilisation by model (DCGM; empty on CPU-only clusters)",
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "avg by (model) (DCGM_FI_DEV_GPU_UTIL * on (namespace,pod) group_left (model,runtime) aibom_pod_info)",
+     "legendFormat": "{{model}}",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Models in the cluster",
+   "gridPos": {
+    "x": 12,
+    "y": 16,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "count(count by (model) (aibom_workload_info))",
+     "legendFormat": "",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "AI workloads",
+   "gridPos": {
+    "x": 16,
+    "y": 16,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "count(aibom_workload_info)",
+     "legendFormat": "",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 8,
+   "type": "stat",
+   "title": "AI pods",
+   "gridPos": {
+    "x": 20,
+    "y": 16,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "count(aibom_pod_info)",
+     "legendFormat": "",
+     "instant": false,
+     "format": "time_series"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 9,
+   "type": "table",
+   "title": "Inventory: workload \u2192 runtime \u2192 model (from the AIBOM resource)",
+   "gridPos": {
+    "x": 12,
+    "y": 20,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (namespace, workload_kind, workload_name, runtime, runtime_version, model, model_confidence, category) (aibom_workload_info)",
+     "legendFormat": "",
+     "instant": true,
+     "format": "table"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "Value": true
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

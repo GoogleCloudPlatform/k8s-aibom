@@ -218,10 +218,12 @@ func (s *InferenceSpecScraper) scrapePodSpecAt(inputs *BOMInputs, spec *corev1.P
 	for i, c := range spec.Containers {
 		inputs.Components = append(inputs.Components,
 			s.extractContainerComponentAt(specLocator, c, false, i, pods, cfg)...)
-		inputs.Components = append(inputs.Components,
-			s.extractEnvVarModelsAt(specLocator, c, false, i, cfg)...)
-		inputs.Components = append(inputs.Components,
+		// Model identities from this container's env and args share the
+		// container's served-model alias (Design 011 §3), when it sets one.
+		models := append(s.extractEnvVarModelsAt(specLocator, c, false, i, cfg),
 			s.extractArgModelsAt(specLocator, c, false, i, cfg)...)
+		applyServedModelName(models, servedModelName(c.Args, c.Env))
+		inputs.Components = append(inputs.Components, models...)
 		inputs.Components = append(inputs.Components,
 			s.extractVolumeMountModelsAt(specLocator, c, spec.Volumes, false, i, cfg)...)
 	}
