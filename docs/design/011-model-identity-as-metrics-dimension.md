@@ -168,7 +168,9 @@ label, default false). Both are plain templates with no new RBAC.
 
 ### 5. OpenCost
 
-Proposed to the OpenCost maintainers separately: let the inference cost
+Proposed to the OpenCost maintainers as
+[opencost/opencost#4213](https://github.com/opencost/opencost/issues/4213):
+let the inference cost
 module take pod-to-model identity from `aibom_pod_info` when the pod
 label is absent, selecting `served_model` when set and `model`
 otherwise. That extends their module to every runtime k8s-aibom
