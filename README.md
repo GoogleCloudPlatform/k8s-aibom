@@ -166,6 +166,36 @@ The image digest is printed in the release notes. Admission policies can verify 
 - **Amazon EKS, Azure AKS, OpenShift, on-prem** — identical install; cloud-specific notes in [Installing on EKS, AKS, and other conformant clusters](docs/install-eks-aks.md).
 - **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
 
+### Verify it works in sixty seconds
+
+With the controller and kubectl plugin installed, create an opted-in namespace and deploy the [walkthrough's](docs/integrations/dependency-track.md#walkthrough) `chat` workload:
+
+```bash
+kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace demo aibom.k8saibom.dev/enabled=true
+
+kubectl apply -n demo -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: chat}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: chat}}
+  template:
+    metadata: {labels: {app: chat}}
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/ggml-org/llama.cpp:server
+          command: ["sleep", "infinity"]
+          env: [{name: HF_MODEL_ID, value: ggml-org/gemma-3-1b-it-GGUF}]
+EOF
+kubectl aibom summary -n demo
+kubectl aibom view apps-deployment-chat -n demo
+```
+
+The container stays idle; no model is downloaded. Allow time for reconciliation and the image pull, then retry the view if needed. The CycloneDX 1.6 document contains the inferred `llama.cpp` runtime and `HF_MODEL_ID` model, the declared container digest and `pkg:oci` purl from pod status, and a `serialNumber` (v1.7.0+). See the [fixture](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the expected shape; namespace, digest, and serial number reflect your workload. Use `kubectl aibom view apps-deployment-chat -n demo --raw` for the canonical bytes when comparing with the fixture.
+
 ### Opt in a namespace
 
 The controller is installed cluster-wide but inactive until you opt in at least one namespace:
