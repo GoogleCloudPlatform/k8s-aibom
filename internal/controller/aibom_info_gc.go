@@ -47,7 +47,7 @@ func (r *AIBOMInfoGCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var a aibomv1beta1.AIBOM
 	if err := r.Get(ctx, req.NamespacedName, &a); err != nil {
 		if apierrors.IsNotFound(err) {
-			metrics.ForgetWorkloadInfo(req.NamespacedName.String())
+			metrics.ForgetWorkloadInfo(req.String())
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
