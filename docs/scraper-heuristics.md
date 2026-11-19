@@ -149,6 +149,17 @@ Supported SGLang and LiteLLM image variants are enumerated in the
 allowlist; names such as `lmsysorg/sglang-router` and
 `nvcr.io/nvidia/tritonserver-sidecar` do not receive runtime attribution.
 
+A Docker Hub image written with its registry matches the patterns for
+its short form: `docker.io/vllm/vllm-openai:v0.6.3` and
+`index.docker.io/vllm/vllm-openai:v0.6.3` attribute `vllm` through the
+same pattern as `vllm/vllm-openai:v0.6.3`, and
+`docker.io/library/<name>` matches as `<name>`. These are the names
+Docker itself resolves to the same image, and the same ones digest
+resolution treats as equal. No other registry prefix is stripped, and a
+registry host written after `docker.io/` is not either: a pattern
+anchored at Docker Hub still does not match `ghcr.io/vllm/vllm-openai`
+or a mirror path. The Component keeps the image reference as written.
+
 - **Confidence: `inferred`.** The runtime identity is inferred from a
   pattern match against the image string, not declared by the workload
   owner. Pattern-match-derived attributes are never `declared`.
