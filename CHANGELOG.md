@@ -302,6 +302,18 @@ API schema do not change.
 
 ### Fixed
 
+- **A Docker Hub image written with `docker.io/` gets its runtime
+  attributed (#399).** Runtime detection matched the image reference as
+  written against patterns anchored at the short Docker Hub name, so
+  `docker.io/vllm/vllm-openai:v0.6.3` (or `index.docker.io/...`) matched
+  nothing while `vllm/vllm-openai:v0.6.3` matched `vllm`. Digest
+  resolution already treated the two as the same image, so the BOM
+  showed the digest but no runtime, and a workload with no other signal
+  got no AIBOM at all. The patterns are now also tried against the short
+  form, with `docker.io/`, `index.docker.io/` and `library/` removed.
+  No other registry prefix is stripped, and the image reference is
+  recorded as written.
+
 - **A webhook endpoint on an IPv6 loopback or link-local address is
   rejected at config load.** The SSRF check in the webhook sink's
   config validation compared the endpoint host with `[::1]`, but the

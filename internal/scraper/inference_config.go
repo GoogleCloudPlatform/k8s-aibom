@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"sigs.k8s.io/yaml"
 )
@@ -133,17 +134,45 @@ func NewRuntimeImagePattern(runtime, pattern string) (RuntimeImagePattern, error
 // DetectRuntime returns the runtime name for an image that matches one of
 // the configured runtime image patterns, plus the pattern that matched
 // (for evidence attribution). Returns ("", nil) if no pattern matches.
+//
+// Each pattern is tried against the image as written and, for a Docker
+// Hub image written with its registry, against the short form Docker
+// resolves to the same image: "docker.io/vllm/vllm-openai:v0.6.3" matches
+// a pattern anchored at "^vllm/vllm-". Only the Docker Hub prefixes are
+// equated (see dockerHubShortForm); every other registry keeps its
+// exact-prefix semantics.
 func (c *InferenceConfig) DetectRuntime(image string) (runtime string, matched *RuntimeImagePattern) {
 	if c == nil {
 		return "", nil
 	}
+	short := dockerHubShortForm(image)
 	for i := range c.RuntimeImagePatterns {
 		p := &c.RuntimeImagePatterns[i]
-		if p.Match(image) {
+		if p.Match(image) || (short != "" && p.Match(short)) {
 			return p.Runtime, p
 		}
 	}
 	return "", nil
+}
+
+// dockerHubShortForm returns the short Docker Hub form of an image
+// reference written with a Docker Hub registry prefix ("docker.io/",
+// "index.docker.io/") or the official-image "library/" namespace, the same
+// rewrite normalizeImageName applies for digest resolution. It returns ""
+// when the reference has none of those prefixes, or when what follows the
+// prefix starts with a registry host ("docker.io/ghcr.io/..."), so a
+// pattern anchored at another registry cannot be reached through it.
+func dockerHubShortForm(image string) string {
+	short := normalizeImageName(image)
+	if short == image {
+		return ""
+	}
+	if i := strings.IndexByte(short, '/'); i >= 0 {
+		if first := short[:i]; strings.ContainsAny(first, ".:") || first == "localhost" {
+			return ""
+		}
+	}
+	return short
 }
 
 // IsModelEnvVarName reports whether the given env var name is in the
