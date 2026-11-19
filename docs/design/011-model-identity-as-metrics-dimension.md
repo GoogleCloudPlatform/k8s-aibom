@@ -1,6 +1,8 @@
-# Design 008: model identity as a metrics dimension
+# Design 011: model identity as a metrics dimension
 
-Status: Proposed 2026-11-19. Targets v1.8.0. Review on the tracking issue.
+Status: Proposed 2026-11-19. Targets v1.8.0. Tracks #411; review there.
+(Numbered 011 because the roadmap reserves 008–010 for the KubeAI,
+agent-sandbox and kagent lenses.)
 
 ## Context
 
