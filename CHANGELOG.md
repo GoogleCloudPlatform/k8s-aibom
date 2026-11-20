@@ -302,6 +302,18 @@ API schema do not change.
 
 ### Fixed
 
+- **A vector database, agent framework, training or evaluation image
+  written with `docker.io/` is recognized.** The `vectordb.spec`,
+  `agent.spec`, `training.spec` and `eval.spec` image patterns are
+  anchored at the short Docker Hub name (`^qdrant/qdrant`,
+  `^langflowai/langflow`, `^pytorch/pytorch`, `^eleutherai/lm-eval`,
+  ...) and were matched against the image as written, so
+  `docker.io/qdrant/qdrant:v1.12.0` (or `index.docker.io/...`) matched
+  nothing. With no other signal the workload got no category and no
+  AIBOM. These patterns now also try the Docker Hub short form, as
+  runtime detection does since #399. No other registry prefix is
+  stripped, and the image reference is recorded as written.
+
 - **A Docker Hub image written with `docker.io/` gets its runtime
   attributed (#399).** Runtime detection matched the image reference as
   written against patterns anchored at the short Docker Hub name, so

@@ -94,8 +94,9 @@ func (s *VectorDBSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 
 func (s *VectorDBSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, t time.Time) {
 	for i, c := range template.Spec.Containers {
+		short := dockerHubShortForm(c.Image)
 		for _, p := range DefaultVectorDBPatterns {
-			if p.Pattern.MatchString(c.Image) {
+			if matchImagePattern(p.Pattern, c.Image, short) {
 				comp := Component{
 					Type:       ComponentApplication,
 					Name:       p.Name,

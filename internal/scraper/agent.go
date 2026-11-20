@@ -120,9 +120,10 @@ func (s *AgentSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1
 	hasComponents := false
 
 	for i, c := range template.Spec.Containers {
+		short := dockerHubShortForm(c.Image)
 		// 1. Check for Agent UI/framework images
 		for _, p := range DefaultAgentImagePatterns {
-			if p.Pattern.MatchString(c.Image) {
+			if matchImagePattern(p.Pattern, c.Image, short) {
 				hasFramework = true
 				hasComponents = true
 				comp := Component{

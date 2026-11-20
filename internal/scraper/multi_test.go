@@ -49,7 +49,9 @@ func TestMultiScraper_KeepsContainerComponentsForNonInferenceWorkloads(t *testin
 		env                                 []corev1.EnvVar
 	}{
 		{name: "vector database", image: "qdrant/qdrant:v1.12.0@sha256:" + hex, wantName: "qdrant/qdrant", wantCategory: string(CategoryVectorDB)},
+		{name: "vector database written with docker.io/", image: "docker.io/qdrant/qdrant:v1.12.0@sha256:" + hex, wantName: "docker.io/qdrant/qdrant", wantCategory: string(CategoryVectorDB)},
 		{name: "agent image", image: "langflowai/langflow:1.1.0@sha256:" + hex, wantName: "langflowai/langflow", wantCategory: string(CategoryAgent)},
+		{name: "agent image written with docker.io/", image: "docker.io/langflowai/langflow:1.1.0@sha256:" + hex, wantName: "docker.io/langflowai/langflow", wantCategory: string(CategoryAgent)},
 		{name: "agent env signature", image: "example.com/my-agent:2.0@sha256:" + hex, wantName: "example.com/my-agent", wantCategory: string(CategoryAgent),
 			env: []corev1.EnvVar{{Name: "LANGCHAIN_TRACING_V2", Value: "true"}}},
 	}

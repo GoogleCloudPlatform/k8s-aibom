@@ -93,9 +93,10 @@ func (s *EvalSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Inference
 func (s *EvalSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, specLocator string) bool {
 	isEval := false
 	for i, c := range template.Spec.Containers {
+		short := dockerHubShortForm(c.Image)
 		// Check for evaluation images
 		for _, p := range DefaultEvalImagePatterns {
-			if p.Pattern.MatchString(c.Image) {
+			if matchImagePattern(p.Pattern, c.Image, short) {
 				isEval = true
 				comp := Component{
 					Type:       ComponentApplication,
