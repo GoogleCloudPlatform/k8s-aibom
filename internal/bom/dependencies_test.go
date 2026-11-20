@@ -64,7 +64,8 @@ func buildGraph(t *testing.T, inputs *scraper.BOMInputs) emittedGraph {
 func TestBuild_DependenciesLinkWorkloadToEveryTopLevelComponent(t *testing.T) {
 	inputs := vllmFixtureBOMInputs()
 	// A second model component with the same name and type (found from an
-	// env var as well as the argument) has its own bom-ref and is listed.
+	// env var as well as the argument) folds into the first (#362): one
+	// component, one bom-ref, listed once.
 	inputs.Components = append(inputs.Components, scraper.Component{
 		Type:       scraper.ComponentMLModel,
 		Name:       "meta-llama/Llama-3.1-8B-Instruct",
@@ -100,8 +101,8 @@ func TestBuild_DependenciesLinkWorkloadToEveryTopLevelComponent(t *testing.T) {
 	}
 	got := *entry.DependsOn
 
-	if len(g.Components) != len(inputs.Components) {
-		t.Fatalf("emitted %d top-level components, want %d", len(g.Components), len(inputs.Components))
+	if len(g.Components) != len(inputs.Components)-1 {
+		t.Fatalf("emitted %d top-level components, want %d", len(g.Components), len(inputs.Components)-1)
 	}
 	want := make([]string, 0, len(g.Components))
 	for _, c := range g.Components {

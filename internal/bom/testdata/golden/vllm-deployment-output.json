@@ -216,39 +216,28 @@
           "value": "spec.template.spec.containers[0].args[0 1](--model)"
         },
         {
+          "name": "k8s-aibom:evidence:confidence",
+          "value": "declared"
+        },
+        {
+          "name": "k8s-aibom:evidence:confidence:1",
+          "value": "inferred"
+        },
+        {
+          "name": "k8s-aibom:evidence:locator:1",
+          "value": "spec.template.spec.containers[0].env[0](HF_MODEL_ID)"
+        },
+        {
+          "name": "k8s-aibom:evidence:source:1",
+          "value": "env_var"
+        },
+        {
           "name": "k8s-aibom:container:name",
           "value": "vllm"
         },
         {
           "name": "k8s-aibom:identity:argFlag",
           "value": "--model"
-        },
-        {
-          "name": "k8s-aibom:identity:confidence",
-          "value": "claimed"
-        }
-      ]
-    },
-    {
-      "bom-ref": "workload:prod-inference/Deployment/vllm-llama3/component/4/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct",
-      "type": "machine-learning-model",
-      "name": "meta-llama/Llama-3.1-8B-Instruct",
-      "properties": [
-        {
-          "name": "k8s-aibom:confidence",
-          "value": "inferred"
-        },
-        {
-          "name": "k8s-aibom:evidence:source",
-          "value": "env_var"
-        },
-        {
-          "name": "k8s-aibom:evidence:locator",
-          "value": "spec.template.spec.containers[0].env[0](HF_MODEL_ID)"
-        },
-        {
-          "name": "k8s-aibom:container:name",
-          "value": "vllm"
         },
         {
           "name": "k8s-aibom:identity:confidence",
@@ -268,8 +257,7 @@
         "workload:prod-inference/Deployment/vllm-llama3/component/0/application/vllm",
         "workload:prod-inference/Deployment/vllm-llama3/component/1/container/vllm/vllm-openai",
         "workload:prod-inference/Deployment/vllm-llama3/component/2/data/llama-weights",
-        "workload:prod-inference/Deployment/vllm-llama3/component/3/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct",
-        "workload:prod-inference/Deployment/vllm-llama3/component/4/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct"
+        "workload:prod-inference/Deployment/vllm-llama3/component/3/machine-learning-model/meta-llama/Llama-3.1-8B-Instruct"
       ]
     }
   ]

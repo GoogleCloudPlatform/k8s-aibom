@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -186,4 +187,75 @@ func docModelConfidence(t *testing.T, data []byte, name string) string {
 	}
 	t.Fatalf("document has no machine-learning-model component %q", name)
 	return ""
+}
+
+// TestBuildSummary_OneEntryPerModel pins the #362 summary contract: one
+// ModelSummary per model, whatever the number of sources that name it,
+// with Source and Confidence from the highest-tier source (the
+// first-found one on a tie). The document keeps every source.
+func TestBuildSummary_OneEntryPerModel(t *testing.T) {
+	model := func(src scraper.EvidenceSource, locator string, conf scraper.Confidence) scraper.Component {
+		return scraper.Component{
+			Type:       scraper.ComponentMLModel,
+			Name:       "m",
+			Evidence:   scraper.Evidence{Source: src, Locator: locator},
+			Confidence: conf,
+		}
+	}
+	cases := []struct {
+		name  string
+		comps []scraper.Component
+		want  aibomv1beta1.ModelSummary
+	}{
+		{
+			name:  "single source",
+			comps: []scraper.Component{model(scraper.SourceEnvVar, "env[0]", scraper.ConfidenceInferred)},
+			want:  aibomv1beta1.ModelSummary{Identity: "m", Source: "env_var", Confidence: "inferred"},
+		},
+		{
+			name: "first-found is the highest tier",
+			comps: []scraper.Component{
+				model(scraper.SourceContainerArg, "args[0]", scraper.ConfidenceDeclared),
+				model(scraper.SourceEnvVar, "env[0]", scraper.ConfidenceInferred),
+			},
+			want: aibomv1beta1.ModelSummary{Identity: "m", Source: "container_arg", Confidence: "declared"},
+		},
+		{
+			name: "a later source is the highest tier",
+			comps: []scraper.Component{
+				model(scraper.SourceEnvVar, "a", scraper.ConfidenceInferred),
+				model(scraper.SourceCRDField, "b", scraper.ConfidenceDeclared),
+			},
+			want: aibomv1beta1.ModelSummary{Identity: "m", Source: "crd_field", Confidence: "declared"},
+		},
+		{
+			name: "tie goes to the first-found source",
+			comps: []scraper.Component{
+				model(scraper.SourceEnvVar, "a", scraper.ConfidenceInferred),
+				model(scraper.SourceContainerArg, "b", scraper.ConfidenceDeclared),
+				model(scraper.SourceCRDField, "c", scraper.ConfidenceDeclared),
+			},
+			want: aibomv1beta1.ModelSummary{Identity: "m", Source: "container_arg", Confidence: "declared"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := bom.NewBuilder().WithClock(func() time.Time { return fixedNow }).Build(&scraper.BOMInputs{
+				ScraperName:     "inference.spec",
+				ScrapeTimestamp: fixedNow,
+				Confidence:      scraper.ConfidenceInferred,
+				Components:      tc.comps,
+			}, bom.BuildOptions{WorkloadKind: "Deployment", WorkloadNamespace: "ns", WorkloadName: "w"})
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			got := buildSummary(doc, testSummaryOptions())
+			if len(got.Models) != 1 {
+				t.Fatalf("summary models = %+v, want one entry", got.Models)
+			}
+			if m := got.Models[0]; m.Identity != tc.want.Identity || m.Source != tc.want.Source || m.Confidence != tc.want.Confidence {
+				t.Errorf("summary model = %+v, want %+v", m, tc.want)
+			}
+		})
+	}
 }
