@@ -175,6 +175,15 @@ func dockerHubShortForm(image string) string {
 	return short
 }
 
+// matchImagePattern reports whether re matches image as written or, for
+// a Docker Hub image written with its registry, its short form: short is
+// dockerHubShortForm(image), "" when there is none. The vectordb.spec,
+// agent.spec, training.spec and eval.spec image patterns match through it,
+// so they equate the same Docker Hub names DetectRuntime does.
+func matchImagePattern(re *regexp.Regexp, image, short string) bool {
+	return re.MatchString(image) || (short != "" && re.MatchString(short))
+}
+
 // IsModelEnvVarName reports whether the given env var name is in the
 // allowlist. Case-sensitive match.
 func (c *InferenceConfig) IsModelEnvVarName(name string) bool {
