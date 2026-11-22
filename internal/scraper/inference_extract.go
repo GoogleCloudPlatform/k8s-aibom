@@ -575,18 +575,24 @@ func servedModelName(args []string, env []corev1.EnvVar) string {
 	for i := 0; i < len(xs); i++ {
 		arg := xs[i]
 		if strings.HasPrefix(arg, servedModelNameFlag+"=") {
-			v := strings.TrimPrefix(arg, servedModelNameFlag+"=")
-			if v == "" || unresolved[i] {
+			if unresolved[i] {
 				return ""
 			}
-			return TruncateString(strings.Fields(v)[0], MaxComponentNameLength)
+			// vLLM accepts several names after the flag; the first is the
+			// one its metrics carry. A value that is empty or only
+			// whitespace names nothing.
+			fields := strings.Fields(strings.TrimPrefix(arg, servedModelNameFlag+"="))
+			if len(fields) == 0 {
+				return ""
+			}
+			return TruncateString(fields[0], MaxComponentNameLength)
 		}
 		if arg == servedModelNameFlag && i+1 < len(xs) {
-			v := xs[i+1]
+			v := strings.TrimSpace(xs[i+1])
 			if v == "" || strings.HasPrefix(v, "--") || unresolved[i+1] {
 				return ""
 			}
-			return TruncateString(v, MaxComponentNameLength)
+			return TruncateString(strings.Fields(v)[0], MaxComponentNameLength)
 		}
 	}
 	return ""
