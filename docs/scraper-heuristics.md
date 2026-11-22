@@ -217,6 +217,13 @@ is recorded in the locator.
 - Empty values are not emitted (an empty env var is not a model identity).
 - Match is case-sensitive (`HF_MODEL_ID` is in the allowlist;
   `hf_model_id` is not).
+- `$(VAR_NAME)` references in the value are expanded from the entries
+  before it in the same `env`, the way the kubelet expands them, so
+  `HF_MODEL_ID: $(MODEL_ID)` after `MODEL_ID: google/gemma-2-2b` records
+  `google/gemma-2-2b`. A reference whose value the spec does not state
+  emits nothing, as for container args below. When a reference was
+  expanded, `identity.envVarName` lists the referenced names after the
+  variable's own name, comma-separated.
 - Confidence: `inferred`. The env var convention is a community pattern,
   not a Kubernetes-native declaration.
 
