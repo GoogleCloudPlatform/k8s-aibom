@@ -6,6 +6,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-24
+
 ### Document shape (one transition, v1.7.0)
 
 Six changes to the emitted CycloneDX document land together (#132,
@@ -107,6 +109,13 @@ API schema do not change.
   same warning.
 
 ### Added
+
+- **The chart prints what to do next.** `helm install` and `helm upgrade`
+  end with a NOTES section (#401, #406): the namespace opt-in label,
+  `kubectl get aibom -A` and `kubectl aibom summary -A`, a pointer to
+  the `AIBOMControllerConfig` named `default` and the chart's `config.*`
+  values, and the reminder that `rbac.sinkSecretAccess` is off by
+  default.
 
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
   Part 2a). An inference workload whose declared Pod template labels
