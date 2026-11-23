@@ -1,6 +1,6 @@
 # k8s-aibom
 
-A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] documents for AI workloads at runtime — inference services, agent stacks, RAG pipelines, training jobs, evaluation harnesses — with auditor-traceable evidence for every attribute.
+k8s-aibom makes the AI identity of every workload a Kubernetes-native fact, derived rather than declared: which model, runtime, agent framework and provider each inference service, agent stack, RAG pipeline, training job or evaluation harness runs, read from the workload itself with the evidence and a confidence grade on every attribute. An unprivileged controller serves that fact as a [CycloneDX 1.6 ML-BOM][cyclonedx-ml] document per workload, and a status summary on the `AIBOM` resource; Prometheus series follow in v1.8. No labels required, no pods touched.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CycloneDX 1.6 ML-BOM](https://img.shields.io/badge/CycloneDX-1.6%20ML--BOM-success.svg)](https://cyclonedx.org/capabilities/mlbom/)
@@ -397,7 +397,7 @@ and a raw kubelet CPU-counter delta over a stated 10-minute window):
   minute** — watch reconnects only, zero writes, zero reconciles,
   1.07 mCPU average. Upgrade 23 s, rollback 17–19 s, all AIBOMs and
   hashes preserved across a full version round trip; see
-  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md); v1.6.1 ADR-019 legs with the NVIDIA Dynamo pairing (one AIBOM per DynamoGraphDeployment, operator outage, 1.5.1→1.6.1 upgrade and rollback, cost): [docs/evidence/v1.6.1-gke-adr019-dynamo.md](docs/evidence/v1.6.1-gke-adr019-dynamo.md)
+  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md); v1.6.1 ADR-019 legs with the NVIDIA Dynamo pairing (one AIBOM per DynamoGraphDeployment, operator outage, 1.5.1→1.6.1 upgrade and rollback, cost): [docs/evidence/v1.6.1-gke-adr019-dynamo.md](docs/evidence/v1.6.1-gke-adr019-dynamo.md); v1.7.0-rc.1 release artefacts, the 1.7.0 document shape, InferencePool membership and steady state: [docs/evidence/v1.7.0-rc1-gke-interop-shape.md](docs/evidence/v1.7.0-rc1-gke-interop-shape.md)
 - 256 KB inline threshold; BOMs exceeding it are offloaded to an
   external sink and referenced by URL in the CR status (boundary
   observed live in NVIDIA/aicr#2310)
@@ -426,7 +426,7 @@ See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and sup
 
 ## Roadmap
 
-Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.6.2**, the coverage release — NVIDIA Dynamo, NIM Operator, LeaderWorkerSet, llm-d `DisaggregatedSet` and CronJob as reported kinds, ownership roll-up (one workload, one AIBOM), a workload-kind allowlist, the companion CRDs chart, and third-party CRD outages that degrade one kind instead of the controller. Next: **v1.7, the interoperability release (24 November 2026)** — one byte-shape transition to CycloneDX conventions (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:` property namespace), proven by Dependency-Track and GUAC ingestion, plus `InferencePool` membership as a routing fact. Then **v1.8, the agent-platform release (January 2027)** — kagent and agent-sandbox lenses, `status.summary.runtimes`, OperatorHub.
+Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.7.0**, the interoperability release — one byte-shape transition to CycloneDX conventions (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:` property namespace, a `dependencies` array, a deterministic `serialNumber`), proven by Dependency-Track and GUAC ingestion; `InferencePool` membership as a routing fact; the `verified` confidence tier in the code; Docker Hub images recognised with or without their registry prefix; chart NOTES after install. Next: **v1.8, the agent-platform release (January 2027)** — kagent and agent-sandbox lenses, `status.summary.runtimes`, OperatorHub, and the AI identity as Prometheus series (`aibom_workload_info`, `aibom_pod_info`) so cost and utilisation read per model.
 
 Full detail in [docs/roadmap.md](docs/roadmap.md).
 

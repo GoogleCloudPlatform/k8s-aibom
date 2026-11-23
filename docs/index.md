@@ -5,7 +5,7 @@ nav_order: 1
 
 # k8s-aibom
 
-Know what AI is actually running in your clusters. k8s-aibom is an unprivileged Kubernetes controller that inventories models, runtimes, agents and RAG components at runtime and writes one CycloneDX 1.6 ML-BOM per workload, with evidence and a confidence tier on every attribute.
+k8s-aibom makes the AI identity of every workload a Kubernetes-native fact, derived rather than declared. An unprivileged Kubernetes controller reads which model, runtime, agent framework and provider each workload runs, with evidence and a confidence grade, and serves it as one CycloneDX 1.6 ML-BOM per workload, with evidence and a confidence tier on every attribute.
 
 - **Source, install and quickstart:** [github.com/GoogleCloudPlatform/k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom)
 - **Releases:** [github.com/GoogleCloudPlatform/k8s-aibom/releases](https://github.com/GoogleCloudPlatform/k8s-aibom/releases)
