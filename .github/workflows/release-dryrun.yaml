@@ -69,6 +69,11 @@ jobs:
         helm package charts/k8s-aibom-crds --version "0.0.0-dryrun" --app-version "v0.0.0-dryrun" --destination dist/
         test -f dist/k8s-aibom-crds-0.0.0-dryrun.tgz
 
+    # The release pushes charts through this script; exercise its retry
+    # and fail-closed paths against a stub helm (no registry, no network).
+    - name: Chart push script (retry and fail-closed paths)
+      run: hack/release/push-chart_test.sh
+
     - name: Generate install.yaml
       # HELM override: the Makefile defaults to ./bin/helm and its
       # self-bootstrap cannot write to the runner; use setup-helm's binary.
