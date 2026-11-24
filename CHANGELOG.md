@@ -6,6 +6,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add `kubectl aibom --version` to report the plugin's build version (#403).
+
+### Fixed
+
+- Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)

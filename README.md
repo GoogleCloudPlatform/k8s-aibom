@@ -139,6 +139,7 @@ Always install from a release asset; the `install.yaml` at the repo root is a de
 ```bash
 kubectl krew install aibom   # or download the attested binary from the release page
 
+kubectl aibom --version                 # plugin build version (dev for unstamped builds)
 kubectl aibom summary -n prod-jobs        # table: workload, category, runtime, models, confidence, Ready
 kubectl aibom find --runtime litellm -A   # where is X running? filters: --runtime --model --image --digest --signed
 kubectl aibom view <aibom-name> -n prod-jobs        # decoded, pretty-printed BOM (--raw for canonical bytes)
@@ -204,7 +205,15 @@ The controller is installed cluster-wide but inactive until you opt in at least 
 kubectl label namespace my-ai-namespace aibom.k8saibom.dev/enabled=true
 ```
 
-Until then the controller is running and recording nothing, and it says so: `AIBOMControllerConfig/default` carries a `NamespacesOptedIn` condition that is `False` with this command in its message, and flips to `True` with the count once a namespace matches (`kubectl aibom summary` prints the same hint when it finds no documents). It is informational and never affects `Ready`.
+Until then the controller is running and recording nothing, and it says so: `AIBOMControllerConfig/default` carries a `NamespacesOptedIn` condition that is `False` with this command in its message, and flips to `True` with the count once a namespace matches. It is informational and never affects `Ready`.
+
+If `kubectl aibom summary` finds no AIBOMs in a namespace labelled
+`aibom.k8saibom.dev/enabled=true`, it suggests checking that the controller is
+running and inspecting `status.conditions` and
+`status.effectiveInferenceRuntimeImagePatterns` with
+`kubectl get aibomcontrollerconfig default -o yaml`. The summary prints the
+general opt-in hint for unlabelled namespaces, with `-A`, or when it cannot read
+the namespace.
 
 Within about a minute the controller records a `NamespaceObserved` event in the namespace, with how many workloads it considered and how many matched an AI workload signal. Workloads that match none get no `AIBOM`; that is conservative detection, not a fault:
 
