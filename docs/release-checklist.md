@@ -57,7 +57,16 @@ commit:
 
 ## Tag & publish
 
-1. Tag the verified commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+1. Tag the `verifier` module on the same commit, before the root tag:
+   `git tag verifier/vX.Y.Z && git push origin verifier/vX.Y.Z`.
+   The root go.mod requires `verifier` by version (no replace
+   directive; #397); until the first `verifier` tag exists it pins a
+   pseudo-version of the current `main` commit. After tagging,
+   bump the require to vX.Y.Z (`go get
+   github.com/GoogleCloudPlatform/k8s-aibom/verifier@vX.Y.Z`) and
+   re-run `go mod tidy`, so `go install .../cmd/kubectl-aibom@vX.Y.Z`
+   resolves the tagged module.
+2. Tag the verified commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
    If the release workflow fails, read the failed step's log before
    anything else, and do not move or delete the tag (the Go module proxy
    caches it). Re-running the workflow on the same tag is safe: every
@@ -65,7 +74,7 @@ commit:
    re-run rebuilds the image, so the version tag moves to a new digest
    and the first image stays reachable by digest as an orphan; record
    that on the release tracking issue (v1.7.0 precedent, #315).
-2. The release workflow builds and publishes: multi-arch image (ghcr),
+3. The release workflow builds and publishes: multi-arch image (ghcr),
    Helm chart and CRDs chart (OCI, same version, both attested),
    install.yaml (digest-pinned), SBOM, provenance attestations, GitHub
    release with notes.
