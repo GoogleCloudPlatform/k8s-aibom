@@ -45,6 +45,24 @@ jobs:
       # `go test ./...` (module boundary); test it explicitly.
       run: cd verifier && go vet ./... && go test -race ./...
 
+    - name: Root tests against in-tree verifier (go.work)
+      # The root go.mod requires verifier by version (#397), so a
+      # change under verifier/ is invisible to the root tests until a
+      # verifier tag exists and the require is bumped. Run the root
+      # tests once more with a temporary, uncommitted go.work pointing
+      # the import at ./verifier, so the tree is always tested
+      # together while the published module graph stays replace-free.
+      # The workspace file is deleted in the same step (and
+      # gitignored); `go work sync` must not leave go.mod changes
+      # behind, so those are restored too.
+      run: |
+        trap 'rm -f go.work go.work.sum; git checkout -- go.mod go.sum verifier/go.mod verifier/go.sum' EXIT
+        rm -f go.work go.work.sum
+        go work init
+        go work use . ./verifier
+        go work sync
+        make test
+
   e2e:
     needs: [test]
     runs-on: ubuntu-latest

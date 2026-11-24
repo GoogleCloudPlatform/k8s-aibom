@@ -65,7 +65,16 @@ commit:
    bump the require to vX.Y.Z (`go get
    github.com/GoogleCloudPlatform/k8s-aibom/verifier@vX.Y.Z`) and
    re-run `go mod tidy`, so `go install .../cmd/kubectl-aibom@vX.Y.Z`
-   resolves the tagged module.
+   resolves the tagged module. Then run `bash
+   hack/check-verifier-pin.sh`: it fails if the pinned verifier
+   version is not the content of `./verifier` at the release commit,
+   or if the module the proxy serves for it differs from the tree.
+   The release workflow runs the same check before building anything,
+   so a failure there means re-tagging from this step, not a partial
+   publish. Between releases the require legitimately lags `main`, so
+   the script is a release-time gate only — in-tree drift in the
+   meantime is caught on every PR by the go.work step in the test
+   workflow.
 2. Tag the verified commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
    If the release workflow fails, read the failed step's log before
    anything else, and do not move or delete the tag (the Go module proxy
