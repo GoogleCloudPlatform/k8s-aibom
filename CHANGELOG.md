@@ -6,6 +6,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- The Cloud Shell tutorial (`.cloudshell/`), which was pinned to v1.0.0 and
+  predated the Helm OCI install, and its "Cloud Shell tutorial" option in the
+  bug report template (#404).
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)
