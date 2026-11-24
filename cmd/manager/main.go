@@ -302,6 +302,11 @@ func main() {
 		log.Error(err, "unable to add InferencePool view")
 		os.Exit(1)
 	}
+	// aibom_workloads_total, recounted from the cached AIBOMs (#398).
+	if err := mgr.Add(controller.NewWorkloadsGauge(mgr.GetClient())); err != nil {
+		log.Error(err, "unable to add workloads gauge")
+		os.Exit(1)
+	}
 
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),

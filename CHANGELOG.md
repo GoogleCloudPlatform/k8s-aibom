@@ -17,6 +17,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   no digest. The release dry-run exercises the script's paths against a
   stub. No change to published artefacts.
 
+- **`aibom_workloads_total` is now set (#398).** The gauge was registered
+  but never written, so it had no series. The leader now recounts the
+  AIBOMs in its cache every 15 seconds, by `category` and `runtime`
+  (`unknown` when the status has no summary yet, `none` when no runtime
+  was detected), so the value follows adds, deletes and restarts. The
+  example Grafana dashboard gains a "Tracked Workloads (by Category)"
+  panel.
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)
