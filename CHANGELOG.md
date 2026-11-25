@@ -38,6 +38,15 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **The controller no longer risks a 30-second hang on shutdown.**
+  controller-runtime v0.24's default priority queue can deadlock while a
+  controller stops (kubernetes-sigs/controller-runtime#3540, fixed in
+  v0.25.0), which delays process exit until the manager's grace period
+  on a rollout or node drain. Controllers use the classic workqueue until
+  the dependency is bumped (#417). Reconcile behaviour is unchanged; only
+  the queue's start-up ordering of the initial list differs. The same
+  deadlock made the envtest suite fail intermittently in CI.
+
 - **Repeated pod events on an unchanged workload refresh AIBOM status at
   most once every five minutes** (#409). In a fake-client test with one
   vLLM Deployment reconciled every 30 seconds for eight simulated minutes,

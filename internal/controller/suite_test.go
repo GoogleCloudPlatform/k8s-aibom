@@ -32,10 +32,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -193,9 +191,7 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 		// names globally in metrics, so the second registration would
 		// fail without SkipNameValidation. In production there's only
 		// one manager per process, so this is test-only safety.
-		Controller: ctrlcfg.Controller{
-			SkipNameValidation: ptr.To(true),
-		},
+		Controller: testControllerOptions(),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)

@@ -137,6 +137,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "k8s-aibom.aibom.k8saibom.dev",
+		// Classic workqueue until controller-runtime v0.25 (#417).
+		Controller: controller.ManagerControllerOptions(),
 	})
 	if err != nil {
 		log.Error(err, "unable to construct manager")
