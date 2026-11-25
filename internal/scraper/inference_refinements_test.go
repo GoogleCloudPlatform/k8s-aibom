@@ -90,6 +90,48 @@ func TestInferenceSpecScraper_RuntimeVersion_SemverTag(t *testing.T) {
 	}
 }
 
+// A Docker Hub image written with its docker.io/ registry attributes
+// the runtime through the Hub pattern, and the container keeps the
+// reference as written (#399).
+func TestInferenceSpecScraper_RuntimeDockerHubQualifiedImage(t *testing.T) {
+	s := newScraper()
+	dep := vllmDeploymentFixtureWithTag("v0.6.3")
+	const image = "docker.io/vllm/vllm-openai:v0.6.3"
+	dep.Spec.Template.Spec.Containers[0].Image = image
+	w := Workload{
+		Kind:   WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		Object: dep,
+	}
+	got, err := s.Scrape(context.Background(), w, testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// With no model flag or env var, the runtime is the workload's only
+	// AI signal: unresolved here means no AIBOM for it.
+	if got.Confidence == ConfidenceUnresolved {
+		t.Errorf("Confidence = %q, want the runtime to make the workload resolvable", got.Confidence)
+	}
+	app := findRuntimeApp(t, got.Components)
+	if app.Name != "vllm" || app.Version != "v0.6.3" {
+		t.Errorf("runtime app = %q %q, want vllm v0.6.3", app.Name, app.Version)
+	}
+	if !strings.HasPrefix(app.Properties["runtime.pattern"], "^vllm/vllm-") {
+		t.Errorf("runtime.pattern = %q, want the Docker Hub vLLM pattern", app.Properties["runtime.pattern"])
+	}
+	var found bool
+	for _, c := range got.Components {
+		if c.Type == ComponentContainer {
+			found = true
+			if c.Properties["image.reference"] != image {
+				t.Errorf("image.reference = %q, want %q as written", c.Properties["image.reference"], image)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing container component")
+	}
+}
+
 func TestInferenceSpecScraper_RuntimeVersion_NonSemverTag(t *testing.T) {
 	s := newScraper()
 	dep := vllmDeploymentFixtureWithTag("latest")

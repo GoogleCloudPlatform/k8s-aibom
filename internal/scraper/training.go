@@ -91,9 +91,10 @@ func (s *TrainingSpecScraper) Scrape(ctx context.Context, w Workload, cfg *Infer
 func (s *TrainingSpecScraper) scrapePodTemplate(inputs *BOMInputs, template *corev1.PodTemplateSpec, specLocator string) {
 	isTraining := false
 	for i, c := range template.Spec.Containers {
+		short := dockerHubShortForm(c.Image)
 		// Check for training images
 		for _, p := range DefaultTrainingImagePatterns {
-			if p.Pattern.MatchString(c.Image) {
+			if matchImagePattern(p.Pattern, c.Image, short) {
 				isTraining = true
 				comp := Component{
 					Type:       ComponentApplication,

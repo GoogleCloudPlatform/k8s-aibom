@@ -22,6 +22,8 @@ When more than one scraper reports a category, the workload takes the one with t
 
 The `inference.spec` scraper lists every container of an `apps/v1` workload, with its image reference and digest, even when it finds no runtime or model. When another scraper recognizes the workload (a Qdrant or Langflow Deployment, say), those container components are kept in its BOM, ahead of the other scrapers' components, and nothing else from the `inference.spec` result is. Containers alone never make a workload an AI workload: a Deployment no scraper recognizes still gets no AIBOM. `batch/v1` Jobs and CronJobs are not read by `inference.spec`, so training and evaluation BOMs do not list containers.
 
+The image patterns of `vectordb.spec`, `agent.spec`, `training.spec` and `eval.spec` treat a Docker Hub image written with its registry the way runtime detection does (see "Runtime detection and runtime version"): `docker.io/qdrant/qdrant:v1.12.0` and `index.docker.io/qdrant/qdrant:v1.12.0` match the pattern for `qdrant/qdrant:v1.12.0`, and `docker.io/library/<name>` matches as `<name>`. No other registry prefix is stripped, so `ghcr.io/qdrant/qdrant` and a mirror path such as `mirror.example.com/docker.io/qdrant/qdrant` still do not match a pattern anchored at the Docker Hub name.
+
 ## Vector Database Heuristics
 **Rule.** The `vector-database` category is for systems whose primary function is embedding storage and approximate nearest-neighbour search, so that the image alone is an AI signal. Milvus, Qdrant, Weaviate, Chroma and Vespa qualify on that reading, and so does a `pgvector` image, a PostgreSQL build made for vector search (a plain `postgres` image is not matched). Elasticsearch, OpenSearch and Redis do not qualify: vector search is one feature among many there, and the image usually means logs, search or caching.
 
@@ -148,6 +150,17 @@ say what each pattern matches and which near-misses it leaves out.
 Supported SGLang and LiteLLM image variants are enumerated in the
 allowlist; names such as `lmsysorg/sglang-router` and
 `nvcr.io/nvidia/tritonserver-sidecar` do not receive runtime attribution.
+
+A Docker Hub image written with its registry matches the patterns for
+its short form: `docker.io/vllm/vllm-openai:v0.6.3` and
+`index.docker.io/vllm/vllm-openai:v0.6.3` attribute `vllm` through the
+same pattern as `vllm/vllm-openai:v0.6.3`, and
+`docker.io/library/<name>` matches as `<name>`. These are the names
+Docker itself resolves to the same image, and the same ones digest
+resolution treats as equal. No other registry prefix is stripped, and a
+registry host written after `docker.io/` is not either: a pattern
+anchored at Docker Hub still does not match `ghcr.io/vllm/vllm-openai`
+or a mirror path. The Component keeps the image reference as written.
 
 - **Confidence: `inferred`.** The runtime identity is inferred from a
   pattern match against the image string, not declared by the workload

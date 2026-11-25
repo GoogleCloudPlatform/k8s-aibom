@@ -1,6 +1,6 @@
 # k8s-aibom
 
-A Kubernetes controller that generates [CycloneDX 1.6 ML-BOM][cyclonedx-ml] documents for AI workloads at runtime — inference services, agent stacks, RAG pipelines, training jobs, evaluation harnesses — with auditor-traceable evidence for every attribute.
+k8s-aibom makes the AI identity of every workload a Kubernetes-native fact, derived rather than declared: which model, runtime, agent framework and provider each inference service, agent stack, RAG pipeline, training job or evaluation harness runs, read from the workload itself with the evidence and a confidence grade on every attribute. An unprivileged controller serves that fact as a [CycloneDX 1.6 ML-BOM][cyclonedx-ml] document per workload, and a status summary on the `AIBOM` resource; Prometheus series follow in v1.8. No labels required, no pods touched.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CycloneDX 1.6 ML-BOM](https://img.shields.io/badge/CycloneDX-1.6%20ML--BOM-success.svg)](https://cyclonedx.org/capabilities/mlbom/)
@@ -139,6 +139,7 @@ Always install from a release asset; the `install.yaml` at the repo root is a de
 ```bash
 kubectl krew install aibom   # or download the attested binary from the release page
 
+kubectl aibom --version                 # plugin build version (dev for unstamped builds)
 kubectl aibom summary -n prod-jobs        # table: workload, category, runtime, models, confidence, Ready
 kubectl aibom find --runtime litellm -A   # where is X running? filters: --runtime --model --image --digest --signed
 kubectl aibom view <aibom-name> -n prod-jobs        # decoded, pretty-printed BOM (--raw for canonical bytes)
@@ -166,6 +167,36 @@ The image digest is printed in the release notes. Admission policies can verify 
 - **Amazon EKS, Azure AKS, OpenShift, on-prem** — identical install; cloud-specific notes in [Installing on EKS, AKS, and other conformant clusters](docs/install-eks-aks.md).
 - **Air-gapped, forks, or development** — see [Building from Source](docs/building-from-source.md).
 
+### Verify it works in sixty seconds
+
+With the controller and kubectl plugin installed, create an opted-in namespace and deploy the [walkthrough's](docs/integrations/dependency-track.md#walkthrough) `chat` workload:
+
+```bash
+kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace demo aibom.k8saibom.dev/enabled=true
+
+kubectl apply -n demo -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: chat}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: chat}}
+  template:
+    metadata: {labels: {app: chat}}
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/ggml-org/llama.cpp:server
+          command: ["sleep", "infinity"]
+          env: [{name: HF_MODEL_ID, value: ggml-org/gemma-3-1b-it-GGUF}]
+EOF
+kubectl aibom summary -n demo
+kubectl aibom view apps-deployment-chat -n demo
+```
+
+The container stays idle; no model is downloaded. Allow time for reconciliation and the image pull, then retry the view if needed. The CycloneDX 1.6 document contains the inferred `llama.cpp` runtime and `HF_MODEL_ID` model, the declared container digest and `pkg:oci` purl from pod status, and a `serialNumber` (v1.7.0+). See the [fixture](docs/integrations/fixtures/llama-cpp-chat.cdx.json) for the expected shape; namespace, digest, and serial number reflect your workload. Use `kubectl aibom view apps-deployment-chat -n demo --raw` for the canonical bytes when comparing with the fixture.
+
 ### Opt in a namespace
 
 The controller is installed cluster-wide but inactive until you opt in at least one namespace:
@@ -174,7 +205,15 @@ The controller is installed cluster-wide but inactive until you opt in at least 
 kubectl label namespace my-ai-namespace aibom.k8saibom.dev/enabled=true
 ```
 
-Until then the controller is running and recording nothing, and it says so: `AIBOMControllerConfig/default` carries a `NamespacesOptedIn` condition that is `False` with this command in its message, and flips to `True` with the count once a namespace matches (`kubectl aibom summary` prints the same hint when it finds no documents). It is informational and never affects `Ready`.
+Until then the controller is running and recording nothing, and it says so: `AIBOMControllerConfig/default` carries a `NamespacesOptedIn` condition that is `False` with this command in its message, and flips to `True` with the count once a namespace matches. It is informational and never affects `Ready`.
+
+If `kubectl aibom summary` finds no AIBOMs in a namespace labelled
+`aibom.k8saibom.dev/enabled=true`, it suggests checking that the controller is
+running and inspecting `status.conditions` and
+`status.effectiveInferenceRuntimeImagePatterns` with
+`kubectl get aibomcontrollerconfig default -o yaml`. The summary prints the
+general opt-in hint for unlabelled namespaces, with `-A`, or when it cannot read
+the namespace.
 
 Within about a minute the controller records a `NamespaceObserved` event in the namespace, with how many workloads it considered and how many matched an AI workload signal. Workloads that match none get no `AIBOM`; that is conservative detection, not a fault:
 
@@ -367,7 +406,7 @@ and a raw kubelet CPU-counter delta over a stated 10-minute window):
   minute** — watch reconnects only, zero writes, zero reconciles,
   1.07 mCPU average. Upgrade 23 s, rollback 17–19 s, all AIBOMs and
   hashes preserved across a full version round trip; see
-  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md); v1.6.1 ADR-019 legs with the NVIDIA Dynamo pairing (one AIBOM per DynamoGraphDeployment, operator outage, 1.5.1→1.6.1 upgrade and rollback, cost): [docs/evidence/v1.6.1-gke-adr019-dynamo.md](docs/evidence/v1.6.1-gke-adr019-dynamo.md)
+  [docs/evidence](docs/evidence/v1.5.1-gke-upgrade-rollback-apiserver.md); v1.6.0-rc.1 two-chart install and DisaggregatedSet roll-up: [docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md](docs/evidence/v1.6.0-rc1-gke-two-chart-dset.md); v1.6.1 ADR-019 legs with the NVIDIA Dynamo pairing (one AIBOM per DynamoGraphDeployment, operator outage, 1.5.1→1.6.1 upgrade and rollback, cost): [docs/evidence/v1.6.1-gke-adr019-dynamo.md](docs/evidence/v1.6.1-gke-adr019-dynamo.md); v1.7.0-rc.1 release artefacts, the 1.7.0 document shape, InferencePool membership and steady state: [docs/evidence/v1.7.0-rc1-gke-interop-shape.md](docs/evidence/v1.7.0-rc1-gke-interop-shape.md)
 - 256 KB inline threshold; BOMs exceeding it are offloaded to an
   external sink and referenced by URL in the CR status (boundary
   observed live in NVIDIA/aicr#2310)
@@ -396,7 +435,7 @@ See [docs/compatibility.md](docs/compatibility.md) for the tested matrix and sup
 
 ## Roadmap
 
-Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.6.2**, the coverage release — NVIDIA Dynamo, NIM Operator, LeaderWorkerSet, llm-d `DisaggregatedSet` and CronJob as reported kinds, ownership roll-up (one workload, one AIBOM), a workload-kind allowlist, the companion CRDs chart, and third-party CRD outages that degrade one kind instead of the controller. Next: **v1.7, the interoperability release (24 November 2026)** — one byte-shape transition to CycloneDX conventions (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:` property namespace), proven by Dependency-Track and GUAC ingestion, plus `InferencePool` membership as a routing fact. Then **v1.8, the agent-platform release (January 2027)** — kagent and agent-sandbox lenses, `status.summary.runtimes`, OperatorHub.
+Releases ship on a monthly train ([VERSIONING.md](VERSIONING.md)); delivered work is in the [CHANGELOG](CHANGELOG.md). Who ships and runs it: [ADOPTERS.md](ADOPTERS.md). Latest: **v1.7.0**, the interoperability release — one byte-shape transition to CycloneDX conventions (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:` property namespace, a `dependencies` array, a deterministic `serialNumber`), proven by Dependency-Track and GUAC ingestion; `InferencePool` membership as a routing fact; the `verified` confidence tier in the code; Docker Hub images recognised with or without their registry prefix; chart NOTES after install. Next: **v1.8, the agent-platform release (January 2027)** — kagent and agent-sandbox lenses, `status.summary.runtimes`, OperatorHub, and the AI identity as Prometheus series (`aibom_workload_info`, `aibom_pod_info`) so cost and utilisation read per model.
 
 Full detail in [docs/roadmap.md](docs/roadmap.md).
 

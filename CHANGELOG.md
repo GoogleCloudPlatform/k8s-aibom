@@ -6,6 +6,45 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Model identity as a metrics dimension** (#411, Design 011). Two info
+  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
+  per workload per model: namespace, kind, name, category, runtime and
+  version, model, model confidence, served model) and `aibom_pod_info`
+  (one per owned pod per model), always `1`, refreshed on every
+  reconcile including the unchanged-input fast path, and removed when
+  the AIBOM is deleted, including by owner garbage collection. They let
+  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
+  read per model with one PromQL join. The inference scraper records
+  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
+  on the container's model components and as `servedName` on the status
+  summary (additive, both served API versions), so the identity exposed
+  equals the `model_name` on vLLM's own metrics. Reference recording
+  rules are in `grafana/model-attribution-rules.yaml`; the chart can
+  install them as a PrometheusRule (`metrics.rules.enabled`) and a
+  per-model Grafana dashboard as a ConfigMap
+  (`metrics.dashboard.enabled`), both off by default. See
+  `docs/observability/per-model-utilisation.md`. Documents without the
+  flag are byte-identical.
+
+- Add `kubectl aibom --version` to report the plugin's build version (#403).
+
+### Fixed
+
+- Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
+
+- **The release workflow fails where a chart push fails.** `helm push`
+  was piped through `tee` without `pipefail`, so a registry error left
+  the step green with an empty digest and the release stopped one step
+  later with an unrelated-looking attestation error (the first v1.7.0
+  attempt). Chart pushes now go through `hack/release/push-chart.sh`:
+  up to four attempts, and a non-zero exit when the push fails or prints
+  no digest. The release dry-run exercises the script's paths against a
+  stub. No change to published artefacts.
+
+## [1.7.0] - 2026-11-24
+
 ### Document shape (one transition, v1.7.0)
 
 Six changes to the emitted CycloneDX document land together (#132,
@@ -108,22 +147,12 @@ API schema do not change.
 
 ### Added
 
-- **Model identity as a metrics dimension** (#411, Design 011). Two info
-  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
-  per workload per model: namespace, kind, name, category, runtime and
-  version, model, model confidence, served model) and `aibom_pod_info`
-  (one per owned pod per model), always `1`, refreshed on every
-  reconcile including the unchanged-input fast path, and removed when
-  the AIBOM is deleted, including by owner garbage collection. They let
-  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
-  read per model with one PromQL join. The inference scraper records
-  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
-  on the container's model components and as `servedName` on the status
-  summary (additive, both served API versions), so the identity exposed
-  equals the `model_name` on vLLM's own metrics. Reference recording
-  rules and a Grafana dashboard ship under `docs/observability/` and as
-  chart toggles `metrics.rules.enabled` and `metrics.dashboard.enabled`,
-  both off by default. Documents without the flag are byte-identical.
+- **The chart prints what to do next.** `helm install` and `helm upgrade`
+  end with a NOTES section (#401, #406): the namespace opt-in label,
+  `kubectl get aibom -A` and `kubectl aibom summary -A`, a pointer to
+  the `AIBOMControllerConfig` named `default` and the chart's `config.*`
+  values, and the reminder that `rbac.sinkSecretAccess` is off by
+  default.
 
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
   Part 2a). An inference workload whose declared Pod template labels
@@ -318,6 +347,30 @@ API schema do not change.
   fixed toolchain; `govulncheck` is clean again. No change in behaviour.
 
 ### Fixed
+
+- **A vector database, agent framework, training or evaluation image
+  written with `docker.io/` is recognized.** The `vectordb.spec`,
+  `agent.spec`, `training.spec` and `eval.spec` image patterns are
+  anchored at the short Docker Hub name (`^qdrant/qdrant`,
+  `^langflowai/langflow`, `^pytorch/pytorch`, `^eleutherai/lm-eval`,
+  ...) and were matched against the image as written, so
+  `docker.io/qdrant/qdrant:v1.12.0` (or `index.docker.io/...`) matched
+  nothing. With no other signal the workload got no category and no
+  AIBOM. These patterns now also try the Docker Hub short form, as
+  runtime detection does since #399. No other registry prefix is
+  stripped, and the image reference is recorded as written.
+
+- **A Docker Hub image written with `docker.io/` gets its runtime
+  attributed (#399).** Runtime detection matched the image reference as
+  written against patterns anchored at the short Docker Hub name, so
+  `docker.io/vllm/vllm-openai:v0.6.3` (or `index.docker.io/...`) matched
+  nothing while `vllm/vllm-openai:v0.6.3` matched `vllm`. Digest
+  resolution already treated the two as the same image, so the BOM
+  showed the digest but no runtime, and a workload with no other signal
+  got no AIBOM at all. The patterns are now also tried against the short
+  form, with `docker.io/`, `index.docker.io/` and `library/` removed.
+  No other registry prefix is stripped, and the image reference is
+  recorded as written.
 
 - **A webhook endpoint on an IPv6 loopback or link-local address is
   rejected at config load.** The SSRF check in the webhook sink's

@@ -58,9 +58,14 @@ which is its default under the GPU Operator.
    ```
 
    Without the Prometheus Operator, leave `rules.enabled` off and load
-   [recording-rules.yaml](recording-rules.yaml) into your Prometheus
-   configuration instead; leave `dashboard.enabled` off and import
-   [dashboard.json](dashboard.json) into Grafana by hand.
+   [grafana/model-attribution-rules.yaml](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/grafana/model-attribution-rules.yaml)
+   into your Prometheus configuration instead; leave `dashboard.enabled`
+   off and import the chart's
+   [aibom-attribution-dashboard.json](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/charts/k8s-aibom/files/aibom-attribution-dashboard.json)
+   into Grafana by hand. The controller-health dashboard that was
+   already in the repository,
+   [grafana/dashboard.json](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/grafana/dashboard.json),
+   is separate and unchanged.
 
 2. Opt a namespace in and let the controller attribute its workloads:
 

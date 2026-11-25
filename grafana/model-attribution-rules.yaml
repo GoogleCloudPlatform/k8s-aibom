@@ -1,4 +1,4 @@
-# Proof-of-concept recording rules: resource usage attributed to model identity.
+# Reference recording rules: resource usage attributed to model identity (Design 011).
 # The only new input is aibom_pod_info (from the AIBOM resource); everything
 # else is cAdvisor / kube-state / DCGM metrics that clusters already have.
 groups:

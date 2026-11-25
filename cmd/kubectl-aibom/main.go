@@ -48,6 +48,13 @@ var aibomGVR = schema.GroupVersionResource{
 	Resource: "aiboms",
 }
 
+var namespaceGVR = schema.GroupVersionResource{
+	Version:  "v1",
+	Resource: "namespaces",
+}
+
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "kubectl-aibom: %v\n", err)
@@ -79,6 +86,7 @@ func run(args []string) error {
   kubectl aibom find [--runtime R] [--model M] [--image I] [--digest D] [--signed S] [-n namespace | -A]
   kubectl aibom view <aibom-name> [-n namespace] [--raw]
   kubectl aibom verify <aibom-name> [-n namespace]
+  kubectl aibom --version
 
 find answers "where is this running?" — filters AND together; zero
 matches prints "0 matches" and exits 0. Zero matches is not proof of
@@ -100,6 +108,12 @@ Flags:
 	switch sub {
 	case "help", "-h", "--help":
 		fs.Usage()
+		return nil
+	case "--version":
+		if len(args) != 1 {
+			return fmt.Errorf("--version does not take arguments")
+		}
+		fmt.Fprintln(os.Stdout, version)
 		return nil
 	case "summary", "find", "view", "verify":
 	default:
@@ -268,13 +282,19 @@ Flags:
 			if err != nil {
 				return err
 			}
-			return runSummary(l.Items, os.Stdout, os.Stderr)
+			return runSummary(l.Items, nil, os.Stdout, os.Stderr)
 		}
 		l, err := dyn.Resource(aibomGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return err
 		}
-		return runSummary(l.Items, os.Stdout, os.Stderr)
+		var summaryNamespace *unstructured.Unstructured
+		if len(l.Items) == 0 {
+			// Some inventory readers cannot read cluster-scoped namespaces.
+			// A failed lookup falls back to a generic hint.
+			summaryNamespace, _ = dyn.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+		}
+		return runSummary(l.Items, summaryNamespace, os.Stdout, os.Stderr)
 
 	case "find":
 		var items []unstructured.Unstructured
