@@ -150,16 +150,18 @@ env.
 
 ### 4. Reference rules and dashboard
 
-Shipped under `docs/observability/`, not installed by the chart by
-default:
+Shipped with the repository, not installed by the chart by default:
 
-- `recording-rules.yaml`: CPU cores, working-set memory, GPU
+- `grafana/model-attribution-rules.yaml`: CPU cores, working-set memory, GPU
   utilisation, GPUs allocated, workloads and pods, each by model and
   runtime.
-- `dashboard.json`: utilisation by model, share by model, memory by
+- `charts/k8s-aibom/files/aibom-attribution-dashboard.json` (the one
+  source; the existing controller-health board in `grafana/` is
+  separate): utilisation by model, share by model, memory by
   model, by runtime, GPU by model, three stat tiles, and an inventory
   table from `aibom_workload_info`.
-- A page, "per-model GPU utilisation in ten minutes", that assumes
+- A page, `docs/observability/per-model-utilisation.md`, "per-model GPU
+  utilisation in ten minutes", that assumes
   kube-prometheus-stack and dcgm-exporter and nothing else.
 
 The chart gains `metrics.rules.enabled` (PrometheusRule, default false)
