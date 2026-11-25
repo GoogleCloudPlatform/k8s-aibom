@@ -286,7 +286,13 @@ window closes.
    sink emission; Agent Sandbox's own sizing comments mention pools of
    about 1–2k replicas. This cost is not measured here. Suppressing
    idle sandboxes until claimed would hide running Pods; reviewers who
-   run large pools should say which they prefer.
+   run large pools should say which they prefer. The cost above counts
+   documents, not status writes. #426 (an open PR fixing #409) would
+   cap timestamp-only status writes for an unchanged workload at one
+   every five minutes instead of one per reconcile; each reconcile of
+   an idle replica would still run the namespace-wide listing, and each
+   replica would still cost an `AIBOM` object and a first sink
+   emission.
 3. **Denied owner reads for claimed and pooled sandboxes.** Adding
    `get` on `sandboxclaims` and `sandboxwarmpools`
    (`extensions.agents.x-k8s.io`) would let the walk finish cleanly and
