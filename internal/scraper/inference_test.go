@@ -392,6 +392,134 @@ func TestInferenceSpecScraper_ArgVariableReferences(t *testing.T) {
 	}
 }
 
+// A model env var whose value refers to an earlier env var with
+// $(VAR_NAME) names the model the kubelet sets, not the reference text. A
+// value whose reference the spec does not state names no model.
+func TestInferenceSpecScraper_EnvVariableReferences(t *testing.T) {
+	lit := func(name, value string) corev1.EnvVar { return corev1.EnvVar{Name: name, Value: value} }
+	fromConfigMap := func(name string) corev1.EnvVar {
+		return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "models"}, Key: "id",
+		}}}
+	}
+	const locator = "spec.template.spec.containers[0].env"
+	cases := []struct {
+		name        string
+		env         []corev1.EnvVar
+		wantModel   string // "" = no model component
+		wantLocator string
+		wantEnvVar  string // identity.envVarName
+	}{
+		{
+			name:        "reference to an earlier env var",
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b"), lit("HF_MODEL_ID", "$(MODEL_ID)")},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[1](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID,MODEL_ID",
+		},
+		{
+			name: "several references in one value",
+			env: []corev1.EnvVar{
+				lit("ORG", "google"), lit("SIZE", "2b"), lit("HF_MODEL_ID", "$(ORG)/gemma-$(SIZE)-$(ORG)"),
+			},
+			wantModel:   "google/gemma-2b-google",
+			wantLocator: locator + "[2](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID,ORG,SIZE",
+		},
+		{
+			name: "reference to an env var that has one itself",
+			env: []corev1.EnvVar{
+				lit("ORG", "google"), lit("MODEL_ID", "$(ORG)/gemma-2-2b"), lit("HF_MODEL_ID", "$(MODEL_ID)"),
+			},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[2](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID,MODEL_ID",
+		},
+		{
+			name: "the value at that point in the list, not a later one",
+			env: []corev1.EnvVar{
+				lit("MODEL_ID", "google/gemma-2-2b"), lit("HF_MODEL_ID", "$(MODEL_ID)"), lit("MODEL_ID", "google/gemma-2-9b"),
+			},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[1](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID,MODEL_ID",
+		},
+		{
+			name:        "escaped reference is passed as written",
+			env:         []corev1.EnvVar{lit("MODEL_ID", "google/gemma-2-2b"), lit("HF_MODEL_ID", "$$(MODEL_ID)")},
+			wantModel:   "$(MODEL_ID)",
+			wantLocator: locator + "[1](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID",
+		},
+		{
+			name:        "literal model is unchanged",
+			env:         []corev1.EnvVar{lit("ORG", "google"), lit("HF_MODEL_ID", "google/gemma-2-2b")},
+			wantModel:   "google/gemma-2-2b",
+			wantLocator: locator + "[1](HF_MODEL_ID)",
+			wantEnvVar:  "HF_MODEL_ID",
+		},
+		{
+			name: "reference to a ConfigMap value",
+			env:  []corev1.EnvVar{fromConfigMap("MODEL_ID"), lit("HF_MODEL_ID", "$(MODEL_ID)")},
+		},
+		{
+			name: "undefined variable (envFrom, Service links or none)",
+			env:  []corev1.EnvVar{lit("HF_MODEL_ID", "google/$(NAME)")},
+		},
+		{
+			name: "reference to a later env var",
+			env:  []corev1.EnvVar{lit("HF_MODEL_ID", "$(ORG)/gemma-2-2b"), lit("ORG", "google")},
+		},
+		{
+			name: "reference to an empty value",
+			env:  []corev1.EnvVar{lit("MODEL_ID", ""), lit("HF_MODEL_ID", "$(MODEL_ID)")},
+		},
+		{
+			name: "value from a ConfigMap",
+			env:  []corev1.EnvVar{fromConfigMap("HF_MODEL_ID")},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "gemma-deployment", Namespace: "ns"},
+				Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "inference-server",
+						Image: "vllm/vllm-openai:v0.10.0",
+						Env:   tc.env,
+					}},
+				}}},
+			}
+			w := Workload{Kind: WorkloadKind{Group: "apps", Version: "v1", Kind: "Deployment"}, Name: dep.Name, Namespace: dep.Namespace, Object: dep}
+			got, err := newScraper().Scrape(context.Background(), w, testConfig())
+			if err != nil {
+				t.Fatalf("Scrape: %v", err)
+			}
+			models := componentsOf(got.Components, ComponentMLModel)
+			if tc.wantModel == "" {
+				if len(models) != 0 {
+					t.Fatalf("want no model component, got:\n%s", dumpComponents(models))
+				}
+				return
+			}
+			if len(models) != 1 {
+				t.Fatalf("want one model component %q, got:\n%s", tc.wantModel, dumpComponents(models))
+			}
+			m := models[0]
+			if m.Name != tc.wantModel || m.Confidence != ConfidenceInferred ||
+				m.Evidence.Source != SourceEnvVar || m.Evidence.Locator != tc.wantLocator {
+				t.Errorf("model = %s %s {%s %s}, want %s inferred {%s %s}",
+					m.Name, m.Confidence, m.Evidence.Source, m.Evidence.Locator,
+					tc.wantModel, SourceEnvVar, tc.wantLocator)
+			}
+			if got := m.Properties["identity.envVarName"]; got != tc.wantEnvVar {
+				t.Errorf("identity.envVarName = %q, want %q", got, tc.wantEnvVar)
+			}
+		})
+	}
+}
+
 func TestExpandVarRefs(t *testing.T) {
 	vars := map[string]string{"A": "x", "EMPTY": ""}
 	lookup := func(name string) (string, bool) {

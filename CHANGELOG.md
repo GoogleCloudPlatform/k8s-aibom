@@ -6,6 +6,30 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Model identity as a metrics dimension** (#411, Design 011). Two info
+  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
+  per workload per model: namespace, kind, name, category, runtime and
+  version, model, model confidence, served model) and `aibom_pod_info`
+  (one per owned pod per model), always `1`, refreshed on every
+  reconcile including the unchanged-input fast path, and removed when
+  the AIBOM is deleted, including by owner garbage collection. They let
+  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
+  read per model with one PromQL join. The inference scraper records
+  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
+  on the container's model components and as `servedName` on the status
+  summary (additive, both served API versions), so the identity exposed
+  equals the `model_name` on vLLM's own metrics. Reference recording
+  rules are in `grafana/model-attribution-rules.yaml`; the chart can
+  install them as a PrometheusRule (`metrics.rules.enabled`) and a
+  per-model Grafana dashboard as a ConfigMap
+  (`metrics.dashboard.enabled`), both off by default. See
+  `docs/observability/per-model-utilisation.md`. Documents without the
+  flag are byte-identical.
+
+- Add `kubectl aibom --version` to report the plugin's build version (#403).
+
 ### Removed
 
 - The Cloud Shell tutorial (`.cloudshell/`), which was pinned to v1.0.0 and
@@ -13,6 +37,8 @@ All notable changes to k8s-aibom are documented here. The format follows
   bug report template (#404).
 
 ### Fixed
+
+- Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
 
 - **The release workflow fails where a chart push fails.** `helm push`
   was piped through `tee` without `pipefail`, so a registry error left
@@ -22,6 +48,14 @@ All notable changes to k8s-aibom are documented here. The format follows
   up to four attempts, and a non-zero exit when the push fails or prints
   no digest. The release dry-run exercises the script's paths against a
   stub. No change to published artefacts.
+
+- **`aibom_workloads_total` is now set (#398).** The gauge was registered
+  but never written, so it had no series. The leader now recounts the
+  AIBOMs in its cache every 15 seconds, by `category` and `runtime`
+  (`unknown` when the status has no summary yet, `none` when no runtime
+  was detected), so the value follows adds, deletes and restarts. The
+  example Grafana dashboard gains a "Tracked Workloads (by Category)"
+  panel.
 
 ## [1.7.0] - 2026-11-24
 
@@ -327,6 +361,21 @@ API schema do not change.
   fixed toolchain; `govulncheck` is clean again. No change in behaviour.
 
 ### Fixed
+
+- **A model env var that refers to another env var names the model, not
+  the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
+  `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`
+  produced a model component named by the reference text, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references from the entries before them, so the
+  values in a container's `env` or a NIMService's `spec.env` are now
+  read that way, as model args are since #391. A reference whose value
+  the spec does not state (`valueFrom`, `envFrom`, a Service link, a
+  later entry, undefined) names no model. A workload whose only signal
+  was such a reference is now unresolved and gets no AIBOM, so an
+  existing one is removed. `identity.envVarName` lists the referenced
+  names after the variable's own name. Values without a `$` are read as
+  before.
 
 - **A vector database, agent framework, training or evaluation image
   written with `docker.io/` is recognized.** The `vectordb.spec`,
