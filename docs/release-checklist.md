@@ -57,15 +57,20 @@ commit:
 
 ## Tag & publish
 
-1. Tag the `verifier` module on the same commit, before the root tag:
+1. Tag the `verifier` module first, on its own commit (call it A),
+   before the root tag:
    `git tag verifier/vX.Y.Z && git push origin verifier/vX.Y.Z`.
    The root go.mod requires `verifier` by version (no replace
    directive; #397); until the first `verifier` tag exists it pins a
-   pseudo-version of the current `main` commit. After tagging,
-   bump the require to vX.Y.Z (`go get
+   pseudo-version of the current `main` commit. Then bump the
+   require to vX.Y.Z in a new commit B (`go get
    github.com/GoogleCloudPlatform/k8s-aibom/verifier@vX.Y.Z`) and
-   re-run `go mod tidy`, so `go install .../cmd/kubectl-aibom@vX.Y.Z`
-   resolves the tagged module. Then run `bash
+   re-run `go mod tidy`, landing B through a PR so CI runs on it, so
+   `go install .../cmd/kubectl-aibom@vX.Y.Z` resolves the tagged
+   module. The root tag in step 2 goes on B, not on A. When
+   `verifier/` has not changed since the last `verifier/` tag, no
+   new tag is needed: the pin check compares trees, not commits, so
+   the existing tag already matches the tree at B. Then run `bash
    hack/check-verifier-pin.sh`: it fails if the pinned verifier
    version is not the content of `./verifier` at the release commit,
    or if the module the proxy serves for it differs from the tree.
@@ -75,7 +80,8 @@ commit:
    the script is a release-time gate only — in-tree drift in the
    meantime is caught on every PR by the go.work step in the test
    workflow.
-2. Tag the verified commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+2. Tag the verified commit (the require-bump commit B from step 1):
+   `git tag vX.Y.Z && git push origin vX.Y.Z`.
    If the release workflow fails, read the failed step's log before
    anything else, and do not move or delete the tag (the Go module proxy
    caches it). Re-running the workflow on the same tag is safe: every

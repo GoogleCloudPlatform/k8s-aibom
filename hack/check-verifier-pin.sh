@@ -50,6 +50,19 @@ MODULE="github.com/GoogleCloudPlatform/k8s-aibom/verifier"
 
 fail() { echo "check-verifier-pin: FAIL: $*" >&2; exit 1; }
 
+# sha256_hex <file>: the hex sha256 of a file. sha256sum is not
+# installed by default on macOS, where releases are cut, so fall back
+# to shasum, then to openssl (which this script already depends on).
+sha256_hex() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    openssl dgst -sha256 "$1" | sed 's/^.*= //'
+  fi
+}
+
 # hash1_dir <dir> <prefix>: the dirhash.Hash1 digest of a directory
 # ("h1:" + base64 of the sha256 over "<hex>  <prefixed-name>" lines,
 # files sorted bytewise). Matches `go mod download -json`'s Sum for a
@@ -57,7 +70,7 @@ fail() { echo "check-verifier-pin: FAIL: $*" >&2; exit 1; }
 hash1_dir() {
   local dir="$1" prefix="$2"
   ( cd "$dir" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
-      printf '%s  %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "${prefix}${f}"
+      printf '%s  %s\n' "$(sha256_hex "$f")" "${prefix}${f}"
     done ) | openssl dgst -sha256 -binary | base64 | tr -d '\n' | sed 's/^/h1:/'
   echo
 }

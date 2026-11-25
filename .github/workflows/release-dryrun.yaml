@@ -74,6 +74,12 @@ jobs:
     - name: Chart push script (retry and fail-closed paths)
       run: hack/release/push-chart_test.sh
 
+    # The verifier pin gate runs at release time; exercise it against
+    # a fixture repo with a stub go (no proxy, no network) so the gate
+    # itself cannot rot between releases.
+    - name: Verifier pin script (pin and proxy checks)
+      run: hack/check-verifier-pin_test.sh
+
     - name: Generate install.yaml
       # HELM override: the Makefile defaults to ./bin/helm and its
       # self-bootstrap cannot write to the runner; use setup-helm's binary.

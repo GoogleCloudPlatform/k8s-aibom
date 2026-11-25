@@ -48,10 +48,14 @@ jobs:
     - name: Root tests against in-tree verifier (go.work)
       # The root go.mod requires verifier by version (#397), so a
       # change under verifier/ is invisible to the root tests until a
-      # verifier tag exists and the require is bumped. Run the root
-      # tests once more with a temporary, uncommitted go.work pointing
-      # the import at ./verifier, so the tree is always tested
-      # together while the published module graph stays replace-free.
+      # verifier tag exists and the require is bumped. Build and test
+      # once more with a temporary, uncommitted go.work pointing the
+      # import at ./verifier, so the tree is always tested together
+      # while the published module graph stays replace-free. Only
+      # internal/sigverify imports the verifier (cmd/manager is its
+      # only dependent), so the workspace run covers just those two
+      # packages instead of repeating all of `make test`; the build
+      # still compiles the whole tree against the in-tree module.
       # The workspace file is deleted in the same step (and
       # gitignored); `go work sync` must not leave go.mod changes
       # behind, so those are restored too.
@@ -61,7 +65,8 @@ jobs:
         go work init
         go work use . ./verifier
         go work sync
-        make test
+        go build ./...
+        go test -race ./internal/sigverify/... ./cmd/manager/...
 
   e2e:
     needs: [test]
