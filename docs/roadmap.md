@@ -107,6 +107,11 @@ code.
   runtime, not one; the API change that waits for a minor.
 - **OperatorHub** (#345): an OLM bundle and submission to operatorhub.io
   and the OpenShift catalog, with an OpenShift install page.
+- **Model identity as a metrics dimension** ([#411](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/411),
+  Design 011): `aibom_workload_info` and `aibom_pod_info` so cAdvisor,
+  DCGM and OpenCost series join to a model with one PromQL expression;
+  `--served-model-name` recorded; reference recording rules and a
+  dashboard, off by default.
 - **Carry-overs from the 1.7 stretch list** in the order above.
 
 **Not in this release:** `v1alpha1` removal (a separate, announced
