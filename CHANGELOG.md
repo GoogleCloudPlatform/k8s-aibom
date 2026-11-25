@@ -12,6 +12,17 @@ All notable changes to k8s-aibom are documented here. The format follows
   predated the Helm OCI install, and its "Cloud Shell tutorial" option in the
   bug report template (#404).
 
+### Fixed
+
+- **The release workflow fails where a chart push fails.** `helm push`
+  was piped through `tee` without `pipefail`, so a registry error left
+  the step green with an empty digest and the release stopped one step
+  later with an unrelated-looking attestation error (the first v1.7.0
+  attempt). Chart pushes now go through `hack/release/push-chart.sh`:
+  up to four attempts, and a non-zero exit when the push fails or prints
+  no digest. The release dry-run exercises the script's paths against a
+  stub. No change to published artefacts.
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)
