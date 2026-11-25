@@ -109,8 +109,9 @@ type AIBOMStatus struct {
 	// status, in an external sink, or truncated (no inline + no external).
 	BOMDocument *BOMDocumentRef `json:"bomDocument,omitempty"`
 
-	// LastReconciled is the time the controller last reconciled this
-	// AIBOM, whether or not the BOM was regenerated.
+	// LastReconciled is the time of the last recorded reconciliation.
+	// Timestamp-only updates for an unchanged workload occur at most once
+	// every five minutes.
 	LastReconciled *metav1.Time `json:"lastReconciled,omitempty"`
 
 	// BOMHash is the SHA-256 of the most recently generated BOM
@@ -128,8 +129,7 @@ type AIBOMStatus struct {
 	// The reconciler compares this against a freshly-computed
 	// inputs hash on every reconcile pass; when they match, the
 	// reconciler skips BOM regeneration and external-sink emission
-	// (the fast path) to reduce computational and storage overhead,
-	// updating only LastReconciled and ObservedGeneration.
+	// (the fast path) to reduce computational and storage overhead.
 	InputHash string `json:"inputHash,omitempty"`
 
 	// ObservedGeneration is the .metadata.generation of the AIBOM at

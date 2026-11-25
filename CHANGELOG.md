@@ -38,6 +38,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **Repeated pod events on an unchanged workload refresh AIBOM status at
+  most once every five minutes** (#409). In a fake-client test with one
+  vLLM Deployment reconciled every 30 seconds for eight simulated minutes,
+  status writes fell from 17 to 2, including the initial write. Inventory,
+  generation and extraction-error updates are still written immediately.
+
 - Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
 
 - **The release workflow fails where a chart push fails.** `helm push`
