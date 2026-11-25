@@ -262,6 +262,9 @@ func startEnvTestWith(t *testing.T, opts envTestOptions) *envTestEnv {
 	if err := (&CronJobReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("SetupWithManager CronJobReconciler: %v", err)
 	}
+	if err := (&AIBOMInfoGCReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+		t.Fatalf("SetupWithManager AIBOMInfoGCReconciler: %v", err)
+	}
 	// Third-party kinds through the supervisor, exactly as cmd/manager
 	// wires them (Design 004), with test-speed knobs.
 	watchHealth := NewWatchHealth()

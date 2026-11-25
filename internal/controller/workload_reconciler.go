@@ -291,6 +291,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
 			}
 			r.Pools.forget(client.ObjectKeyFromObject(aibom))
+			metrics.ForgetWorkloadInfo(client.ObjectKeyFromObject(aibom).String())
 		} else if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("get orphaned AIBOM: %w", err)
 		}
@@ -366,6 +367,9 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			recordExtractionErrors(&next, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
 			// Bootstrap detection below needs a non-nil lastReconciled, regardless of its age.
 			if skipFastPathStatusTouch(&existing.Status, &next) {
+				// The status write is skipped, but the pod set may have
+				// changed: keep the identity series (Design 011) current.
+				metrics.SetWorkloadInfo(aibomKey.String(), existing.Status.Summary, ownedPodNames(req.Workload.Pods))
 				return ctrl.Result{}, nil
 			}
 			existing.Status = next
@@ -376,6 +380,9 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				r.recordStatusPersistFailure(&existing, req, err)
 				return ctrl.Result{}, fmt.Errorf("update AIBOM status (fast path): %w", err)
 			}
+			// The document is unchanged but the pod set may not be
+			// (Design 011): refresh the identity series every reconcile.
+			metrics.SetWorkloadInfo(aibomKey.String(), existing.Status.Summary, ownedPodNames(req.Workload.Pods))
 			return ctrl.Result{}, nil
 		}
 		// Stale cache: this process already emitted exactly this document
@@ -510,6 +517,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("update AIBOM status: %w", err)
 	}
 	r.Pools.remember(aibom, pools)
+	metrics.SetWorkloadInfo(aibomKey.String(), aibom.Status.Summary, ownedPodNames(req.Workload.Pods))
 	if sinkFailed {
 		r.emittedStore().forget(aibomKey)
 	} else {
@@ -873,6 +881,7 @@ func (r *WorkloadReconciler) deleteWorkloadAIBOM(ctx context.Context, req Worklo
 		return fmt.Errorf("delete %s AIBOM: %w", why, err)
 	}
 	r.Pools.forget(client.ObjectKeyFromObject(aibom))
+	metrics.ForgetWorkloadInfo(client.ObjectKeyFromObject(aibom).String())
 	r.emittedStore().forget(client.ObjectKeyFromObject(aibom))
 	return nil
 }
@@ -1028,4 +1037,14 @@ func (r *WorkloadReconciler) EnqueueWorkloadForPod(targetKind string) handler.Ma
 		}
 		return []reconcile.Request{{NamespacedName: ownerKey}}
 	}
+}
+
+// ownedPodNames lists the names of the pods a reconcile gathered for the
+// workload, the pod set the identity series (Design 011) describe.
+func ownedPodNames(pods []corev1.Pod) []string {
+	out := make([]string, 0, len(pods))
+	for i := range pods {
+		out = append(out, pods[i].Name)
+	}
+	return out
 }

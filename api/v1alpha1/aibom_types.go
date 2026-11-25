@@ -207,6 +207,12 @@ type ModelSummary struct {
 	// (see Signed). Never "unresolved" — unresolved attributes are not
 	// summarized.
 	Confidence string `json:"confidence,omitempty"`
+	// ServedName is the alias the serving engine was told to publish the
+	// model under (vLLM --served-model-name), when the container args set
+	// one; the name the engine's own metrics carry as model_name. Empty
+	// when the args set no alias.
+	// +optional
+	ServedName string `json:"servedName,omitempty"`
 	// Signed encodes signature presence and verification. One of
 	// "unsigned", "claimed", "verified"; empty when the workload
 	// declares no signature reference, which readers treat as
