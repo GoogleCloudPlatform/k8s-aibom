@@ -313,27 +313,35 @@ func (s *InferenceSpecScraper) extractEnvVarModelsAt(specLocator string, c corev
 // locatorBase is the path of the object that holds the env list.
 // containerName may be empty for CRs whose env list is not inside a
 // container (NIMService spec.env); the container.name property is then
-// omitted rather than written empty.
+// omitted rather than written empty. $(VAR_NAME) references in a value
+// are expanded from the entries before it; a value with a reference that
+// cannot be resolved names no model, as in argModels.
 func envVarModels(env []corev1.EnvVar, containerName, locatorBase string, cfg *InferenceConfig) []Component {
 	var out []Component
+	resolved, _ := resolveSpecEnv(env)
 	for envIdx, e := range env {
 		if !cfg.IsModelEnvVarName(e.Name) {
 			continue
 		}
-		if e.Value == "" {
-			// Honest extraction: empty value is not a model identity.
+		value := resolved[envIdx].value
+		if value == "" || !resolved[envIdx].ok {
+			// Honest extraction: an empty value, or one the spec does not
+			// state, is not a model identity.
 			continue
 		}
+		// The locator names e, whose value shows the reference; the names
+		// after e.Name lead from there to the value (see withEnvVarName).
+		names := append([]string{e.Name}, resolved[envIdx].refs...)
 		props := map[string]string{
 			"identity.confidence": "claimed",
-			"identity.envVarName": e.Name,
+			"identity.envVarName": strings.Join(names, ","),
 		}
 		if containerName != "" {
 			props["container.name"] = containerName
 		}
 		out = append(out, Component{
 			Type:       ComponentMLModel,
-			Name:       TruncateString(e.Value, MaxComponentNameLength),
+			Name:       TruncateString(value, MaxComponentNameLength),
 			Confidence: ConfidenceInferred,
 			Evidence: Evidence{
 				Source:  SourceEnvVar,
@@ -398,30 +406,51 @@ func expandVarRefs(s string, lookup func(string) (string, bool)) (expanded strin
 	return b.String(), ok
 }
 
-// specEnvValues returns the env vars whose values the container spec
-// states, resolved in order as the kubelet resolves them: each value is
-// expanded against the entries before it, and a later entry replaces an
-// earlier one of the same name. An entry set through valueFrom, or whose
-// value refers to a name not resolved this way, is left out: its value
-// is not in the spec.
-func specEnvValues(env []corev1.EnvVar) map[string]string {
+// resolvedEnvVar is the value of one env entry as the kubelet resolves it.
+type resolvedEnvVar struct {
+	value string
+	// ok is false when the spec does not state the value: the entry is
+	// set through valueFrom, or refers to a name not resolved this way.
+	ok bool
+	// refs holds the names the value was expanded from, in order of first
+	// appearance. A "$$" escape is not a reference.
+	refs []string
+}
+
+// resolveSpecEnv resolves a container's env in order as the kubelet does:
+// each value is expanded against the entries before it, and a later entry
+// replaces an earlier one of the same name. It returns the resolution of
+// each entry, and the values the spec states by name; an entry whose value
+// is not in the spec is left out of the latter.
+func resolveSpecEnv(env []corev1.EnvVar) ([]resolvedEnvVar, map[string]string) {
+	resolved := make([]resolvedEnvVar, len(env))
 	vars := make(map[string]string, len(env))
-	lookup := func(name string) (string, bool) {
-		v, found := vars[name]
-		return v, found
-	}
-	for _, e := range env {
+	for i, e := range env {
 		if e.ValueFrom != nil {
 			delete(vars, e.Name)
 			continue
 		}
-		v, ok := expandVarRefs(e.Value, lookup)
-		if !ok {
+		r := &resolved[i]
+		r.value, r.ok = expandVarRefs(e.Value, func(name string) (string, bool) {
+			v, found := vars[name]
+			if found && !slices.Contains(r.refs, name) {
+				r.refs = append(r.refs, name)
+			}
+			return v, found
+		})
+		if !r.ok {
 			delete(vars, e.Name)
 			continue
 		}
-		vars[e.Name] = v
+		vars[e.Name] = r.value
 	}
+	return resolved, vars
+}
+
+// specEnvValues returns the env vars whose values the container spec
+// states, by name; see resolveSpecEnv.
+func specEnvValues(env []corev1.EnvVar) map[string]string {
+	_, vars := resolveSpecEnv(env)
 	return vars
 }
 

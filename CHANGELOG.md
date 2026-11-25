@@ -336,6 +336,21 @@ API schema do not change.
 
 ### Fixed
 
+- **A model env var that refers to another env var names the model, not
+  the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
+  `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`
+  produced a model component named by the reference text, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references from the entries before them, so the
+  values in a container's `env` or a NIMService's `spec.env` are now
+  read that way, as model args are since #391. A reference whose value
+  the spec does not state (`valueFrom`, `envFrom`, a Service link, a
+  later entry, undefined) names no model. A workload whose only signal
+  was such a reference is now unresolved and gets no AIBOM, so an
+  existing one is removed. `identity.envVarName` lists the referenced
+  names after the variable's own name. Values without a `$` are read as
+  before.
+
 - **A vector database, agent framework, training or evaluation image
   written with `docker.io/` is recognized.** The `vectordb.spec`,
   `agent.spec`, `training.spec` and `eval.spec` image patterns are
