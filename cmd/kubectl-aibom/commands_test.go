@@ -174,7 +174,7 @@ func TestRunSummaryTable(t *testing.T) {
 	doc := []byte(`{}`)
 	items := []unstructured.Unstructured{*fixtureAIBOM(t, doc, false), *fixtureTruncated()}
 	var out bytes.Buffer
-	if err := runSummary(items, &out, nil); err != nil {
+	if err := runSummary(items, nil, &out, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -202,7 +202,7 @@ func TestRunSummaryTable(t *testing.T) {
 // on stdout, and nothing is printed to stderr when rows exist.
 func TestRunSummary_EmptyPrintsOptInHintOnStderr(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if err := runSummary(nil, &out, &errOut); err != nil {
+	if err := runSummary(nil, nil, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(errOut.String(), "kubectl label namespace <name> aibom.k8saibom.dev/enabled=true") {
@@ -214,7 +214,7 @@ func TestRunSummary_EmptyPrintsOptInHintOnStderr(t *testing.T) {
 
 	errOut.Reset()
 	u := fixtureAIBOM(t, []byte(`{"bomFormat":"CycloneDX"}`), false)
-	if err := runSummary([]unstructured.Unstructured{*u}, &out, &errOut); err != nil {
+	if err := runSummary([]unstructured.Unstructured{*u}, nil, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if errOut.Len() != 0 {

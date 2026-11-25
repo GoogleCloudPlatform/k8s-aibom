@@ -6,7 +6,13 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add `kubectl aibom --version` to report the plugin's build version (#403).
+
 ### Fixed
+
+- Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
 
 - **The release workflow fails where a chart push fails.** `helm push`
   was piped through `tee` without `pipefail`, so a registry error left
