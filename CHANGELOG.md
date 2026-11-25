@@ -30,6 +30,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 - Add `kubectl aibom --version` to report the plugin's build version (#403).
 
+### Removed
+
+- The Cloud Shell tutorial (`.cloudshell/`), which was pinned to v1.0.0 and
+  predated the Helm OCI install, and its "Cloud Shell tutorial" option in the
+  bug report template (#404).
+
 ### Fixed
 
 - Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
