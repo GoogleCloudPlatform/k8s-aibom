@@ -30,6 +30,12 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 - Add `kubectl aibom --version` to report the plugin's build version (#403).
 
+### Removed
+
+- The Cloud Shell tutorial (`.cloudshell/`), which was pinned to v1.0.0 and
+  predated the Helm OCI install, and its "Cloud Shell tutorial" option in the
+  bug report template (#404).
+
 ### Fixed
 
 - **The controller no longer risks a 30-second hang on shutdown.**
@@ -40,6 +46,12 @@ All notable changes to k8s-aibom are documented here. The format follows
   the dependency is bumped (#417). Reconcile behaviour is unchanged; only
   the queue's start-up ordering of the initial list differs. The same
   deadlock made the envtest suite fail intermittently in CI.
+
+- **Repeated pod events on an unchanged workload refresh AIBOM status at
+  most once every five minutes** (#409). In a fake-client test with one
+  vLLM Deployment reconciled every 30 seconds for eight simulated minutes,
+  status writes fell from 17 to 2, including the initial write. Inventory,
+  generation and extraction-error updates are still written immediately.
 
 - Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
 

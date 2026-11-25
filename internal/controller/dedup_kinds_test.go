@@ -47,10 +47,8 @@ type dedupTestCase struct {
 	// newWorkload returns the typed K8s object to create.
 	newWorkload func() client.Object
 
-	// addCosmeticAnnotation mutates the workload to add a
-	// non-model annotation. The scraper does not extract such
-	// annotations, so BOMInputs is unchanged → dedup must fire.
-	addCosmeticAnnotation func()
+	// cosmeticPatch changes a spec field the scraper does not inventory.
+	cosmeticPatch string
 
 	// applySubstantiveChange mutates the workload in a way that
 	// CHANGES BOMInputs. For Deployment / StatefulSet / DaemonSet this
@@ -59,9 +57,6 @@ type dedupTestCase struct {
 	// kind-specific; the runner just calls it and asserts the
 	// resulting re-emit.
 	applySubstantiveChange func()
-
-	// fetchGeneration returns the workload's current Generation.
-	fetchGeneration func() int64
 }
 
 // runDedupCosmeticThenSubstantive is the kind-agnostic body of the
@@ -79,7 +74,8 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 	ctx := context.Background()
 
 	mustCreateOptedInNamespace(t, env.k8sClient, ctx, tc.namespace)
-	mustCreate(t, env.k8sClient, ctx, tc.newWorkload())
+	workload := tc.newWorkload()
+	mustCreate(t, env.k8sClient, ctx, workload)
 
 	aibomKey := types.NamespacedName{Name: tc.aibomName, Namespace: tc.namespace}
 
@@ -105,39 +101,10 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 	if first.Status.LastReconciled == nil {
 		t.Fatal("Phase A: LastReconciled nil")
 	}
-	initialLastReconciled := first.Status.LastReconciled.Time
 	initialReadyTransition := mustFindCondition(t, first.Status.Conditions, aibomv1beta1.ConditionReady).LastTransitionTime
 
-	// metav1.Time has second precision when serialized to the Kubernetes API
-	// server. Sleep past the second boundary to ensure that the new
-	// LastReconciled timestamp is strictly greater than the initial one,
-	// allowing us to observe the reconcile run.
-	time.Sleep(1100 * time.Millisecond)
-
 	// ---------- Phase B: cosmetic change → dedup fast path ----------
-	tc.addCosmeticAnnotation()
-	_ = tc.fetchGeneration() // sanity: ensure workload still exists
-
-	// Wait directly for the dedup reconcile to fire (LastReconciled
-	// advances past initialLastReconciled). K8s does not always bump
-	// metadata.generation for metadata.annotations updates, so polling
-	// on ObservedGeneration is racy. Polling on LastReconciled is the
-	// direct, deterministic signal: the dedup reconcile's Status().Update
-	// is exactly what advances LastReconciled.
-	var afterCosmetic aibomv1beta1.AIBOM
-	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
-		if err := env.k8sClient.Get(ctx, aibomKey, &afterCosmetic); err != nil {
-			return err
-		}
-		if afterCosmetic.Status.LastReconciled == nil {
-			return errors.New("LastReconciled nil after cosmetic change")
-		}
-		if !afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
-			return fmt.Errorf("LastReconciled (%v) not yet after initial (%v); waiting for dedup reconcile",
-				afterCosmetic.Status.LastReconciled.Time, initialLastReconciled)
-		}
-		return nil
-	})
+	afterCosmetic := patchAndWaitForObservedGeneration(t, env.k8sClient, ctx, workload, tc.cosmeticPatch, aibomKey)
 	if got := rs.emitCount(); got != 1 {
 		t.Errorf("Phase B (%s): emit count = %d after cosmetic change, want 1 (dedup must hit)", tc.kind, got)
 	}
@@ -148,11 +115,6 @@ func runDedupCosmeticThenSubstantive(t *testing.T, env *envTestEnv, rs *recordin
 	if afterCosmetic.Status.BOMHash != initialBOMHash {
 		t.Errorf("Phase B (%s): BOMHash changed on cosmetic change: %q -> %q",
 			tc.kind, initialBOMHash, afterCosmetic.Status.BOMHash)
-	}
-	if afterCosmetic.Status.LastReconciled == nil ||
-		!afterCosmetic.Status.LastReconciled.After(initialLastReconciled) {
-		t.Errorf("Phase B (%s): LastReconciled did not advance: %v -> %v",
-			tc.kind, initialLastReconciled, afterCosmetic.Status.LastReconciled)
 	}
 	ready2 := mustFindCondition(t, afterCosmetic.Status.Conditions, aibomv1beta1.ConditionReady)
 	if !ready2.LastTransitionTime.Time.Equal(initialReadyTransition.Time) {
@@ -211,19 +173,7 @@ func TestIntegration_FastReconcile_StatefulSet_Dedup(t *testing.T) {
 		newWorkload: func() client.Object {
 			return vllmStatefulSet(nsName, ssName)
 		},
-		addCosmeticAnnotation: func() {
-			var ss appsv1.StatefulSet
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: ssName, Namespace: nsName}, &ss); err != nil {
-				t.Fatalf("get statefulset: %v", err)
-			}
-			if ss.Annotations == nil {
-				ss.Annotations = map[string]string{}
-			}
-			ss.Annotations["k8s-aibom.test/cosmetic"] = "1"
-			if err := env.k8sClient.Update(ctx, &ss); err != nil {
-				t.Fatalf("update statefulset annotation: %v", err)
-			}
-		},
+		cosmeticPatch: `{"spec":{"minReadySeconds":1}}`,
 		applySubstantiveChange: func() {
 			var ss appsv1.StatefulSet
 			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: ssName, Namespace: nsName}, &ss); err != nil {
@@ -233,13 +183,6 @@ func TestIntegration_FastReconcile_StatefulSet_Dedup(t *testing.T) {
 			if err := env.k8sClient.Update(ctx, &ss); err != nil {
 				t.Fatalf("update statefulset image: %v", err)
 			}
-		},
-		fetchGeneration: func() int64 {
-			var ss appsv1.StatefulSet
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: ssName, Namespace: nsName}, &ss); err != nil {
-				t.Fatalf("get statefulset for generation: %v", err)
-			}
-			return ss.Generation
 		},
 	}
 	runDedupCosmeticThenSubstantive(t, env, rs, tc)
@@ -263,19 +206,7 @@ func TestIntegration_FastReconcile_DaemonSet_Dedup(t *testing.T) {
 		newWorkload: func() client.Object {
 			return vllmDaemonSet(nsName, dsName)
 		},
-		addCosmeticAnnotation: func() {
-			var ds appsv1.DaemonSet
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: dsName, Namespace: nsName}, &ds); err != nil {
-				t.Fatalf("get daemonset: %v", err)
-			}
-			if ds.Annotations == nil {
-				ds.Annotations = map[string]string{}
-			}
-			ds.Annotations["k8s-aibom.test/cosmetic"] = "1"
-			if err := env.k8sClient.Update(ctx, &ds); err != nil {
-				t.Fatalf("update daemonset annotation: %v", err)
-			}
-		},
+		cosmeticPatch: `{"spec":{"minReadySeconds":1}}`,
 		applySubstantiveChange: func() {
 			var ds appsv1.DaemonSet
 			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: dsName, Namespace: nsName}, &ds); err != nil {
@@ -286,13 +217,6 @@ func TestIntegration_FastReconcile_DaemonSet_Dedup(t *testing.T) {
 				t.Fatalf("update daemonset image: %v", err)
 			}
 		},
-		fetchGeneration: func() int64 {
-			var ds appsv1.DaemonSet
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: dsName, Namespace: nsName}, &ds); err != nil {
-				t.Fatalf("get daemonset for generation: %v", err)
-			}
-			return ds.Generation
-		},
 	}
 	runDedupCosmeticThenSubstantive(t, env, rs, tc)
 }
@@ -300,8 +224,7 @@ func TestIntegration_FastReconcile_DaemonSet_Dedup(t *testing.T) {
 // TestIntegration_FastReconcile_KServeInferenceService_Dedup verifies
 // the dedup property holds for KServe InferenceService workloads.
 //
-// Cosmetic change: add a non-model annotation. The scraper does not
-// extract such annotations → BOMInputs unchanged → dedup hits.
+// Cosmetic change: change minReplicas, which is not part of BOMInputs.
 //
 // Substantive change: update spec.predictor.model.storageUri to a new
 // URI. The scraper extracts storageUri as a model identity → BOMInputs
@@ -328,21 +251,7 @@ func TestIntegration_FastReconcile_KServeInferenceService_Dedup(t *testing.T) {
 			return kserveInferenceService(nsName, isvcName,
 				"pytorch", "gs://my-models/llama-3.1-8b/")
 		},
-		addCosmeticAnnotation: func() {
-			u := minimalUnstructuredISVC(nsName, isvcName)
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: isvcName, Namespace: nsName}, u); err != nil {
-				t.Fatalf("get InferenceService: %v", err)
-			}
-			anns := u.GetAnnotations()
-			if anns == nil {
-				anns = map[string]string{}
-			}
-			anns["k8s-aibom.test/cosmetic"] = "1"
-			u.SetAnnotations(anns)
-			if err := env.k8sClient.Update(ctx, u); err != nil {
-				t.Fatalf("update InferenceService annotation: %v", err)
-			}
-		},
+		cosmeticPatch: `{"spec":{"predictor":{"minReplicas":2}}}`,
 		applySubstantiveChange: func() {
 			u := minimalUnstructuredISVC(nsName, isvcName)
 			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: isvcName, Namespace: nsName}, u); err != nil {
@@ -353,13 +262,6 @@ func TestIntegration_FastReconcile_KServeInferenceService_Dedup(t *testing.T) {
 			if err := env.k8sClient.Update(ctx, u); err != nil {
 				t.Fatalf("update InferenceService storageUri: %v", err)
 			}
-		},
-		fetchGeneration: func() int64 {
-			u := minimalUnstructuredISVC(nsName, isvcName)
-			if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: isvcName, Namespace: nsName}, u); err != nil {
-				t.Fatalf("get InferenceService for generation: %v", err)
-			}
-			return u.GetGeneration()
 		},
 	}
 	runDedupCosmeticThenSubstantive(t, env, rs, tc)
