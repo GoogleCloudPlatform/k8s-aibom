@@ -112,5 +112,5 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes, WatchHealthy, WatchErrors, NamespacesOptedIn)
+	metrics.Registry.MustRegister(SinkEmitFailures, ScraperExtractionErrors, StatusPersistFailures, ConfigReloads, WorkloadsTotal, WorkloadReconcileOutcomes, WatchHealthy, WatchErrors, NamespacesOptedIn, WorkloadInfo, PodInfo)
 }

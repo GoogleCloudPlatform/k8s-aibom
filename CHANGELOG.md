@@ -8,6 +8,26 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Added
 
+- **Model identity as a metrics dimension** (#411, Design 011). Two info
+  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
+  per workload per model: namespace, kind, name, category, runtime and
+  version, model, model confidence, served model) and `aibom_pod_info`
+  (one per owned pod per model), always `1`, refreshed on every
+  reconcile including the unchanged-input fast path, and removed when
+  the AIBOM is deleted, including by owner garbage collection. They let
+  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
+  read per model with one PromQL join. The inference scraper records
+  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
+  on the container's model components and as `servedName` on the status
+  summary (additive, both served API versions), so the identity exposed
+  equals the `model_name` on vLLM's own metrics. Reference recording
+  rules are in `grafana/model-attribution-rules.yaml`; the chart can
+  install them as a PrometheusRule (`metrics.rules.enabled`) and a
+  per-model Grafana dashboard as a ConfigMap
+  (`metrics.dashboard.enabled`), both off by default. See
+  `docs/observability/per-model-utilisation.md`. Documents without the
+  flag are byte-identical.
+
 - Add `kubectl aibom --version` to report the plugin's build version (#403).
 
 ### Fixed

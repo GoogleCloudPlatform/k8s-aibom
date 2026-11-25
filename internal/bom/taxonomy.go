@@ -38,7 +38,10 @@ const (
 	PropRuntimeName       = Namespace + ":runtime:name"
 	PropImageReference    = Namespace + ":image:reference"
 	PropSigningStatus     = Namespace + ":security:signing:status"
-	PropWorkloadCategory  = Namespace + ":workload:category"
+	// PropIdentityServedModelName is the alias a serving engine labels its
+	// own metrics with (vLLM --served-model-name), when the args set one.
+	PropIdentityServedModelName = Namespace + ":identity:servedModelName"
+	PropWorkloadCategory        = Namespace + ":workload:category"
 )
 
 const (

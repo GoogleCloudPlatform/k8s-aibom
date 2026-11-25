@@ -348,6 +348,12 @@ func main() {
 	dsetBase := inferenceBase
 	dsetBase.Scraper = scraper.NewDisaggregatedSetScraper(sigVerifier)
 
+	// Design 011: forget a deleted AIBOM's identity series when the
+	// workload reconcilers never see the deletion (owner GC).
+	if err := (&controller.AIBOMInfoGCReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to set up AIBOMInfoGCReconciler")
+		os.Exit(1)
+	}
 	if err := (&controller.DeploymentReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up DeploymentReconciler")
 		os.Exit(1)
