@@ -287,12 +287,12 @@ window closes.
    about 1–2k replicas. This cost is not measured here. Suppressing
    idle sandboxes until claimed would hide running Pods; reviewers who
    run large pools should say which they prefer. The cost above counts
-   documents, not status writes. #426 (an open PR fixing #409) would
-   cap timestamp-only status writes for an unchanged workload at one
-   every five minutes instead of one per reconcile; each reconcile of
-   an idle replica would still run the namespace-wide listing, and each
-   replica would still cost an `AIBOM` object and a first sink
-   emission.
+   documents, not reconciles: every further reconcile of a replica
+   repeats the namespace-wide listing and the denied owner GET (§4)
+   and, today, writes status. #426 (an open PR fixing #409) would cap
+   those writes at one every five minutes while only the timestamp
+   changes; a replica whose scrape reports extraction errors still
+   writes on every reconcile, because its error counter changes.
 3. **Denied owner reads for claimed and pooled sandboxes.** Adding
    `get` on `sandboxclaims` and `sandboxwarmpools`
    (`extensions.agents.x-k8s.io`) would let the walk finish cleanly and
