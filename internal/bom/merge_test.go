@@ -137,6 +137,62 @@ func TestBuild_MergedModelTakesHighestTier(t *testing.T) {
 	}
 }
 
+// TestBuild_MergedModelCarriesServedModelName: the inference scraper
+// records identity.servedModelName (#413) on every model component of a
+// container, so a merged model keeps it like the other identity
+// properties: once when every source agrees, from a later source when the
+// first-found one has none, and from the highest-tier source when two
+// sources disagree.
+func TestBuild_MergedModelCarriesServedModelName(t *testing.T) {
+	served := func(name string) map[string]string {
+		if name == "" {
+			return map[string]string{"container.name": "vllm"}
+		}
+		return map[string]string{"container.name": "vllm", "identity.servedModelName": name}
+	}
+	cases := []struct {
+		name  string
+		comps []scraper.Component
+		want  string
+	}{
+		{
+			name: "every source has the same alias",
+			comps: []scraper.Component{
+				modelComp("m", scraper.SourceContainerArg, "args", scraper.ConfidenceDeclared, served("llama")),
+				modelComp("m", scraper.SourceEnvVar, "env", scraper.ConfidenceInferred, served("llama")),
+			},
+			want: "llama",
+		},
+		{
+			name: "only a later, lower-tier source has an alias",
+			comps: []scraper.Component{
+				modelComp("m", scraper.SourceContainerArg, "a-args", scraper.ConfidenceDeclared, served("")),
+				modelComp("m", scraper.SourceEnvVar, "b-env", scraper.ConfidenceInferred, served("llama")),
+			},
+			want: "llama",
+		},
+		{
+			name: "different aliases: the highest-tier source wins",
+			comps: []scraper.Component{
+				modelComp("m", scraper.SourceEnvVar, "a-env", scraper.ConfidenceInferred, served("first")),
+				modelComp("m", scraper.SourceContainerArg, "b-args", scraper.ConfidenceDeclared, served("strongest")),
+			},
+			want: "strongest",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			comps := buildComps(t, tc.comps...)
+			if len(comps) != 1 {
+				t.Fatalf("emitted %d components, want 1", len(comps))
+			}
+			if got := propsOf(comps[0])[PropIdentityServedModelName]; got != tc.want {
+				t.Errorf("%s = %q, want %q", PropIdentityServedModelName, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestBuild_MergeLeavesOtherComponentsAlone: only top-level
 // machine-learning-model components with the same name are merged.
 // Different model names, other types and nested children keep one

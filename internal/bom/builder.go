@@ -307,10 +307,13 @@ const (
 // each source's own confidence is recorded beside it
 // (aibom.evidence.confidence for the first, .<i> for the others), since
 // the component's confidence becomes the highest tier among them
-// (verified > declared > inferred > unresolved). Properties are the union;
-// when two sources set the same key differently, the value from the
-// highest-tier source wins. Components of other types, and models named
-// once, pass through unchanged, so their bytes do not move.
+// (verified > declared > inferred > unresolved). Properties are the union,
+// identity properties included (identity.servedModelName, which the
+// inference scraper sets on every model of a container, is carried even
+// when only one source has it); when two sources set the same key
+// differently, the value from the highest-tier source wins. Components
+// of other types, and models named once, pass through unchanged, so
+// their bytes do not move.
 //
 // The scraper output is already sorted (Type, Name, Evidence.Locator),
 // so the merge, and the "first-found" choice, are deterministic.

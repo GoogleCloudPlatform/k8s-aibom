@@ -17,7 +17,10 @@ All notable changes to k8s-aibom are documented here. The format follows
   `k8s-aibom:evidence:locator:<i>` / `:source:<i>`, and each source's
   confidence is `k8s-aibom:evidence:confidence[:<i>]`. The component's
   `k8s-aibom:confidence` is the highest tier among its sources, and the
-  identity properties of every source are kept. Only top-level models
+  identity properties of every source are kept, including
+  `k8s-aibom:identity:servedModelName` (#411), so the summary's
+  `servedName` survives the merge; where sources disagree, the
+  highest-tier source's value wins. Only top-level models
   are merged; other components and models named once are byte-identical.
   The document's aggregate confidence is unchanged.
 - **API contract (behaviour, not schema): `status.summary.models` has

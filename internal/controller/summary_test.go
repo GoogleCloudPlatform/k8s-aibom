@@ -202,6 +202,12 @@ func TestBuildSummary_OneEntryPerModel(t *testing.T) {
 			Confidence: conf,
 		}
 	}
+	withServedName := func(c scraper.Component, name string) scraper.Component {
+		if name != "" {
+			c.Properties = map[string]string{"identity.servedModelName": name}
+		}
+		return c
+	}
 	cases := []struct {
 		name  string
 		comps []scraper.Component
@@ -237,6 +243,14 @@ func TestBuildSummary_OneEntryPerModel(t *testing.T) {
 			},
 			want: aibomv1beta1.ModelSummary{Identity: "m", Source: "container_arg", Confidence: "declared"},
 		},
+		{
+			name: "served model name survives the merge",
+			comps: []scraper.Component{
+				withServedName(model(scraper.SourceContainerArg, "args[0]", scraper.ConfidenceDeclared), ""),
+				withServedName(model(scraper.SourceEnvVar, "env[0]", scraper.ConfidenceInferred), "llama"),
+			},
+			want: aibomv1beta1.ModelSummary{Identity: "m", Source: "container_arg", Confidence: "declared", ServedName: "llama"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -253,7 +267,7 @@ func TestBuildSummary_OneEntryPerModel(t *testing.T) {
 			if len(got.Models) != 1 {
 				t.Fatalf("summary models = %+v, want one entry", got.Models)
 			}
-			if m := got.Models[0]; m.Identity != tc.want.Identity || m.Source != tc.want.Source || m.Confidence != tc.want.Confidence {
+			if m := got.Models[0]; m.Identity != tc.want.Identity || m.Source != tc.want.Source || m.Confidence != tc.want.Confidence || m.ServedName != tc.want.ServedName {
 				t.Errorf("summary model = %+v, want %+v", m, tc.want)
 			}
 		})
