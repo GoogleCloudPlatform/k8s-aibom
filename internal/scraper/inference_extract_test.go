@@ -471,8 +471,8 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 
 		// Infinity embeddings/reranking server — publisher-anchored Docker
 		// Hub image. Tag and digest forms match; name-prefix and
-		// other-registry near-misses do not. DetectRuntime does not strip
-		// a registry prefix, so ghcr.io stays quiet.
+		// other-registry near-misses do not. DetectRuntime strips only
+		// the Docker Hub registry prefix, so ghcr.io stays quiet.
 		{"michaelf34/infinity:0.0.77", "infinity"},
 		{"michaelf34/infinity:0.0.77-cpu", "infinity"},
 		{"michaelf34/infinity:0.0.77-rocm", "infinity"},
@@ -582,7 +582,7 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		{"openvino/ubuntu24_runtime:latest", ""},
 		{"openvino/ubuntu24_dev:latest", ""},
 		{"openvino/cvat_server:latest", ""},
-		{"docker.io/openvino/model_server:latest", ""},
+		{"docker.io/openvino/model_server:latest", "openvino-model-server"},
 		{"ghcr.io/openvino/model_server:latest", ""},
 
 		// TensorRT-LLM standalone release image on NGC. GA, rc, dev and
@@ -757,6 +757,119 @@ func TestInferenceConfig_DetectRuntime(t *testing.T) {
 		t.Run(tc.image, func(t *testing.T) {
 			got, _ := cfg.DetectRuntime(tc.image)
 			if got != tc.wantRuntime {
+				t.Errorf("DetectRuntime(%q) = %q, want %q", tc.image, got, tc.wantRuntime)
+			}
+		})
+	}
+}
+
+// TestInferenceConfig_DetectRuntime_DockerHubPrefix pins #399: a Docker
+// Hub image written with its registry ("docker.io/", "index.docker.io/")
+// attributes the same runtime, through the same pattern, as the short
+// form. Only those prefixes are equated; every other registry keeps its
+// exact-prefix semantics.
+func TestInferenceConfig_DetectRuntime_DockerHubPrefix(t *testing.T) {
+	cfg := DefaultV1Config()
+	// One image per Docker Hub-anchored pattern in the v1 defaults.
+	hubImages := []string{
+		"vllm/vllm-openai:v0.6.3",
+		"rocm/vllm:rocm7.0.0_vllm_0.11.1_20251103",
+		"huggingface/text-generation-inference:2.0.0",
+		"ollama/ollama:0.3.0",
+		"rayproject/ray-ml:2.9.0",
+		"lmsysorg/sglang:v0.4.0",
+		"openmmlab/lmdeploy:v0.6.0",
+		"michaelf34/infinity:0.0.77",
+		"fedirz/faster-whisper-server:latest-cpu",
+		"lmcache/vllm-openai:latest",
+		"kserve/huggingfaceserver:latest",
+		"openvino/model_server:2026.4.1",
+		"localai/localai:latest",
+		"xprobe/xinference:v4.0.1",
+		"alpindale/aphrodite-openai:latest",
+		"tensorflow/serving:2.14.1",
+		"pytorch/torchserve:0.12.0-cpu",
+		"kserve/sklearnserver:v0.21.0",
+		"kserve/xgbserver:v0.21.0",
+		"kserve/lgbserver:v0.21.0",
+		"kserve/paddleserver:v0.21.0",
+		"kserve/pmmlserver:v0.21.0",
+		"onerahmet/openai-whisper-asr-webservice:v1.10.0",
+	}
+	for _, img := range hubImages {
+		wantRuntime, wantPattern := cfg.DetectRuntime(img)
+		if wantRuntime == "" {
+			t.Fatalf("DetectRuntime(%q) = \"\", the short form must match", img)
+		}
+		for _, prefix := range []string{"docker.io/", "index.docker.io/"} {
+			t.Run(prefix+img, func(t *testing.T) {
+				got, matched := cfg.DetectRuntime(prefix + img)
+				if got != wantRuntime {
+					t.Fatalf("DetectRuntime(%q) = %q, want %q", prefix+img, got, wantRuntime)
+				}
+				if matched.Pattern != wantPattern.Pattern {
+					t.Errorf("DetectRuntime(%q) pattern = %q, want %q", prefix+img, matched.Pattern, wantPattern.Pattern)
+				}
+			})
+		}
+	}
+
+	// Other registries, a Docker Hub prefix that is not at the start, and
+	// a registry host smuggled in after docker.io/ stay quiet.
+	for _, img := range []string{
+		"ghcr.io/openvino/model_server:latest",
+		"quay.io/docker.io/openvino/model_server:latest",
+		"mirror.example.com/docker.io/vllm/vllm-openai:v0.6.3",
+		"docker.io/ghcr.io/ggml-org/llama.cpp:server",
+		"docker.io/nvcr.io/nim/meta/llama3-8b-instruct:1.0.0",
+		"docker.io/localhost/vllm/vllm-openai:v0.6.3",
+		"docker.io/berriai/litellm:main",
+		"docker.io/ggml-org/llama.cpp:server-b10680",
+		"registry-1.docker.io.example.com/vllm/vllm-openai:v0.6.3",
+	} {
+		t.Run(img, func(t *testing.T) {
+			if got, _ := cfg.DetectRuntime(img); got != "" {
+				t.Errorf("DetectRuntime(%q) = %q, want \"\"", img, got)
+			}
+		})
+	}
+
+	// ghcr.io/vllm/vllm-openai matches the GHCR vLLM pattern, not the
+	// Docker Hub one.
+	if _, matched := cfg.DetectRuntime("ghcr.io/vllm/vllm-openai:v0.6.3"); matched == nil || strings.HasPrefix(matched.Pattern, "^vllm/") {
+		t.Errorf("ghcr.io/vllm/vllm-openai must not match a Docker Hub-anchored pattern, got %+v", matched)
+	}
+}
+
+// TestInferenceConfig_DetectRuntime_DockerHubOfficialAndQualifiedPatterns
+// covers configured patterns: an official image ("library/") matches a
+// pattern written for its short name, and a pattern that itself names
+// docker.io still matches the image as written.
+func TestInferenceConfig_DetectRuntime_DockerHubOfficialAndQualifiedPatterns(t *testing.T) {
+	official, err := NewRuntimeImagePattern("custom-official", `^custom-server(?:[:@]|$)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualified, err := NewRuntimeImagePattern("custom-qualified", `^docker\.io/acme/server(?:[:@]|$)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &InferenceConfig{RuntimeImagePatterns: []RuntimeImagePattern{official, qualified}}
+	cases := []struct {
+		image       string
+		wantRuntime string
+	}{
+		{"custom-server:1", "custom-official"},
+		{"library/custom-server:1", "custom-official"},
+		{"docker.io/custom-server:1", "custom-official"},
+		{"docker.io/library/custom-server:1", "custom-official"},
+		{"index.docker.io/library/custom-server:1", "custom-official"},
+		{"ghcr.io/library/custom-server:1", ""},
+		{"docker.io/acme/server:1", "custom-qualified"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.image, func(t *testing.T) {
+			if got, _ := cfg.DetectRuntime(tc.image); got != tc.wantRuntime {
 				t.Errorf("DetectRuntime(%q) = %q, want %q", tc.image, got, tc.wantRuntime)
 			}
 		})

@@ -65,6 +65,14 @@
         { "expr": "rate(aibom_scraper_extraction_errors_total[5m])", "legendFormat": "{{scraper}} - {{evidence_source}}" }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tracked Workloads (by Category)",
+      "targets": [
+        { "expr": "sum by (category) (aibom_workloads_total)", "legendFormat": "{{category}}" }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 }
     }
   ],
   "refresh": "10s",

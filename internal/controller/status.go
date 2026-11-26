@@ -18,6 +18,7 @@ package controller
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,6 +80,10 @@ var SinkRetryRequeueAfter = time.Minute
 // because the Owns-watch filters status-update events. A variable so
 // the envtest suite can shrink it; production code never mutates it.
 var BootstrapRaceRequeueAfter = 2 * time.Second
+
+// fastPathStatusTouchInterval is the minimum time between timestamp-only
+// status writes for an unchanged workload.
+const fastPathStatusTouchInterval = 5 * time.Minute
 
 // anySinkFailed reports whether any configured external sink returned
 // an error this cycle.
@@ -193,6 +198,17 @@ func (b *StatusBuilder) BuildFastPathStatus(prev *aibomv1beta1.AIBOMStatus, gene
 	out.LastReconciled = &now
 	out.ObservedGeneration = generation
 	return *out
+}
+
+// skipFastPathStatusTouch compares the fields that can change on a hash
+// match, after extraction errors have been recorded on next.
+func skipFastPathStatusTouch(prev, next *aibomv1beta1.AIBOMStatus) bool {
+	if prev.LastReconciled == nil || prev.ObservedGeneration != next.ObservedGeneration ||
+		prev.ConsecutiveErrors != next.ConsecutiveErrors || !slices.Equal(prev.Conditions, next.Conditions) {
+		return false
+	}
+	age := next.LastReconciled.Sub(prev.LastReconciled.Time)
+	return age >= 0 && age < fastPathStatusTouchInterval
 }
 
 func (b *StatusBuilder) buildBOMDocumentRef(doc *bom.Document, sinkResults []SinkResult, inlineThresholdBytes int64) *aibomv1beta1.BOMDocumentRef {

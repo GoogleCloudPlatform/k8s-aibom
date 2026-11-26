@@ -29,10 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,10 +116,8 @@ func startEnvTestWithSinks(t *testing.T, sinks []sink.Sink) *envTestEnv {
 	}
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme,
-		Controller: config.Controller{
-			SkipNameValidation: ptr.To(true),
-		},
+		Scheme:     scheme,
+		Controller: testControllerOptions(),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)

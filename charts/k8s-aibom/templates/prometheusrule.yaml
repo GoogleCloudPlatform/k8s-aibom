@@ -1,0 +1,64 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if and .Values.metrics.enabled .Values.metrics.rules.enabled }}
+# Design 011 reference recording rules: resource use attributed to model
+# identity through aibom_pod_info. Rendered only when metrics.enabled and
+# metrics.rules.enabled are set, because it requires the
+# monitoring.coreos.com CRDs. The same rules, for clusters without the
+# Prometheus Operator, are in docs/observability/recording-rules.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "k8s-aibom.fullname" . }}-attribution
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k8s-aibom.labels" . | nindent 4 }}
+    {{- with .Values.metrics.rules.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+  - name: aibom-attribution
+    interval: 30s
+    rules:
+    - record: aibom:model_cpu_cores:rate2m
+      expr: |
+        sum by (model, runtime) (
+          rate(container_cpu_usage_seconds_total{container!="",pod!=""}[2m])
+          * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+        )
+    - record: aibom:model_memory_working_set_bytes
+      expr: |
+        sum by (model, runtime) (
+          container_memory_working_set_bytes{container!="",pod!=""}
+          * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+        )
+    - record: aibom:model_gpu_util:avg
+      expr: |
+        avg by (model, runtime) (
+          DCGM_FI_DEV_GPU_UTIL
+          * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+        )
+    - record: aibom:model_gpus_allocated
+      expr: |
+        count by (model, runtime) (
+          DCGM_FI_DEV_GPU_UTIL
+          * on (namespace, pod) group_left (model, runtime) aibom_pod_info
+        )
+    - record: aibom:model_workloads
+      expr: count by (model) (aibom_workload_info)
+    - record: aibom:model_pods
+      expr: count by (model) (aibom_pod_info)
+{{- end }}

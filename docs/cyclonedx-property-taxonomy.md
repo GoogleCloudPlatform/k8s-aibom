@@ -99,7 +99,7 @@ fact so an auditor can trace it back without cluster access.
 | `k8s-aibom:runtime:pattern` | The image pattern that matched, when inferred. |
 | `k8s-aibom:identity:confidence` | Always `claimed` for a model identity read from the workload; verification is expressed under `security:signing`. |
 | `k8s-aibom:identity:source` | Where the identity came from when not a container field (`kserve.storageUri`, `dynamo.modelRef`, `nim.imagePath`). |
-| `k8s-aibom:identity:envVarName` / `k8s-aibom:identity:argFlag` / `k8s-aibom:identity:annotation` | The env var, arg flag or annotation key that carried the identity. |
+| `k8s-aibom:identity:envVarName` / `k8s-aibom:identity:argFlag` / `k8s-aibom:identity:annotation` | The env var, arg flag or annotation key that carried the identity. For a model arg expanded from `$(VAR_NAME)`, `envVarName` names the referenced variable (several comma-separated, in order of first appearance); for a model env var expanded the same way, they follow the variable's own name. |
 | `k8s-aibom:image:reference` | Image reference as written in the workload. |
 | `k8s-aibom:image:repository` / `k8s-aibom:image:tag` | Repository and tag when the source API splits them (NIMService). |
 | `k8s-aibom:container:name` | Container name within the pod template. |

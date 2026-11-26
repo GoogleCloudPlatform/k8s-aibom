@@ -22,6 +22,8 @@ When more than one scraper reports a category, the workload takes the one with t
 
 The `inference.spec` scraper lists every container of an `apps/v1` workload, with its image reference and digest, even when it finds no runtime or model. When another scraper recognizes the workload (a Qdrant or Langflow Deployment, say), those container components are kept in its BOM, ahead of the other scrapers' components, and nothing else from the `inference.spec` result is. Containers alone never make a workload an AI workload: a Deployment no scraper recognizes still gets no AIBOM. `batch/v1` Jobs and CronJobs are not read by `inference.spec`, so training and evaluation BOMs do not list containers.
 
+The image patterns of `vectordb.spec`, `agent.spec`, `training.spec` and `eval.spec` treat a Docker Hub image written with its registry the way runtime detection does (see "Runtime detection and runtime version"): `docker.io/qdrant/qdrant:v1.12.0` and `index.docker.io/qdrant/qdrant:v1.12.0` match the pattern for `qdrant/qdrant:v1.12.0`, and `docker.io/library/<name>` matches as `<name>`. No other registry prefix is stripped, so `ghcr.io/qdrant/qdrant` and a mirror path such as `mirror.example.com/docker.io/qdrant/qdrant` still do not match a pattern anchored at the Docker Hub name.
+
 ## Vector Database Heuristics
 **Rule.** The `vector-database` category is for systems whose primary function is embedding storage and approximate nearest-neighbour search, so that the image alone is an AI signal. Milvus, Qdrant, Weaviate, Chroma and Vespa qualify on that reading, and so does a `pgvector` image, a PostgreSQL build made for vector search (a plain `postgres` image is not matched). Elasticsearch, OpenSearch and Redis do not qualify: vector search is one feature among many there, and the image usually means logs, search or caching.
 
@@ -149,6 +151,17 @@ Supported SGLang and LiteLLM image variants are enumerated in the
 allowlist; names such as `lmsysorg/sglang-router` and
 `nvcr.io/nvidia/tritonserver-sidecar` do not receive runtime attribution.
 
+A Docker Hub image written with its registry matches the patterns for
+its short form: `docker.io/vllm/vllm-openai:v0.6.3` and
+`index.docker.io/vllm/vllm-openai:v0.6.3` attribute `vllm` through the
+same pattern as `vllm/vllm-openai:v0.6.3`, and
+`docker.io/library/<name>` matches as `<name>`. These are the names
+Docker itself resolves to the same image, and the same ones digest
+resolution treats as equal. No other registry prefix is stripped, and a
+registry host written after `docker.io/` is not either: a pattern
+anchored at Docker Hub still does not match `ghcr.io/vllm/vllm-openai`
+or a mirror path. The Component keeps the image reference as written.
+
 - **Confidence: `inferred`.** The runtime identity is inferred from a
   pattern match against the image string, not declared by the workload
   owner. Pattern-match-derived attributes are never `declared`.
@@ -189,7 +202,10 @@ The three model allowlists used below (`modelEnvVarNames`,
 controller from
 [`internal/scraper/v1-runtime-patterns.yaml`](https://github.com/GoogleCloudPlatform/k8s-aibom/blob/main/internal/scraper/v1-runtime-patterns.yaml).
 The `AIBOMControllerConfig` CR does not expose them: it overrides only
-the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`).
+the runtime image patterns (`spec.discovery.inferenceRuntimeImagePatterns`),
+and setting that field replaces the compiled-in list rather than
+extending it; `status.effectiveInferenceRuntimeImagePatterns` shows the
+list in force.
 Extending an allowlist is a PR to that file; see
 [contributing a pattern](contributing-a-pattern.md).
 
@@ -201,6 +217,13 @@ is recorded in the locator.
 - Empty values are not emitted (an empty env var is not a model identity).
 - Match is case-sensitive (`HF_MODEL_ID` is in the allowlist;
   `hf_model_id` is not).
+- `$(VAR_NAME)` references in the value are expanded from the entries
+  before it in the same `env`, the way the kubelet expands them, so
+  `HF_MODEL_ID: $(MODEL_ID)` after `MODEL_ID: google/gemma-2-2b` records
+  `google/gemma-2-2b`. A reference whose value the spec does not state
+  emits nothing, as for container args below. When a reference was
+  expanded, `identity.envVarName` lists the referenced names after the
+  variable's own name, comma-separated.
 - Confidence: `inferred`. The env var convention is a community pattern,
   not a Kubernetes-native declaration.
 
@@ -217,6 +240,17 @@ matches the configured `modelArgFlags` allowlist contribute
 
 A flag with no following value, or a value that itself starts with `--`,
 is treated as "no value present" and emits nothing.
+
+`$(VAR_NAME)` references in args are expanded from the container's `env`
+the way the kubelet expands them, so `--model=$(MODEL_ID)` with
+`MODEL_ID: google/gemma-2-2b` in `env` records `google/gemma-2-2b`. A
+reference whose value the spec does not state (a `valueFrom` variable,
+one only `envFrom` or a Service link could define, or an undefined one)
+emits nothing, rather than the reference text as a model. When a
+reference was expanded, the component also carries
+`identity.envVarName` with the referenced name (several names
+comma-separated, in order of first appearance), so the evidence leads
+from the arg locator to the variable.
 
 Confidence: `declared`. The workload owner explicitly invoked the runtime
 with this model identity.

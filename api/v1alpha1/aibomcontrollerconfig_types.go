@@ -68,8 +68,9 @@ type DiscoveryConfig struct {
 	// NamespaceSelector selects which namespaces the controller
 	// scrapes. The controller checks this selector on each reconcile
 	// against the workload's Namespace; non-matching namespaces are
-	// silently skipped. If absent or empty, defaults to matching the
-	// label `aibom.k8saibom.dev/enabled=true`.
+	// silently skipped. If absent, defaults to matching the label
+	// `aibom.k8saibom.dev/enabled=true`. An explicit empty selector
+	// (`{}`) is honoured as written and matches every namespace.
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 
@@ -77,6 +78,9 @@ type DiscoveryConfig struct {
 	// the InferenceSpecScraper uses to detect runtime frameworks
 	// from container image references. If absent or empty, the
 	// compiled-in v1 defaults apply (see internal/scraper/v1-runtime-patterns.yaml).
+	// Setting any pattern replaces that whole list rather than adding
+	// to it; status.effectiveInferenceRuntimeImagePatterns shows the
+	// list in force.
 	//
 	// Conservative-detection rule: prefer anchored patterns. See
 	// docs/scraper-heuristics.md "Known false negatives" for context.

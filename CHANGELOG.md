@@ -42,6 +42,82 @@ All notable changes to k8s-aibom are documented here. The format follows
   readers:** a workload whose model was listed twice (arg + env var) now
   has one summary entry; read the document for every source.
 
+### Added
+
+- **Model identity as a metrics dimension** (#411, Design 011). Two info
+  series on the existing `/metrics` endpoint: `aibom_workload_info` (one
+  per workload per model: namespace, kind, name, category, runtime and
+  version, model, model confidence, served model) and `aibom_pod_info`
+  (one per owned pod per model), always `1`, refreshed on every
+  reconcile including the unchanged-input fast path, and removed when
+  the AIBOM is deleted, including by owner garbage collection. They let
+  cAdvisor, DCGM, TPU and cost-allocation series, all keyed by pod, be
+  read per model with one PromQL join. The inference scraper records
+  vLLM's `--served-model-name` alias as `k8s-aibom:identity:servedModelName`
+  on the container's model components and as `servedName` on the status
+  summary (additive, both served API versions), so the identity exposed
+  equals the `model_name` on vLLM's own metrics. Reference recording
+  rules are in `grafana/model-attribution-rules.yaml`; the chart can
+  install them as a PrometheusRule (`metrics.rules.enabled`) and a
+  per-model Grafana dashboard as a ConfigMap
+  (`metrics.dashboard.enabled`), both off by default. See
+  `docs/observability/per-model-utilisation.md`. Documents without the
+  flag are byte-identical.
+
+- Add `kubectl aibom --version` to report the plugin's build version (#403).
+
+### Removed
+
+- The Cloud Shell tutorial (`.cloudshell/`), which was pinned to v1.0.0 and
+  predated the Helm OCI install, and its "Cloud Shell tutorial" option in the
+  bug report template (#404).
+
+### Fixed
+
+- **NIMService model locators keep their `spec.env` index past a
+  malformed entry.** A `spec.env` entry that was not an object or did
+  not decode was recorded and dropped from the list, so every later
+  entry moved up one place and a model claimed from it was located at
+  the wrong index (`spec.env[0](NIM_MODEL_NAME)` for the entry at
+  `spec.env[1]`). The entry is now left in place with no stated value,
+  as `spec.args` already does (#430).
+
+- **The controller no longer risks a 30-second hang on shutdown.**
+  controller-runtime v0.24's default priority queue can deadlock while a
+  controller stops (kubernetes-sigs/controller-runtime#3540, fixed in
+  v0.25.0), which delays process exit until the manager's grace period
+  on a rollout or node drain. Controllers use the classic workqueue until
+  the dependency is bumped (#417). Reconcile behaviour is unchanged; only
+  the queue's start-up ordering of the initial list differs. The same
+  deadlock made the envtest suite fail intermittently in CI.
+
+- **Repeated pod events on an unchanged workload refresh AIBOM status at
+  most once every five minutes** (#409). In a fake-client test with one
+  vLLM Deployment reconciled every 30 seconds for eight simulated minutes,
+  status writes fell from 17 to 2, including the initial write. Inventory,
+  generation and extraction-error updates are still written immediately.
+
+- Show namespace-specific guidance when `kubectl aibom summary` finds no AIBOMs (#403).
+
+- **The release workflow fails where a chart push fails.** `helm push`
+  was piped through `tee` without `pipefail`, so a registry error left
+  the step green with an empty digest and the release stopped one step
+  later with an unrelated-looking attestation error (the first v1.7.0
+  attempt). Chart pushes now go through `hack/release/push-chart.sh`:
+  up to four attempts, and a non-zero exit when the push fails or prints
+  no digest. The release dry-run exercises the script's paths against a
+  stub. No change to published artefacts.
+
+- **`aibom_workloads_total` is now set (#398).** The gauge was registered
+  but never written, so it had no series. The leader now recounts the
+  AIBOMs in its cache every 15 seconds, by `category` and `runtime`
+  (`unknown` when the status has no summary yet, `none` when no runtime
+  was detected), so the value follows adds, deletes and restarts. The
+  example Grafana dashboard gains a "Tracked Workloads (by Category)"
+  panel.
+
+## [1.7.0] - 2026-11-24
+
 ### Document shape (one transition, v1.7.0)
 
 Six changes to the emitted CycloneDX document land together (#132,
@@ -131,7 +207,25 @@ API schema do not change.
   schema-identical again. Upgrade note: a `v1alpha1` apply no longer
   drops the allowlist, and a `v1alpha1` manifest may now set it.
 
+- **Two field descriptions now say what the controller does** (no
+  behaviour change, descriptions regenerated in both served versions).
+  `spec.discovery.namespaceSelector`: an explicit empty selector (`{}`)
+  matches every namespace, which the loader has always honoured on
+  purpose; only an absent selector falls back to the opt-in label.
+  `spec.discovery.inferenceRuntimeImagePatterns`: setting any pattern
+  replaces the compiled-in list rather than adding to it, and
+  `status.effectiveInferenceRuntimeImagePatterns` shows the list in
+  force. The contributor guide and scraper-heuristics page carry the
+  same warning.
+
 ### Added
+
+- **The chart prints what to do next.** `helm install` and `helm upgrade`
+  end with a NOTES section (#401, #406): the namespace opt-in label,
+  `kubectl get aibom -A` and `kubectl aibom summary -A`, a pointer to
+  the `AIBOMControllerConfig` named `default` and the chart's `config.*`
+  values, and the reminder that `rbac.sinkSecretAccess` is off by
+  default.
 
 - **InferencePool membership as a routing fact** (#137, Design 007 §2,
   Part 2a). An inference workload whose declared Pod template labels
@@ -326,6 +420,125 @@ API schema do not change.
   fixed toolchain; `govulncheck` is clean again. No change in behaviour.
 
 ### Fixed
+
+- **A model env var that refers to another env var names the model, not
+  the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
+  `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`
+  produced a model component named by the reference text, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references from the entries before them, so the
+  values in a container's `env` or a NIMService's `spec.env` are now
+  read that way, as model args are since #391. A reference whose value
+  the spec does not state (`valueFrom`, `envFrom`, a Service link, a
+  later entry, undefined) names no model. A workload whose only signal
+  was such a reference is now unresolved and gets no AIBOM, so an
+  existing one is removed. `identity.envVarName` lists the referenced
+  names after the variable's own name. Values without a `$` are read as
+  before.
+
+- **A vector database, agent framework, training or evaluation image
+  written with `docker.io/` is recognized.** The `vectordb.spec`,
+  `agent.spec`, `training.spec` and `eval.spec` image patterns are
+  anchored at the short Docker Hub name (`^qdrant/qdrant`,
+  `^langflowai/langflow`, `^pytorch/pytorch`, `^eleutherai/lm-eval`,
+  ...) and were matched against the image as written, so
+  `docker.io/qdrant/qdrant:v1.12.0` (or `index.docker.io/...`) matched
+  nothing. With no other signal the workload got no category and no
+  AIBOM. These patterns now also try the Docker Hub short form, as
+  runtime detection does since #399. No other registry prefix is
+  stripped, and the image reference is recorded as written.
+
+- **A Docker Hub image written with `docker.io/` gets its runtime
+  attributed (#399).** Runtime detection matched the image reference as
+  written against patterns anchored at the short Docker Hub name, so
+  `docker.io/vllm/vllm-openai:v0.6.3` (or `index.docker.io/...`) matched
+  nothing while `vllm/vllm-openai:v0.6.3` matched `vllm`. Digest
+  resolution already treated the two as the same image, so the BOM
+  showed the digest but no runtime, and a workload with no other signal
+  got no AIBOM at all. The patterns are now also tried against the short
+  form, with `docker.io/`, `index.docker.io/` and `library/` removed.
+  No other registry prefix is stripped, and the image reference is
+  recorded as written.
+
+- **A webhook endpoint on an IPv6 loopback or link-local address is
+  rejected at config load.** The SSRF check in the webhook sink's
+  config validation compared the endpoint host with `[::1]`, but the
+  host it reads has no brackets (`::1`), so `https://[::1]:8443/` passed,
+  as did `[::]`, `[fe80::1]` and `[::ffff:127.0.0.1]`. The sink was
+  built and reported ready, and every emission then failed at dial time,
+  where the private-IP guard does block these addresses. IPv6 literals
+  are now matched by address (loopback, unspecified, link-local), the
+  IPv6 forms of the `127.*`, `0.0.0.0` and `169.254.*` checks already
+  there, so the config is rejected with `ConfigInvalid` instead.
+  `AIBOM_DISABLE_SSRF_CHECKS=true` still turns the check off.
+
+- **Documentation matches the 1.7.0 tree.** The Dependency-Track and
+  GUAC fixture carries the v1.7.0 `serialNumber`; D-006 in
+  `schema-divergences.md` says v1.7.0, not v1.8.0; `VERSIONING.md`
+  records the one-time document-shape transition under the public
+  contract it affects; the README no longer suggests
+  `go install ...@latest` for the plugin (the root module's `replace`
+  directive for the verifier breaks it; krew and the attested release
+  binaries are the supported paths), no longer shows the webhook sink
+  posting to GUAC (GUAC collects files, see the walkthrough), and notes
+  that the sink refuses endpoints resolving to private addresses;
+  `llms.txt` lists `find`; the overview deck's confidence examples and
+  roadmap panel match the README; the Terraform example names the
+  current chart version; Design 002 marks its verification metrics as
+  deferred.
+
+- **Two code comments no longer cite the retired D-001 rule.** #377
+  retired schema-divergences entry D-001 ("v1 never emits `verified`")
+  in the CRD descriptions and docs, but the comment on
+  `ModelSummary.Signed` in `internal/controller/summary.go` still said
+  the value was a NoopVerifier-derived
+  `k8s-aibom:identity:confidence=claimed`, a property the builder never
+  writes, and `NewKServeInferenceServiceScraper` still pointed at D-001
+  for its nil-verifier default. The summary comment now names the
+  `k8s-aibom:security:signing:status` property it reads and when it is
+  `verified`. Comments only; no behaviour change.
+
+- **No spurious `WatchUnhealthy` at startup on API servers without the
+  WatchList feature gate.** client-go v0.36 enables `WatchListClient` by
+  default and opens the first watch of an informer with
+  `sendInitialEvents`; API servers without the server-side `WatchList`
+  gate (the default through Kubernetes 1.33) reject it with 403 and
+  client-go falls back to a plain list on its own, but the rejection
+  reached the CRD discovery informer's error handler first and was
+  reported as a discovery outage: one `WatchUnhealthy` event, a
+  `Degraded` condition on `AIBOMControllerConfig`, and a `WatchRecovered`
+  a second later, at every controller start on such clusters (and the
+  same for the InferencePool view). Both reflectors now opt out of
+  WatchList semantics and use list+watch on every server version; the
+  lists involved are small. Affected: 1.7.0 pre-releases only (the
+  discovery informer and the client-go bump both landed after 1.6.2);
+  found by the weekly envtest matrix on 1.27 and 1.31.
+
+- **A document is not emitted twice when two reconciles overlap the
+  informer cache.** The dedup fast path compares the input hash with the
+  one in the AIBOM status read through the cache; a reconcile that ran
+  before the previous reconcile's status write had reached the cache saw
+  the old hash and emitted the same document to the sinks a second time
+  (a duplicate archive copy, never an overwrite). The reconciler now
+  also keeps a per-process record of the last hash it emitted for each
+  AIBOM, cleared on a sink failure so the retry contract holds and on
+  deletion. The InferencePool view's fan-out on recovery made the race
+  easy to hit; it has been possible since external sinks were
+  introduced.
+
+- **A model arg that refers to an env var names the model, not the
+  reference** (#391). `--model=$(MODEL_ID)` with `MODEL_ID` set in the
+  container's `env`, the form GKE's vLLM and TGI serving samples use,
+  produced a `declared` model component named `$(MODEL_ID)`, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references before the server starts, so args are
+  now expanded from the container's `env` (or a NIMService's
+  `spec.env`) the same way. A reference whose value the spec does not
+  state (`valueFrom`, `envFrom`, a Service link, undefined) names no
+  model. A workload whose only signal was such a reference, with no
+  runtime image or other model claim, is now unresolved and gets no
+  AIBOM, so an existing one is removed. Args without a `$` are read as
+  before.
 
 - **A failed `AIBOMControllerConfig` status write no longer repeats
   the config event.** The controller emits the transition event

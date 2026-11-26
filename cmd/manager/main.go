@@ -137,6 +137,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "k8s-aibom.aibom.k8saibom.dev",
+		// Classic workqueue until controller-runtime v0.25 (#417).
+		Controller: controller.ManagerControllerOptions(),
 	})
 	if err != nil {
 		log.Error(err, "unable to construct manager")
@@ -302,6 +304,11 @@ func main() {
 		log.Error(err, "unable to add InferencePool view")
 		os.Exit(1)
 	}
+	// aibom_workloads_total, recounted from the cached AIBOMs (#398).
+	if err := mgr.Add(controller.NewWorkloadsGauge(mgr.GetClient())); err != nil {
+		log.Error(err, "unable to add workloads gauge")
+		os.Exit(1)
+	}
 
 	inferenceBase := controller.WorkloadReconciler{
 		Client:            mgr.GetClient(),
@@ -343,6 +350,12 @@ func main() {
 	dsetBase := inferenceBase
 	dsetBase.Scraper = scraper.NewDisaggregatedSetScraper(sigVerifier)
 
+	// Design 011: forget a deleted AIBOM's identity series when the
+	// workload reconcilers never see the deletion (owner GC).
+	if err := (&controller.AIBOMInfoGCReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to set up AIBOMInfoGCReconciler")
+		os.Exit(1)
+	}
 	if err := (&controller.DeploymentReconciler{WorkloadReconciler: inferenceBase}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to set up DeploymentReconciler")
 		os.Exit(1)

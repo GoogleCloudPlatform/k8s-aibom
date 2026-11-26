@@ -91,6 +91,21 @@ type WorkloadReconciler struct {
 	// recorder simply skip Event emission.
 	Recorder record.EventRecorder
 
+	// emitted records, per AIBOM, the input hash of the last document
+	// this process emitted with every sink succeeding. The dedup fast
+	// path reads the previous hash from the AIBOM status through the
+	// informer cache, and a reconcile that runs before the previous
+	// reconcile's status write has reached that cache sees the old hash
+	// and would emit the same document a second time; the InferencePool
+	// view's fan-out on recovery made that race easy to hit. The map is
+	// consulted after the status hash, only ever prevents a repeat of a
+	// document this process already emitted, is cleared when a sink
+	// fails (so the retry contract holds) or the AIBOM is deleted, and is
+	// empty after a restart, so the status stays the durable record.
+	// A pointer, created on first use, because tests and cmd/manager
+	// build reconcilers as struct literals and copy them.
+	emitted *emittedHashes
+
 	// ConfigStore holds the live AIBOMControllerConfig-derived Snapshot.
 	// Read once at the top of reconcileWorkload; the loaded *Snapshot is
 	// threaded through every downstream call site for the duration of
@@ -177,7 +192,7 @@ type WorkloadReconcileRequest struct {
 //  2. Scrape via the configured scraper.Scraper.
 //  3. Skip if BOMInputs.Confidence is Unresolved (no inference signal).
 //  4. Compute input hash; consult existing AIBOM CR for dedup.
-//     - Match -> fast path: BuildFastPathStatus + Status().Update.
+//     - Match -> fast path: update status changes or refresh an overdue timestamp.
 //     - Bootstrap race (AIBOM exists, Status.LastReconciled nil) -> defer.
 //  5. Build the BOM.
 //  6. Fan out to external sinks in parallel (see emitToExternalSinks).
@@ -276,6 +291,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				return ctrl.Result{}, fmt.Errorf("delete orphaned AIBOM: %w", err)
 			}
 			r.Pools.forget(client.ObjectKeyFromObject(aibom))
+			metrics.ForgetWorkloadInfo(client.ObjectKeyFromObject(aibom).String())
 		} else if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("get orphaned AIBOM: %w", err)
 		}
@@ -287,8 +303,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 
 	// Compute the input hash and consult any existing AIBOM CR to see
 	// whether this reconcile would produce content-identical output.
-	// If so, take the fast path: touch LastReconciled + ObservedGeneration
-	// only, skipping BOM build and external sink emission entirely.
+	// If so, take the fast path, skipping the BOM build and external sink emission.
 	if string(inputs.Category) != "" {
 		req.SummaryOptions.WorkloadCategory = string(inputs.Category)
 		req.BOMBuildOptions.WorkloadCategory = string(inputs.Category)
@@ -338,8 +353,7 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("hash inputs: %w", err)
 	}
 	if existingErr == nil {
-		// Dedup fast path: input hash matches the previously-emitted BOM's
-		// hash. Touch LastReconciled + ObservedGeneration only.
+		// Dedup fast path: input hash matches the previously-emitted BOM's hash.
 		if existing.Status.InputHash != "" && existing.Status.InputHash == inputHash {
 			logger.V(1).Info("BOM inputs unchanged since last reconcile, skipping emit",
 				"workload_namespace", req.Workload.Namespace,
@@ -349,9 +363,16 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 			// The document is unchanged, so it carries exactly these facts.
 			r.Pools.remember(&existing, pools)
 			r.countExtractionErrors(inputs.Errors)
-			prevErrors := existing.Status.ConsecutiveErrors
-			existing.Status = r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
-			recordExtractionErrors(&existing.Status, prevErrors, inputs.Errors, snap.StaleThresholdReconciles)
+			next := r.StatusBuilder.BuildFastPathStatus(&existing.Status, req.Generation)
+			recordExtractionErrors(&next, existing.Status.ConsecutiveErrors, inputs.Errors, snap.StaleThresholdReconciles)
+			// Bootstrap detection below needs a non-nil lastReconciled, regardless of its age.
+			if skipFastPathStatusTouch(&existing.Status, &next) {
+				// The status write is skipped, but the pod set may have
+				// changed: keep the identity series (Design 011) current.
+				metrics.SetWorkloadInfo(aibomKey.String(), existing.Status.Summary, ownedPodNames(req.Workload.Pods))
+				return ctrl.Result{}, nil
+			}
+			existing.Status = next
 			if err := r.Status().Update(ctx, &existing); err != nil {
 				if apierrors.IsConflict(err) {
 					return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // keep rate-limited requeue semantics; RequeueAfter migration is a deliberate follow-up
@@ -359,7 +380,24 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 				r.recordStatusPersistFailure(&existing, req, err)
 				return ctrl.Result{}, fmt.Errorf("update AIBOM status (fast path): %w", err)
 			}
+			// The document is unchanged but the pod set may not be
+			// (Design 011): refresh the identity series every reconcile.
+			metrics.SetWorkloadInfo(aibomKey.String(), existing.Status.Summary, ownedPodNames(req.Workload.Pods))
 			return ctrl.Result{}, nil
+		}
+		// Stale cache: this process already emitted exactly this document
+		// and wrote its hash, but the informer cache has not delivered
+		// that status yet, so existing still carries the previous hash.
+		// Emitting again would duplicate the document in every sink and
+		// writing status from this stale copy would only conflict. Wait
+		// for the cache; the next reconcile takes the fast path above.
+		if r.emittedBefore(aibomKey, inputHash) {
+			logger.V(1).Info("AIBOM status not yet caught up with the last emission, deferring briefly",
+				"workload_namespace", req.Workload.Namespace,
+				"workload_name", req.Workload.Name,
+				"input_hash", inputHash[:12],
+			)
+			return ctrl.Result{RequeueAfter: BootstrapRaceRequeueAfter}, nil
 		}
 		// Bootstrap race: the AIBOM exists (a prior reconcile's
 		// CreateOrUpdate landed) but its Status hasn't propagated
@@ -479,6 +517,12 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{}, fmt.Errorf("update AIBOM status: %w", err)
 	}
 	r.Pools.remember(aibom, pools)
+	metrics.SetWorkloadInfo(aibomKey.String(), aibom.Status.Summary, ownedPodNames(req.Workload.Pods))
+	if sinkFailed {
+		r.emittedStore().forget(aibomKey)
+	} else {
+		r.emittedStore().record(aibomKey, inputHash)
+	}
 	if sinkFailed {
 		// Deterministic self-heal: without this, a re-emit would wait
 		// for the next watch event, which for a quiet workload may
@@ -487,6 +531,54 @@ func (r *WorkloadReconciler) reconcileWorkload(ctx context.Context, req Workload
 		return ctrl.Result{RequeueAfter: SinkRetryRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// emittedBefore reports whether this process already emitted a document
+// with this input hash for the AIBOM and recorded it (see emitted). It
+// covers the window between a status write and the informer cache
+// catching up to it: the reconcile defers briefly instead of emitting
+// the same document a second time or writing status from a stale copy.
+func (r *WorkloadReconciler) emittedBefore(key types.NamespacedName, inputHash string) bool {
+	if inputHash == "" {
+		return false
+	}
+	return r.emittedStore().is(key, inputHash)
+}
+
+// emittedHashes is the per-process record behind emittedBefore.
+type emittedHashes struct {
+	mu sync.Mutex
+	m  map[types.NamespacedName]string
+}
+
+func (e *emittedHashes) record(key types.NamespacedName, hash string) {
+	e.mu.Lock()
+	e.m[key] = hash
+	e.mu.Unlock()
+}
+
+func (e *emittedHashes) forget(key types.NamespacedName) {
+	e.mu.Lock()
+	delete(e.m, key)
+	e.mu.Unlock()
+}
+
+func (e *emittedHashes) is(key types.NamespacedName, hash string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.m[key] == hash
+}
+
+// emittedInitMu guards the lazy creation of WorkloadReconciler.emitted.
+var emittedInitMu sync.Mutex
+
+func (r *WorkloadReconciler) emittedStore() *emittedHashes {
+	emittedInitMu.Lock()
+	defer emittedInitMu.Unlock()
+	if r.emitted == nil {
+		r.emitted = &emittedHashes{m: map[types.NamespacedName]string{}}
+	}
+	return r.emitted
 }
 
 // countExtractionErrors adds this scrape's extraction errors to
@@ -789,6 +881,8 @@ func (r *WorkloadReconciler) deleteWorkloadAIBOM(ctx context.Context, req Worklo
 		return fmt.Errorf("delete %s AIBOM: %w", why, err)
 	}
 	r.Pools.forget(client.ObjectKeyFromObject(aibom))
+	metrics.ForgetWorkloadInfo(client.ObjectKeyFromObject(aibom).String())
+	r.emittedStore().forget(client.ObjectKeyFromObject(aibom))
 	return nil
 }
 
@@ -943,4 +1037,14 @@ func (r *WorkloadReconciler) EnqueueWorkloadForPod(targetKind string) handler.Ma
 		}
 		return []reconcile.Request{{NamespacedName: ownerKey}}
 	}
+}
+
+// ownedPodNames lists the names of the pods a reconcile gathered for the
+// workload, the pod set the identity series (Design 011) describe.
+func ownedPodNames(pods []corev1.Pod) []string {
+	out := make([]string, 0, len(pods))
+	for i := range pods {
+		out = append(out, pods[i].Name)
+	}
+	return out
 }

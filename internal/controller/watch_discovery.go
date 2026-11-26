@@ -152,6 +152,25 @@ func (k *crdWorker) poke() {
 	}
 }
 
+// listWatchOnly tells client-go's reflector not to use WatchList
+// (streaming list) semantics for the informers the supervisor builds.
+// client-go enables WatchListClient by default since v0.35 and opens the
+// first watch with sendInitialEvents set; an API server without the
+// WatchList feature gate (the default through 1.33) rejects that with
+// 403 "sendInitialEvents is forbidden", and although the reflector then
+// falls back to a plain list on its own, the rejection first reaches the
+// watch error handler. For the CRD discovery informer that surfaced as a
+// discovery outage at every controller start on such servers: one
+// WatchUnhealthy event, a Degraded condition, then WatchRecovered a
+// second later. The CRD and InferencePool lists are small, so the
+// streaming list buys nothing here; plain list+watch behaves the same on
+// every supported server version.
+type listWatchOnly struct{}
+
+// IsWatchListSemanticsUnSupported is the client-go opt-out read by
+// cache.ToListWatcherWithWatchListSemantics.
+func (listWatchOnly) IsWatchListSemanticsUnSupported() bool { return true }
+
 // startDiscovery builds the shared CRD metadata informer and starts one
 // worker per candidate, all under the supervisor's wait group. Each
 // worker reads its CRD once straight away (the startup read), and again
@@ -206,7 +225,7 @@ func (s *WatchSupervisor) startDiscovery(ctx context.Context) error {
 		WatchFuncWithContext: watchCRDs,
 	}
 	inf := toolscache.NewSharedIndexInformer(
-		toolscache.ToListWatcherWithWatchListSemantics(lw, mc),
+		toolscache.ToListWatcherWithWatchListSemantics(lw, listWatchOnly{}),
 		&metav1.PartialObjectMetadata{}, 0, toolscache.Indexers{})
 	if err := inf.SetTransform(stripCRDMetadata); err != nil {
 		return fmt.Errorf("CRD discovery transform: %w", err)

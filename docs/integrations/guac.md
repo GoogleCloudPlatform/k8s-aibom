@@ -16,7 +16,7 @@ three on the same `ghcr.io/ggml-org/llama.cpp:server` digest. The
 `team-a/chat` document is
 [fixtures/llama-cpp-chat.cdx.json](fixtures/llama-cpp-chat.cdx.json),
 now regenerated with the `main` controller at `110c434` and explicit
-workload-to-component dependencies. See the
+workload-to-component dependencies, plus the v1.7.0 `serialNumber`. See the
 [fixture provenance](dependency-track.md#walkthrough) for the API-input
 replay used to regenerate it. The GUAC results below are from the
 original `cf8eeca` run, not a repeat with the regenerated fixture.

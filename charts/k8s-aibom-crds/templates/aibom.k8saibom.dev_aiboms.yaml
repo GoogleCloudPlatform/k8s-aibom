@@ -343,13 +343,13 @@ spec:
                   The reconciler compares this against a freshly-computed
                   inputs hash on every reconcile pass; when they match, the
                   reconciler skips BOM regeneration and external-sink emission
-                  (the fast path) to reduce computational and storage overhead,
-                  updating only LastReconciled and ObservedGeneration.
+                  (the fast path) to reduce computational and storage overhead.
                 type: string
               lastReconciled:
                 description: |-
-                  LastReconciled is the time the controller last reconciled this
-                  AIBOM, whether or not the BOM was regenerated.
+                  LastReconciled is the time of the last recorded reconciliation.
+                  Timestamp-only updates for an unchanged workload occur at most once
+                  every five minutes.
                 format: date-time
                 type: string
               observedGeneration:
@@ -391,6 +391,13 @@ spec:
                           description: |-
                             Identity is the model identifier as it appeared in the source
                             (env var value, arg value, annotation value). NOT normalized.
+                          type: string
+                        servedName:
+                          description: |-
+                            ServedName is the alias the serving engine was told to publish the
+                            model under (vLLM --served-model-name), when the container args set
+                            one; the name the engine's own metrics carry as model_name. Empty
+                            when the args set no alias.
                           type: string
                         signed:
                           description: |-
@@ -779,13 +786,13 @@ spec:
                   The reconciler compares this against a freshly-computed
                   inputs hash on every reconcile pass; when they match, the
                   reconciler skips BOM regeneration and external-sink emission
-                  (the fast path) to reduce computational and storage overhead,
-                  updating only LastReconciled and ObservedGeneration.
+                  (the fast path) to reduce computational and storage overhead.
                 type: string
               lastReconciled:
                 description: |-
-                  LastReconciled is the time the controller last reconciled this
-                  AIBOM, whether or not the BOM was regenerated.
+                  LastReconciled is the time of the last recorded reconciliation.
+                  Timestamp-only updates for an unchanged workload occur at most once
+                  every five minutes.
                 format: date-time
                 type: string
               observedGeneration:
@@ -827,6 +834,13 @@ spec:
                           description: |-
                             Identity is the model identifier as it appeared in the source
                             (env var value, arg value, annotation value). NOT normalized.
+                          type: string
+                        servedName:
+                          description: |-
+                            ServedName is the alias the serving engine was told to publish the
+                            model under (vLLM --served-model-name), when the container args set
+                            one; the name the engine's own metrics carry as model_name. Empty
+                            when the args set no alias.
                           type: string
                         signed:
                           description: |-

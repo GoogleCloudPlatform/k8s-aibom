@@ -1,5 +1,7 @@
 # Quality Baseline: v1.0 Release
 
+> Historical record from the v1.0.0 release (May 2026), kept as published. The same tools still run in CI on every pull request; their results are not re-recorded per release.
+
 This document serves as the public-facing evidence of the project's engineering quality and security baseline. Below is the static-analysis and misconfiguration audit report for the `v1.0` release candidate manifests.
 
 All tools are configured to run automatically in CI on every Pull Request to prevent regressions.

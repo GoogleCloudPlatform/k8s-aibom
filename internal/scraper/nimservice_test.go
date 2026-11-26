@@ -180,6 +180,77 @@ func TestNIMServiceScraper_DeclaredArgs(t *testing.T) {
 	}
 }
 
+// The operator hands spec.env and spec.args to the NIM container, so a
+// $(VAR_NAME) reference in spec.args names the spec.env value. One the
+// spec does not state is not a declared model, and the image path still
+// names the model.
+func TestNIMServiceScraper_ArgVariableReferences(t *testing.T) {
+	u := nimService("ns", "args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		map[string]interface{}{"name": "SERVED_MODEL", "value": "org/served-model"},
+	}, "spec", "env")
+	_ = unstructured.SetNestedStringSlice(u.Object, []string{"--model", "$(SERVED_MODEL)"}, "spec", "args")
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "org/served-model" || models[0].Confidence != ConfidenceDeclared ||
+		models[0].Evidence.Locator != "spec.args[0 1](--model)" {
+		t.Fatalf("models = %+v, want org/served-model declared from spec.args[0 1]", models)
+	}
+	if got := models[0].Properties["identity.envVarName"]; got != "SERVED_MODEL" {
+		t.Errorf("identity.envVarName = %q, want SERVED_MODEL", got)
+	}
+
+	u = nimService("ns", "args", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedStringSlice(u.Object, []string{"--model=$(SERVED_MODEL)"}, "spec", "args")
+	got, err = newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models = componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "meta/llama-3.1-8b-instruct" || models[0].Confidence != ConfidenceInferred {
+		t.Fatalf("models = %+v, want only the image-path model", models)
+	}
+}
+
+// A $(VAR_NAME) reference in a spec.env model variable names the value of
+// the earlier spec.env entry. One the spec does not state is not a
+// declared model, and the image path still names the model.
+func TestNIMServiceScraper_EnvVariableReferences(t *testing.T) {
+	u := nimService("ns", "env", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		map[string]interface{}{"name": "SERVED_MODEL", "value": "org/served-model"},
+		map[string]interface{}{"name": "NIM_MODEL_NAME", "value": "$(SERVED_MODEL)"},
+	}, "spec", "env")
+	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "org/served-model" || models[0].Confidence != ConfidenceInferred ||
+		models[0].Evidence.Locator != "spec.env[1](NIM_MODEL_NAME)" {
+		t.Fatalf("models = %+v, want org/served-model inferred from spec.env[1]", models)
+	}
+	if got := models[0].Properties["identity.envVarName"]; got != "NIM_MODEL_NAME,SERVED_MODEL" {
+		t.Errorf("identity.envVarName = %q, want NIM_MODEL_NAME,SERVED_MODEL", got)
+	}
+
+	u = nimService("ns", "env", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
+	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
+		map[string]interface{}{"name": "NIM_MODEL_NAME", "value": "$(SERVED_MODEL)"},
+	}, "spec", "env")
+	got, err = newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
+	if err != nil {
+		t.Fatalf("Scrape: %v", err)
+	}
+	models = componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "meta/llama-3.1-8b-instruct" || models[0].Evidence.Source != SourceImageReference {
+		t.Fatalf("models = %+v, want only the image-path model", models)
+	}
+}
+
 // A NIMService pointing at a non-NIM registry (mirror, custom build):
 // the kind still declares the runtime, but no model is invented.
 func TestNIMServiceScraper_NonNIMRegistry_NoModel(t *testing.T) {
@@ -261,22 +332,30 @@ func TestNIMServiceScraper_MultiNodeAndStorageShapes(t *testing.T) {
 	}
 }
 
-// A malformed env entry is recorded and skipped; the rest still scrapes.
+// A malformed env entry is recorded and skipped; the rest still scrapes,
+// with their original indices.
 func TestNIMServiceScraper_MalformedEnv_Degrades(t *testing.T) {
 	u := nimService("ns", "bad", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
 	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
 		"not-an-object",
+		map[string]interface{}{"name": "NIM_SERVER_PORT", "value": int64(8000)},
 		map[string]interface{}{"name": "NIM_MODEL_NAME", "value": "Qwen/Qwen3-0.6B"},
 	}, "spec", "env")
 	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
 	if err != nil {
 		t.Fatalf("Scrape must succeed: %v", err)
 	}
-	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0].Error(), "spec.env[0]") {
+	if len(got.Errors) != 2 ||
+		!strings.Contains(got.Errors[0].Error(), "spec.env[0]") ||
+		!strings.Contains(got.Errors[1].Error(), "spec.env[1]") {
 		t.Errorf("errors = %v", got.Errors)
 	}
-	if models := componentsOf(got.Components, ComponentMLModel); len(models) != 1 || models[0].Name != "Qwen/Qwen3-0.6B" {
-		t.Errorf("models = %+v", models)
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "Qwen/Qwen3-0.6B" {
+		t.Fatalf("models = %+v", models)
+	}
+	if loc := models[0].Evidence.Locator; loc != "spec.env[2](NIM_MODEL_NAME)" {
+		t.Errorf("locator = %q, want spec.env[2](NIM_MODEL_NAME)", loc)
 	}
 }
 

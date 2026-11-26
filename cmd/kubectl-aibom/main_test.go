@@ -17,10 +17,17 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // withoutCluster points the kubeconfig loading rules at a file that
@@ -64,6 +71,149 @@ func TestRun_HelpNeedsNoCluster(t *testing.T) {
 	}
 }
 
+func TestRun_VersionNeedsNoCluster(t *testing.T) {
+	withoutCluster(t)
+	stdout := captureOutput(t, &os.Stdout)
+	if err := run([]string{"--version"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(stdout()); got != "dev" {
+		t.Errorf("--version = %q, want dev", got)
+	}
+}
+
+func TestRun_SummaryHintUsesNamespaceOptIn(t *testing.T) {
+	const generalHint = "No AIBOMs found. Nothing is inventoried until a namespace is opted in:\n" +
+		"  kubectl label namespace <name> aibom.k8saibom.dev/enabled=true\n" +
+		"The controller reports the same in the NamespacesOptedIn condition of AIBOMControllerConfig/default.\n"
+	for _, tc := range []struct {
+		name          string
+		allNamespaces bool
+		items         string
+		labels        string
+		wantHint      string
+		wantRequests  int32
+	}{
+		{
+			name:   "opted in",
+			labels: `{"aibom.k8saibom.dev/enabled":"true"}`,
+			wantHint: "No AIBOMs found. Namespace prod-jobs is opted in.\n" +
+				"Check that the controller is running. Then inspect status.conditions and status.effectiveInferenceRuntimeImagePatterns with:\n" +
+				"  kubectl get aibomcontrollerconfig default -o yaml\n",
+			wantRequests: 2,
+		},
+		{
+			name:         "not opted in",
+			labels:       `{}`,
+			wantHint:     generalHint,
+			wantRequests: 2,
+		},
+		{
+			name:         "explicitly opted out",
+			labels:       `{"aibom.k8saibom.dev/enabled":"false"}`,
+			wantHint:     generalHint,
+			wantRequests: 2,
+		},
+		{
+			name:         "namespace lookup forbidden",
+			wantHint:     generalHint,
+			wantRequests: 2,
+		},
+		{
+			name:         "populated namespace",
+			items:        `[{"apiVersion":"aibom.k8saibom.dev/v1beta1","kind":"AIBOM","metadata":{"name":"server","namespace":"prod-jobs"}}]`,
+			wantRequests: 1,
+		},
+		{
+			name:          "empty across all namespaces",
+			allNamespaces: true,
+			wantHint:      generalHint,
+			wantRequests:  1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			listPath := "/apis/aibom.k8saibom.dev/v1beta1/namespaces/prod-jobs/aiboms"
+			if tc.allNamespaces {
+				listPath = "/apis/aibom.k8saibom.dev/v1beta1/aiboms"
+			}
+			items := tc.items
+			if items == "" {
+				items = "[]"
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case listPath:
+					fmt.Fprintf(w, `{"apiVersion":"aibom.k8saibom.dev/v1beta1","kind":"AIBOMList","items":%s}`, items)
+				case "/api/v1/namespaces/prod-jobs":
+					if tc.labels == "" {
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprint(w, `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Forbidden","code":403}`)
+						return
+					}
+					fmt.Fprintf(w, `{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"prod-jobs","labels":%s}}`, tc.labels)
+				default:
+					t.Errorf("unexpected API request: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			cfg := clientcmdapi.NewConfig()
+			cfg.Clusters["test"] = &clientcmdapi.Cluster{Server: server.URL}
+			cfg.Contexts["test"] = &clientcmdapi.Context{Cluster: "test", Namespace: "prod-jobs"}
+			cfg.CurrentContext = "test"
+			kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+			if err := clientcmd.WriteToFile(*cfg, kubeconfig); err != nil {
+				t.Fatal(err)
+			}
+
+			stdout := captureOutput(t, &os.Stdout)
+			stderr := captureOutput(t, &os.Stderr)
+			args := []string{"summary", "--kubeconfig", kubeconfig}
+			if tc.allNamespaces {
+				args = append(args, "-A")
+			}
+			if err := run(args); err != nil {
+				t.Fatal(err)
+			}
+			if got := requests.Load(); got != tc.wantRequests {
+				t.Errorf("API requests = %d, want %d", got, tc.wantRequests)
+			}
+			if hint := stderr(); hint != tc.wantHint {
+				t.Errorf("stderr = %q, want %q", hint, tc.wantHint)
+			}
+			if got := stdout(); !strings.HasPrefix(got, "NAMESPACE") || strings.Contains(got, "No AIBOMs") {
+				t.Errorf("stdout = %q, want only the summary table", got)
+			}
+		})
+	}
+}
+
+func captureOutput(t *testing.T, stream **os.File) func() string {
+	t.Helper()
+	output, err := os.Create(filepath.Join(t.TempDir(), "output"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := *stream
+	*stream = output
+	t.Cleanup(func() {
+		*stream = original
+		_ = output.Close()
+	})
+	return func() string {
+		t.Helper()
+		data, err := os.ReadFile(output.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+}
+
 func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 	withoutCluster(t)
 	for _, tc := range []struct {
@@ -71,6 +221,7 @@ func TestRun_ArgumentErrorsNeedNoCluster(t *testing.T) {
 		want string
 	}{
 		{[]string{"bogus"}, `unknown subcommand "bogus"`},
+		{[]string{"--version", "extra"}, "--version does not take arguments"},
 		{[]string{"find", "--signed", "maybe"}, "--signed must be one of"},
 		{[]string{"find", "--digest", "sha256:"}, "--digest"},
 		{[]string{"view"}, "view requires exactly one AIBOM name"},

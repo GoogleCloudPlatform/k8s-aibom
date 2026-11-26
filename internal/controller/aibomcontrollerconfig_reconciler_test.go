@@ -36,11 +36,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	cfgctrl "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	aibomv1beta1 "github.com/GoogleCloudPlatform/k8s-aibom/api/v1beta1"
@@ -518,10 +516,8 @@ func startConfigEnvTestFull(t *testing.T, crdDirs []string, health *WatchHealth)
 		t.Fatalf("client.New: %v", err)
 	}
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme,
-		Controller: cfgctrl.Controller{
-			SkipNameValidation: ptr.To(true),
-		},
+		Scheme:     scheme,
+		Controller: testControllerOptions(),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)

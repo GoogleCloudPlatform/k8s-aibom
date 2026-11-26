@@ -40,13 +40,14 @@ the companion `k8s-aibom-crds` chart; third-party CRD outages that
 degrade one kind instead of the controller ([Design 004](design/004-watch-isolation.md)).
 NVIDIA AICR requalified each of the three tags within a day of release.
 
-## v1.7 — the interoperability release (target 2026-11-24)
+## v1.7 — the interoperability release (shipped 2026-11-24)
 
 **Focus.** The document becomes the one other tools read, not only the
 one we write. Six changes to the document shape land together so
 downstream consumers see a single transition, and the two main
 consumers prove the result by ingesting it. Tracking: [#315](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/315)
-(go/no-go Fri 2026-11-14, rc.1 Mon 11-17, tag Mon 11-24).
+(go/no-go 2026-11-13, rc.1 11-18, tag 11-24). Everything in scope
+shipped; the stretch items moved to 1.8 as planned.
 
 **In scope (decides the theme).**
 
@@ -77,7 +78,7 @@ consumers prove the result by ingesting it. Tracking: [#315](https://github.com/
 **Small, any time:** webhook sink CA bundle for bearer auth over a
 private CA (#96).
 
-**Stretch, moves to 1.8 if not on main by rc.1:** the detection-coverage
+**Stretch, moved to 1.8 (not on main by rc.1):** the detection-coverage
 corpus scored per release (#314); a CycloneDX 2.0 sample document now
 that the 2.0 AI/ML module is merged (#145); narrowing the apps/v1 and
 batch watches under the Design 004 supervisor (#136); the KubeAI lens
@@ -106,6 +107,11 @@ code.
   runtime, not one; the API change that waits for a minor.
 - **OperatorHub** (#345): an OLM bundle and submission to operatorhub.io
   and the OpenShift catalog, with an OpenShift install page.
+- **Model identity as a metrics dimension** ([#411](https://github.com/GoogleCloudPlatform/k8s-aibom/issues/411),
+  Design 011): `aibom_workload_info` and `aibom_pod_info` so cAdvisor,
+  DCGM and OpenCost series join to a model with one PromQL expression;
+  `--served-model-name` recorded; reference recording rules and a
+  dashboard, off by default.
 - **Carry-overs from the 1.7 stretch list** in the order above.
 
 **Not in this release:** `v1alpha1` removal (a separate, announced

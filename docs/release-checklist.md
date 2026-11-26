@@ -58,6 +58,13 @@ commit:
 ## Tag & publish
 
 1. Tag the verified commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   If the release workflow fails, read the failed step's log before
+   anything else, and do not move or delete the tag (the Go module proxy
+   caches it). Re-running the workflow on the same tag is safe: every
+   push is idempotent or creates something that does not exist yet. A
+   re-run rebuilds the image, so the version tag moves to a new digest
+   and the first image stays reachable by digest as an orphan; record
+   that on the release tracking issue (v1.7.0 precedent, #315).
 2. The release workflow builds and publishes: multi-arch image (ghcr),
    Helm chart and CRDs chart (OCI, same version, both attested),
    install.yaml (digest-pinned), SBOM, provenance attestations, GitHub

@@ -140,8 +140,10 @@ jobs:
       id: chart
       run: |
         helm package charts/k8s-aibom --version "${VERSION}" --app-version "${TAG}" --destination dist/
-        helm push "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}" 2>&1 | tee push.log
-        echo "digest=$(awk '/Digest:/ {print $2}' push.log)" >> "$GITHUB_OUTPUT"
+        # Retries and fails closed: a failed push, or one without a digest,
+        # stops the release here (see hack/release/push-chart.sh).
+        digest="$(hack/release/push-chart.sh "dist/k8s-aibom-${VERSION}.tgz" "${CHART_REPO}")"
+        echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
     # The chart is attested like the image, so both artifacts AICR pins
     # (image digest + chart) are cryptographically verifiable.
@@ -159,8 +161,8 @@ jobs:
       id: crdschart
       run: |
         helm package charts/k8s-aibom-crds --version "${VERSION}" --app-version "${TAG}" --destination dist/
-        helm push "dist/k8s-aibom-crds-${VERSION}.tgz" "${CHART_REPO}" 2>&1 | tee push-crds.log
-        echo "digest=$(awk '/Digest:/ {print $2}' push-crds.log)" >> "$GITHUB_OUTPUT"
+        digest="$(hack/release/push-chart.sh "dist/k8s-aibom-crds-${VERSION}.tgz" "${CHART_REPO}")"
+        echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
     - name: Attest CRDs chart build provenance
       id: attest-crdschart

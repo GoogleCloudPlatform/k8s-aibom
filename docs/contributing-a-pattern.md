@@ -115,4 +115,8 @@ merged in a morning.
 - **A mirror of a known image in your private registry**: configure
   `spec.discovery.inferenceRuntimeImagePatterns` in your
   `AIBOMControllerConfig` instead; the default allowlist stays
-  publisher-anchored.
+  publisher-anchored. Note that the field **replaces** the compiled-in
+  list rather than adding to it: copy the defaults you still want from
+  `internal/scraper/v1-runtime-patterns.yaml` (or from
+  `status.effectiveInferenceRuntimeImagePatterns` on the config CR)
+  before appending your own.

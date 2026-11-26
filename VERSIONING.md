@@ -25,8 +25,16 @@ version:
 1. **The AIBOM and AIBOMControllerConfig APIs** (`aibom.k8saibom.dev`),
    including status condition semantics.
 2. **The emitted CycloneDX 1.6 ML-BOM document shape**, including the
-   confidence model (declared / inferred / unresolved), evidence locators,
-   and signature status semantics (unsigned / claimed / verified).
+   confidence model (declared / inferred / unresolved / verified),
+   evidence locators, and signature status semantics (unsigned / claimed /
+   verified). One deliberate exception inside 1.x: v1.7.0 moves the
+   document to CycloneDX conventions in a single transition
+   (`metadata.lifecycles`, `pkg:oci` purls, the registered `k8s-aibom:`
+   property namespace, `dependencies`, `serialNumber`), so byte-identity
+   with v1.4.0 through v1.6.x documents ends there. The CHANGELOG's
+   "Document shape (one transition, v1.7.0)" section lists every change
+   and docs/schema-divergences.md records the reasoning; determinism
+   within a release is unchanged.
 3. **The Helm chart values interface.**
 4. **The namespace opt-in contract** (`aibom.k8saibom.dev/enabled=true`).
 

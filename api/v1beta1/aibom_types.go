@@ -109,8 +109,9 @@ type AIBOMStatus struct {
 	// status, in an external sink, or truncated (no inline + no external).
 	BOMDocument *BOMDocumentRef `json:"bomDocument,omitempty"`
 
-	// LastReconciled is the time the controller last reconciled this
-	// AIBOM, whether or not the BOM was regenerated.
+	// LastReconciled is the time of the last recorded reconciliation.
+	// Timestamp-only updates for an unchanged workload occur at most once
+	// every five minutes.
 	LastReconciled *metav1.Time `json:"lastReconciled,omitempty"`
 
 	// BOMHash is the SHA-256 of the most recently generated BOM
@@ -128,8 +129,7 @@ type AIBOMStatus struct {
 	// The reconciler compares this against a freshly-computed
 	// inputs hash on every reconcile pass; when they match, the
 	// reconciler skips BOM regeneration and external-sink emission
-	// (the fast path) to reduce computational and storage overhead,
-	// updating only LastReconciled and ObservedGeneration.
+	// (the fast path) to reduce computational and storage overhead.
 	InputHash string `json:"inputHash,omitempty"`
 
 	// ObservedGeneration is the .metadata.generation of the AIBOM at
@@ -209,6 +209,12 @@ type ModelSummary struct {
 	// (see Signed). Never "unresolved" — unresolved attributes are not
 	// summarized.
 	Confidence string `json:"confidence,omitempty"`
+	// ServedName is the alias the serving engine was told to publish the
+	// model under (vLLM --served-model-name), when the container args set
+	// one; the name the engine's own metrics carry as model_name. Empty
+	// when the args set no alias.
+	// +optional
+	ServedName string `json:"servedName,omitempty"`
 	// Signed encodes signature presence and verification. One of
 	// "unsigned", "claimed", "verified"; empty when the workload
 	// declares no signature reference, which readers treat as

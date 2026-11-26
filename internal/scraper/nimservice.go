@@ -189,11 +189,16 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 	// 3. Declared claims: spec.env and spec.args through the allowlists,
 	// then workload annotations. These are the sources that win.
 	var declared []Component
+	var env []corev1.EnvVar
 	if rawEnv, found, err := unstructured.NestedSlice(u.Object, "spec", "env"); err != nil {
 		inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.env: %w; skipped", err))
 	} else if found {
-		env := make([]corev1.EnvVar, 0, len(rawEnv))
+		// A malformed entry is recorded and left in place as one whose
+		// value the spec does not state, so the remaining entries keep
+		// their indices in evidence locators and nothing expands from it.
+		env = make([]corev1.EnvVar, len(rawEnv))
 		for i, item := range rawEnv {
+			env[i].ValueFrom = &corev1.EnvVarSource{}
 			m, ok := item.(map[string]interface{})
 			if !ok {
 				inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.env[%d]: not an object (%T); skipped", i, item))
@@ -204,7 +209,7 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 				inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.env[%d]: %w; skipped", i, err))
 				continue
 			}
-			env = append(env, e)
+			env[i] = e
 		}
 		declared = append(declared, envVarModels(env, "", "spec", cfg)...)
 	}
@@ -223,7 +228,9 @@ func (s *NIMServiceScraper) Scrape(ctx context.Context, w Workload, cfg *Inferen
 			}
 			args[i] = s
 		}
-		declared = append(declared, argModels(args, "", "spec", cfg)...)
+		// The operator passes spec.env and spec.args to the NIM
+		// container, so $(VAR_NAME) in args expands from spec.env.
+		declared = append(declared, argModels(args, env, "", "spec", cfg)...)
 	}
 	declared = append(declared,
 		extractAnnotationModels(u.GetAnnotations(), SourceWorkloadAnnotation, "metadata.annotations")...)

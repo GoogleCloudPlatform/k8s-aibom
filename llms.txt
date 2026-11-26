@@ -1,6 +1,6 @@
 # k8s-aibom
 
-> An open-source (Apache-2.0), unprivileged Kubernetes controller that generates CycloneDX 1.6 ML-BOM documents for AI workloads at runtime — inference services, agent stacks, RAG pipelines, training jobs, and evaluation harnesses — with evidence locators and a confidence tier on every attribute.
+> k8s-aibom makes the AI identity of every workload a Kubernetes-native fact, derived rather than declared. An open-source (Apache-2.0), unprivileged Kubernetes controller reads which model, runtime, agent framework and provider each AI workload runs — inference services, agent stacks, RAG pipelines, training jobs, and evaluation harnesses — and serves it as a CycloneDX 1.6 ML-BOM document per workload and a status summary (Prometheus series follow in v1.8), with evidence locators and a confidence tier on every attribute.
 
 Key facts:
 
@@ -10,7 +10,7 @@ Key facts:
 - Measured cost: ~1.17 mCPU and ~63 MiB at 1,001 tracked workloads, with signature verification enabled, on live GKE.
 - Ships in NVIDIA AI Cluster Runtime as a qualified component (default-on in the stock GKE H100 inference recipe since AICR v0.20); runs on any conformant Kubernetes, with install docs for GKE, EKS, and AKS.
 - Releases are digest-pinned with provenance and SBOM attestations; the Helm chart is on ghcr.io (`oci://ghcr.io/googlecloudplatform/charts/k8s-aibom`).
-- A kubectl plugin (`kubectl aibom`) provides summary, view, and verify subcommands.
+- A kubectl plugin (`kubectl aibom`) provides summary, find, view, and verify subcommands.
 
 ## Docs
 
