@@ -332,22 +332,30 @@ func TestNIMServiceScraper_MultiNodeAndStorageShapes(t *testing.T) {
 	}
 }
 
-// A malformed env entry is recorded and skipped; the rest still scrapes.
+// A malformed env entry is recorded and skipped; the rest still scrapes,
+// with their original indices.
 func TestNIMServiceScraper_MalformedEnv_Degrades(t *testing.T) {
 	u := nimService("ns", "bad", "nvcr.io/nim/meta/llama-3.1-8b-instruct", "1.3.0")
 	_ = unstructured.SetNestedSlice(u.Object, []interface{}{
 		"not-an-object",
+		map[string]interface{}{"name": "NIM_SERVER_PORT", "value": int64(8000)},
 		map[string]interface{}{"name": "NIM_MODEL_NAME", "value": "Qwen/Qwen3-0.6B"},
 	}, "spec", "env")
 	got, err := newNIMScraper().Scrape(context.Background(), nimWorkload(u), testConfig())
 	if err != nil {
 		t.Fatalf("Scrape must succeed: %v", err)
 	}
-	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0].Error(), "spec.env[0]") {
+	if len(got.Errors) != 2 ||
+		!strings.Contains(got.Errors[0].Error(), "spec.env[0]") ||
+		!strings.Contains(got.Errors[1].Error(), "spec.env[1]") {
 		t.Errorf("errors = %v", got.Errors)
 	}
-	if models := componentsOf(got.Components, ComponentMLModel); len(models) != 1 || models[0].Name != "Qwen/Qwen3-0.6B" {
-		t.Errorf("models = %+v", models)
+	models := componentsOf(got.Components, ComponentMLModel)
+	if len(models) != 1 || models[0].Name != "Qwen/Qwen3-0.6B" {
+		t.Fatalf("models = %+v", models)
+	}
+	if loc := models[0].Evidence.Locator; loc != "spec.env[2](NIM_MODEL_NAME)" {
+		t.Errorf("locator = %q, want spec.env[2](NIM_MODEL_NAME)", loc)
 	}
 }
 

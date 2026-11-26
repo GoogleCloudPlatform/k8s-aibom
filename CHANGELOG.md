@@ -38,6 +38,14 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **NIMService model locators keep their `spec.env` index past a
+  malformed entry.** A `spec.env` entry that was not an object or did
+  not decode was recorded and dropped from the list, so every later
+  entry moved up one place and a model claimed from it was located at
+  the wrong index (`spec.env[0](NIM_MODEL_NAME)` for the entry at
+  `spec.env[1]`). The entry is now left in place with no stated value,
+  as `spec.args` already does (#430).
+
 - **The controller no longer risks a 30-second hang on shutdown.**
   controller-runtime v0.24's default priority queue can deadlock while a
   controller stops (kubernetes-sigs/controller-runtime#3540, fixed in
