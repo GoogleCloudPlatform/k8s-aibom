@@ -38,6 +38,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- Page AIBOM lists in `kubectl aibom summary` and `find`, preserving table output (#403).
+
 - **NIMService model locators keep their `spec.env` index past a
   malformed entry.** A `spec.env` entry that was not an object or did
   not decode was recorded and dropped from the list, so every later

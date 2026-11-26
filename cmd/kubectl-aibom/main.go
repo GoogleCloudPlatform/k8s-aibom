@@ -32,6 +32,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"iter"
 	"os"
 	"strings"
 
@@ -276,42 +277,21 @@ Flags:
 	ctx := context.Background()
 
 	switch sub {
-	case "summary":
-		if *allNS {
-			l, err := dyn.Resource(aibomGVR).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return err
+	case "summary", "find":
+		items := listAIBOMs(ctx, dyn.Resource(aibomGVR).Namespace(ns))
+		if sub == "find" {
+			return runFind(items, f, os.Stdout, os.Stderr)
+		}
+		var emptyNamespace func() *unstructured.Unstructured
+		if !*allNS {
+			emptyNamespace = func() *unstructured.Unstructured {
+				// Some inventory readers cannot read cluster-scoped namespaces.
+				// A failed lookup falls back to a generic hint.
+				namespace, _ := dyn.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+				return namespace
 			}
-			return runSummary(l.Items, nil, os.Stdout, os.Stderr)
 		}
-		l, err := dyn.Resource(aibomGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
-		var summaryNamespace *unstructured.Unstructured
-		if len(l.Items) == 0 {
-			// Some inventory readers cannot read cluster-scoped namespaces.
-			// A failed lookup falls back to a generic hint.
-			summaryNamespace, _ = dyn.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
-		}
-		return runSummary(l.Items, summaryNamespace, os.Stdout, os.Stderr)
-
-	case "find":
-		var items []unstructured.Unstructured
-		if *allNS {
-			l, err := dyn.Resource(aibomGVR).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return err
-			}
-			items = l.Items
-		} else {
-			l, err := dyn.Resource(aibomGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return err
-			}
-			items = l.Items
-		}
-		return runFind(items, f, os.Stdout, os.Stderr)
+		return runSummary(items, emptyNamespace, os.Stdout, os.Stderr)
 
 	case "view", "verify":
 		u, err := dyn.Resource(aibomGVR).Namespace(ns).Get(ctx, positional[0], metav1.GetOptions{})
@@ -331,6 +311,29 @@ Flags:
 		return nil
 	}
 	return nil
+}
+
+// listAIBOMs yields one page at a time in the order returned by the API.
+func listAIBOMs(ctx context.Context, resource dynamic.ResourceInterface) iter.Seq2[*unstructured.Unstructured, error] {
+	return func(yield func(*unstructured.Unstructured, error) bool) {
+		options := metav1.ListOptions{Limit: 500}
+		for {
+			page, err := resource.List(ctx, options)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			for i := range page.Items {
+				if !yield(&page.Items[i], nil) {
+					return
+				}
+			}
+			options.Continue = page.GetContinue()
+			if options.Continue == "" {
+				return
+			}
+		}
+	}
 }
 
 // isBoolFlag reports whether the token a names one of fs's boolean

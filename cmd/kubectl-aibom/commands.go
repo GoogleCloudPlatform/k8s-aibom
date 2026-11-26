@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"strings"
 	"text/tabwriter"
 
@@ -33,8 +34,7 @@ import (
 
 // The command logic operates on unstructured AIBOM objects so the plugin
 // works against both served API versions and never needs a scheme. All
-// functions here are pure (object in, bytes/rows out) — main.go owns the
-// client, these own the behavior, and the tests exercise these directly.
+// functions here consume objects without owning the Kubernetes client.
 
 // errTruncated is returned by inlineBOM when the document is not carried
 // inline; the message tells the operator how to recover the full BOM.
@@ -239,9 +239,26 @@ func orDash(s string) string {
 	return s
 }
 
-// runSummary renders the table for a list of AIBOMs.
-func runSummary(items []unstructured.Unstructured, namespace *unstructured.Unstructured, w, errw io.Writer) error {
-	if len(items) == 0 && errw != nil {
+// runSummary renders the table after the full list has been read.
+func runSummary(items iter.Seq2[*unstructured.Unstructured, error], emptyNamespace func() *unstructured.Unstructured, w, errw io.Writer) error {
+	// Keep the table together for column alignment and suppress all output
+	// if a later page fails.
+	var table bytes.Buffer
+	tw := tabwriter.NewWriter(&table, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAMESPACE\tNAME\tWORKLOAD\tWORKLOAD-NAME\tCATEGORY\tRUNTIME\tMODELS\tCONFIDENCE\tSIGNED\tREADY")
+	empty := true
+	for item, err := range items {
+		if err != nil {
+			return err
+		}
+		empty = false
+		fmt.Fprintln(tw, strings.Join(summaryRow(item), "\t"))
+	}
+	if empty && errw != nil {
+		var namespace *unstructured.Unstructured
+		if emptyNamespace != nil {
+			namespace = emptyNamespace()
+		}
 		if namespace != nil && namespace.GetLabels()["aibom.k8saibom.dev/enabled"] == "true" {
 			fmt.Fprintf(errw, "No AIBOMs found. Namespace %s is opted in.\n", namespace.GetName())
 			fmt.Fprintln(errw, "Check that the controller is running. Then inspect status.conditions and status.effectiveInferenceRuntimeImagePatterns with:")
@@ -252,10 +269,9 @@ func runSummary(items []unstructured.Unstructured, namespace *unstructured.Unstr
 			fmt.Fprintln(errw, "The controller reports the same in the NamespacesOptedIn condition of AIBOMControllerConfig/default.")
 		}
 	}
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAMESPACE\tNAME\tWORKLOAD\tWORKLOAD-NAME\tCATEGORY\tRUNTIME\tMODELS\tCONFIDENCE\tSIGNED\tREADY")
-	for i := range items {
-		fmt.Fprintln(tw, strings.Join(summaryRow(&items[i]), "\t"))
+	if err := tw.Flush(); err != nil {
+		return err
 	}
-	return tw.Flush()
+	_, err := table.WriteTo(w)
+	return err
 }
