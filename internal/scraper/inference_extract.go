@@ -173,8 +173,7 @@ func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, 
 			// filtering upstream is the primary guard, and real
 			// kubelets always populate it.
 			if cs.Image != "" {
-				csName, _, _ := parseImageRef(cs.Image)
-				if normalizeImageName(csName) != normalizeImageName(specName) {
+				if normalizeImageName(statusImageName(cs)) != normalizeImageName(specName) {
 					continue
 				}
 			}
@@ -193,6 +192,27 @@ func resolveContainerDigest(specImage, containerName string, pods []corev1.Pod, 
 		return "", ""
 	}
 	return best, SourcePodStatus
+}
+
+// statusImageName returns the image name a container status reports.
+// The runtime reports status.image as the bare image ID
+// ("sha256:...") rather than a name when the node's copy of the
+// image has no tag, for example after a moving tag such as :latest
+// was pulled again and now names a newer image. The name then comes
+// from the repository digest in status.imageID
+// ("docker.io/vllm/vllm-openai@sha256:...", optionally behind a
+// "docker-pullable://" scheme). When imageID is a bare ID as well,
+// the returned name ("sha256") matches no spec image.
+func statusImageName(cs corev1.ContainerStatus) string {
+	image := cs.Image
+	if cleanSHA256Digest(image) != "" {
+		image = cs.ImageID
+		if i := strings.Index(image, "://"); i >= 0 {
+			image = image[i+len("://"):]
+		}
+	}
+	name, _, _ := parseImageRef(image)
+	return name
 }
 
 // normalizeImageName equates the forms a registry-default image name
