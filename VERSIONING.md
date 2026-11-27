@@ -23,7 +23,12 @@ The following are the project's public contracts, stable within a MAJOR
 version:
 
 1. **The AIBOM and AIBOMControllerConfig APIs** (`aibom.k8saibom.dev`),
-   including status condition semantics.
+   including status condition semantics. One behaviour change inside 1.x:
+   from v1.8.0, `status.summary.models` has one entry per model, so a
+   workload whose model is named by several evidence sources (e.g.,
+   `--model` and `HF_MODEL_ID`) reports one entry where it used to
+   report one per source. The schema is unchanged; the CHANGELOG's
+   "One model component per name (v1.8.0)" section has the details.
 2. **The emitted CycloneDX 1.6 ML-BOM document shape**, including the
    confidence model (declared / inferred / unresolved / verified),
    evidence locators, and signature status semantics (unsigned / claimed /
