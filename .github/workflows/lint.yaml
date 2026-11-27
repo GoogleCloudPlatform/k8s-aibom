@@ -44,3 +44,10 @@ jobs:
         helm lint charts/k8s-aibom-crds
     - name: Chart CRDs match generated manifests
       run: make verify-chart-crds
+    - name: Released changelog sections are unchanged
+      # A PR written before a release and merged after it can land its
+      # entry inside the released section without a conflict (#418).
+      run: |
+        git fetch --quiet --depth=1 origin "refs/tags/v*:refs/tags/v*"
+        hack/verify-changelog-released_test.sh
+        make verify-changelog
