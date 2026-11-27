@@ -279,6 +279,41 @@ func TestResolveContainerDigest_DockerHubNormalization(t *testing.T) {
 	}
 }
 
+func TestResolveContainerDigest_BareImageIDStatusImage(t *testing.T) {
+	// The runtime reports status.image as the bare image ID when the
+	// node's copy of the image has no tag (a moving tag pulled again
+	// since the container started). The name guard must then read the
+	// name from the repository digest in imageID instead of comparing
+	// the spec against "sha256".
+	imageID := "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+	dg := "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+	pod := func(image, id string) []corev1.Pod {
+		return []corev1.Pod{{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "vllm", Image: image, ImageID: id},
+		}}}}
+	}
+	for _, tc := range []struct {
+		name    string
+		image   string
+		imageID string
+		want    string
+	}{
+		{"containerd repo digest", imageID, "docker.io/vllm/vllm-openai@" + dg, dg},
+		{"docker-pullable scheme", imageID, "docker-pullable://vllm/vllm-openai@" + dg, dg},
+		{"foreign repo digest", imageID, "docker.io/other/imposter@" + dg, ""},
+		{"bare imageID too", imageID, imageID, ""},
+	} {
+		d, src := resolveContainerDigest("vllm/vllm-openai:latest", "vllm", pod(tc.image, tc.imageID), false)
+		wantSrc := EvidenceSource("")
+		if tc.want != "" {
+			wantSrc = SourcePodStatus
+		}
+		if d != tc.want || src != wantSrc {
+			t.Errorf("%s: got (%q, %q), want (%q, %q)", tc.name, d, src, tc.want, wantSrc)
+		}
+	}
+}
+
 func TestResolveContainerDigest_MalformedPodStatusImageIDStaysUnresolved(t *testing.T) {
 	// If a pod-status imageID is malformed (truncated, mis-encoded by a
 	// custom CRI), the scraper treats it as "no digest" rather than

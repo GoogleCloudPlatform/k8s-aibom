@@ -38,6 +38,16 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- **A container whose status reports a bare image ID keeps its pod
+  digest.** When the node's copy of an image has no tag, for example
+  after a moving tag such as `:latest` was pulled again, the runtime
+  reports `status.containerStatuses[].image` as the image ID
+  (`sha256:...`). The image-name guard compared the spec's image name
+  against `sha256`, skipped the status, and the container was left
+  `unresolved`. The guard now reads the name from the repository digest
+  in `imageID` in that case; a status whose `imageID` is a bare ID too,
+  or names another image, is still skipped.
+
 - **NIMService model locators keep their `spec.env` index past a
   malformed entry.** A `spec.env` entry that was not an object or did
   not decode was recorded and dropped from the list, so every later
