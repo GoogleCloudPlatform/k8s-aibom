@@ -40,6 +40,21 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 - Page AIBOM lists in `kubectl aibom summary` and `find`, preserving table output (#403).
 
+- **A model env var that refers to another env var names the model, not
+  the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
+  `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`
+  produced a model component named by the reference text, which also
+  reached `status.summary.models` and `kubectl aibom find --model`. The
+  kubelet expands such references from the entries before them, so the
+  values in a container's `env` or a NIMService's `spec.env` are now
+  read that way, as model args are since #391. A reference whose value
+  the spec does not state (`valueFrom`, `envFrom`, a Service link, a
+  later entry, undefined) names no model. A workload whose only signal
+  was such a reference is now unresolved and gets no AIBOM, so an
+  existing one is removed. `identity.envVarName` lists the referenced
+  names after the variable's own name. Values without a `$` are read as
+  before.
+
 - **A container whose status reports a bare image ID keeps its pod
   digest.** When the node's copy of an image has no tag, for example
   after a moving tag such as `:latest` was pulled again, the runtime
@@ -396,21 +411,6 @@ API schema do not change.
   fixed toolchain; `govulncheck` is clean again. No change in behaviour.
 
 ### Fixed
-
-- **A model env var that refers to another env var names the model, not
-  the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
-  `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`
-  produced a model component named by the reference text, which also
-  reached `status.summary.models` and `kubectl aibom find --model`. The
-  kubelet expands such references from the entries before them, so the
-  values in a container's `env` or a NIMService's `spec.env` are now
-  read that way, as model args are since #391. A reference whose value
-  the spec does not state (`valueFrom`, `envFrom`, a Service link, a
-  later entry, undefined) names no model. A workload whose only signal
-  was such a reference is now unresolved and gets no AIBOM, so an
-  existing one is removed. `identity.envVarName` lists the referenced
-  names after the variable's own name. Values without a `$` are read as
-  before.
 
 - **A vector database, agent framework, training or evaluation image
   written with `docker.io/` is recognized.** The `vectordb.spec`,
