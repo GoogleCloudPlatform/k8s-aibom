@@ -63,6 +63,9 @@ All notable changes to k8s-aibom are documented here. The format follows
   in `imageID` in that case; a status whose `imageID` is a bare ID too,
   or names another image, is still skipped.
 
+- The no-op CRD update integration test checks events for the watch it
+  exercises, so another watch finishing startup cannot fail it (#428).
+
 - **NIMService model locators keep their `spec.env` index past a
   malformed entry.** A `spec.env` entry that was not an object or did
   not decode was recorded and dropped from the list, so every later
