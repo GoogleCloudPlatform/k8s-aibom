@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -270,6 +271,9 @@ func buildMetadataProperties(inputs *scraper.BOMInputs, opts BuildOptions) *[]cd
 // result is schema-valid"; pushing validation downstream would leak
 // implementation details upward.
 func buildComponents(in []scraper.Component, opts BuildOptions, parentRef string) ([]cdx.Component, error) {
+	if parentRef == "" {
+		in = mergeModelComponents(in)
+	}
 	out := make([]cdx.Component, 0, len(in))
 	for i, c := range in {
 		cdxComp, err := toCDXComponent(c, opts, i, parentRef)
@@ -279,6 +283,147 @@ func buildComponents(in []scraper.Component, opts BuildOptions, parentRef string
 		out = append(out, cdxComp)
 	}
 	return out, nil
+}
+
+// Scraper-layer keys of the per-source evidence a merged model component
+// carries (#362). PropertyName maps them to k8s-aibom:evidence:locator:<i>,
+// k8s-aibom:evidence:source:<i> and k8s-aibom:evidence:confidence[:<i>].
+const (
+	mergedLocatorKey    = "aibom.evidence.locator"
+	mergedSourceKey     = "aibom.evidence.source"
+	mergedConfidenceKey = "aibom.evidence.confidence"
+)
+
+// mergeModelComponents folds top-level machine-learning-model components
+// that share a name into one component per model (#362). Before, a model
+// named by both a container argument and an environment variable became
+// two components that differed only in evidence; Dependency-Track kept one
+// and dropped the other's properties.
+//
+// The merged component is the first-found one, so its unnumbered
+// evidence locator and source stay where existing readers look. Every
+// further source is kept as an indexed locator and source
+// (aibom.evidence.locator.<i>, aibom.evidence.source.<i>, i from 1), and
+// each source's own confidence is recorded beside it
+// (aibom.evidence.confidence for the first, .<i> for the others), since
+// the component's confidence becomes the highest tier among them
+// (verified > declared > inferred > unresolved). Properties are the union,
+// identity properties included (identity.servedModelName, which the
+// inference scraper sets on every model of a container, is carried even
+// when only one source has it); when two sources set the same key
+// differently, the value from the highest-tier source wins. Components
+// of other types, and models named once, pass through unchanged, so
+// their bytes do not move.
+//
+// The scraper output is already sorted (Type, Name, Evidence.Locator),
+// so the merge, and the "first-found" choice, are deterministic.
+func mergeModelComponents(in []scraper.Component) []scraper.Component {
+	groups := map[string][]int{}
+	for i, c := range in {
+		if c.Type == scraper.ComponentMLModel {
+			groups[c.Name] = append(groups[c.Name], i)
+		}
+	}
+	merged := false
+	for _, idx := range groups {
+		if len(idx) > 1 {
+			merged = true
+			break
+		}
+	}
+	if !merged {
+		return in
+	}
+	out := make([]scraper.Component, 0, len(in))
+	for i, c := range in {
+		idx, ok := groups[c.Name]
+		if c.Type != scraper.ComponentMLModel || !ok || len(idx) < 2 {
+			out = append(out, c)
+			continue
+		}
+		if idx[0] != i {
+			continue // folded into the first-found component
+		}
+		members := make([]scraper.Component, 0, len(idx))
+		for _, j := range idx {
+			members = append(members, in[j])
+		}
+		out = append(out, mergeModel(members))
+	}
+	return out
+}
+
+// mergeModel builds one component from members (same type and name, in
+// document order). See mergeModelComponents for the rules.
+func mergeModel(members []scraper.Component) scraper.Component {
+	winner := 0
+	for i, m := range members {
+		if confidenceRank(m.Confidence) > confidenceRank(members[winner].Confidence) {
+			winner = i
+		}
+	}
+	// Property and hash precedence: the highest-tier source first, then
+	// the rest in document order. The first value seen for a key is kept.
+	order := make([]int, 0, len(members))
+	order = append(order, winner)
+	for i := range members {
+		if i != winner {
+			order = append(order, i)
+		}
+	}
+
+	out := members[0]
+	out.Confidence = members[winner].Confidence
+	out.Properties = map[string]string{}
+	out.Hashes = nil
+	out.Children = nil
+	for _, i := range order {
+		m := members[i]
+		for k, v := range m.Properties {
+			if _, seen := out.Properties[k]; !seen {
+				out.Properties[k] = v
+			}
+		}
+		for k, v := range m.Hashes {
+			if out.Hashes == nil {
+				out.Hashes = map[string]string{}
+			}
+			if _, seen := out.Hashes[k]; !seen {
+				out.Hashes[k] = v
+			}
+		}
+		if out.Version == "" {
+			out.Version = m.Version
+		}
+		if out.PURL == "" {
+			out.PURL = m.PURL
+		}
+	}
+	for _, m := range members {
+		out.Children = append(out.Children, m.Children...)
+	}
+	out.Properties[mergedConfidenceKey] = string(members[0].Confidence)
+	for i, m := range members[1:] {
+		n := strconv.Itoa(i + 1)
+		out.Properties[mergedLocatorKey+"."+n] = m.Evidence.Locator
+		out.Properties[mergedSourceKey+"."+n] = string(m.Evidence.Source)
+		out.Properties[mergedConfidenceKey+"."+n] = string(m.Confidence)
+	}
+	return out
+}
+
+// confidenceRank orders attribute confidence tiers for merging:
+// verified > declared > inferred > unresolved (Design 002 §4).
+func confidenceRank(c scraper.Confidence) int {
+	switch c {
+	case scraper.ConfidenceVerified:
+		return 3
+	case scraper.ConfidenceDeclared:
+		return 2
+	case scraper.ConfidenceInferred:
+		return 1
+	}
+	return 0
 }
 
 // toCDXComponent translates one internal Component. The index argument is

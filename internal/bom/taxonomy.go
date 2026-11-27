@@ -30,14 +30,18 @@ const Namespace = "k8s-aibom"
 // through PropertyName at emission, so these constants are the only
 // place the emitted spelling is written down in Go.
 const (
-	PropConfidence        = Namespace + ":confidence"
-	PropEvidenceSource    = Namespace + ":evidence:source"
-	PropEvidenceLocator   = Namespace + ":evidence:locator"
-	PropRedactionApplied  = Namespace + ":redaction:applied"
-	PropTruncationApplied = Namespace + ":truncation:applied"
-	PropRuntimeName       = Namespace + ":runtime:name"
-	PropImageReference    = Namespace + ":image:reference"
-	PropSigningStatus     = Namespace + ":security:signing:status"
+	PropConfidence      = Namespace + ":confidence"
+	PropEvidenceSource  = Namespace + ":evidence:source"
+	PropEvidenceLocator = Namespace + ":evidence:locator"
+	// PropEvidenceConfidence is the confidence of one evidence source on
+	// a model component merged from several (#362); the indexed forms
+	// (":<i>") sit beside PropEvidenceLocator/PropEvidenceSource + ":<i>".
+	PropEvidenceConfidence = Namespace + ":evidence:confidence"
+	PropRedactionApplied   = Namespace + ":redaction:applied"
+	PropTruncationApplied  = Namespace + ":truncation:applied"
+	PropRuntimeName        = Namespace + ":runtime:name"
+	PropImageReference     = Namespace + ":image:reference"
+	PropSigningStatus      = Namespace + ":security:signing:status"
 	// PropIdentityServedModelName is the alias a serving engine labels its
 	// own metrics with (vLLM --served-model-name), when the args set one.
 	PropIdentityServedModelName = Namespace + ":identity:servedModelName"
