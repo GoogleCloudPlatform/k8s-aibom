@@ -374,6 +374,7 @@ func TestIntegration_LateCRD_AllowlistPrecedence(t *testing.T) {
 // Row 4: CRD updates that leave it Ready (labels, annotations) neither
 // restart the runner nor produce events.
 func TestIntegration_LateCRD_NoopUpdatesStayQuiet(t *testing.T) {
+	const kind = "DynamoGraphDeployment"
 	opts := envTestOptions{omitExternalCRDs: []string{dgdCRDFile}, events: true}
 	reads := observeCRDReads(&opts)
 	env := startEnvTestWith(t, opts)
@@ -382,9 +383,9 @@ func TestIntegration_LateCRD_NoopUpdatesStayQuiet(t *testing.T) {
 
 	waitAbsenceObserved(t, reads, dgdCRDName)
 	installExternalCRD(t, env, dgdCRDFile)
-	waitHealthy(t, env.watchHealth, "DynamoGraphDeployment")
-	events.wait(t, EventReasonWatchStarted, "DynamoGraphDeployment")
-	before, _ := env.watchHealth.Status("DynamoGraphDeployment")
+	waitHealthy(t, env.watchHealth, kind)
+	events.wait(t, EventReasonWatchStarted, kind)
+	before, _ := env.watchHealth.Status(kind)
 	nBefore := len(events.all())
 
 	for i := 0; i < 3; i++ {
@@ -411,14 +412,18 @@ func TestIntegration_LateCRD_NoopUpdatesStayQuiet(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 	time.Sleep(2 * time.Second)
-	after, _ := env.watchHealth.Status("DynamoGraphDeployment")
+	after, _ := env.watchHealth.Status(kind)
 	if !after.Healthy || !after.Since.Equal(before.Since) {
 		t.Errorf("row 4: the runner must not restart; before %+v, after %+v", before, after)
 	}
-	if got := events.all(); len(got) != nBefore {
-		t.Errorf("row 4: no new events; got %q", got[nBefore:])
+	// Other watches may still report startup events while these updates run.
+	for _, event := range events.all()[nBefore:] {
+		parts := strings.SplitN(event, " ", 4)
+		if len(parts) >= 3 && parts[2] == kind {
+			t.Errorf("row 4: no new events for %s; got %q", kind, event)
+		}
 	}
-	if n := events.count(EventReasonWatchStarted, "DynamoGraphDeployment"); n != 1 {
+	if n := events.count(EventReasonWatchStarted, kind); n != 1 {
 		t.Errorf("WatchStarted exactly once, got %d", n)
 	}
 }
