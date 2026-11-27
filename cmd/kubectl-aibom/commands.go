@@ -214,9 +214,9 @@ func summaryRow(u *unstructured.Unstructured) []string {
 			}
 		}
 	}
-	runtime := get("status", "summary", "runtime", "name")
-	if runtime == "" {
-		runtime = "-"
+	runtime := "-"
+	if names, _ := summaryRuntimes(u); len(names) > 0 {
+		runtime = strings.Join(names, ",")
 	}
 	return []string{
 		u.GetNamespace(),

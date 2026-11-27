@@ -150,8 +150,17 @@ type AIBOMSummary struct {
 	// Workload identifies the workload the BOM describes.
 	Workload WorkloadSummary `json:"workload"`
 
-	// Runtime is the detected inference runtime, if any.
+	// Runtime is deprecated in favour of Runtimes and is kept, as the
+	// first entry of Runtimes, for readers written before Runtimes
+	// existed. A workload that runs more than one runtime (vLLM with a
+	// LiteLLM proxy beside it, say) has only the first, in document
+	// order, here.
 	Runtime *RuntimeSummary `json:"runtime,omitempty"`
+
+	// Runtimes lists every runtime attributed in the BOM document, in
+	// document order (sorted by component name), each distinct entry
+	// once. Runtime equals the first entry.
+	Runtimes []RuntimeSummary `json:"runtimes,omitempty"`
 
 	// Models is the set of declared/inferred model identities. Multiple
 	// entries are emitted when different evidence sources name the same

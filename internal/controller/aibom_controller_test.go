@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -195,6 +196,49 @@ func mustCreate(t *testing.T, c client.Client, ctx context.Context, obj client.O
 	t.Helper()
 	if err := c.Create(ctx, obj); err != nil {
 		t.Fatalf("create %s/%s: %v", obj.GetNamespace(), obj.GetName(), err)
+	}
+}
+
+// TestIntegration_SummaryListsEveryRuntime (#336): a Deployment that
+// runs vLLM with a TEI sidecar gets both runtimes in
+// status.summary.runtimes as read back from the API server, so the CRD
+// schema carries the field (it would be pruned otherwise), and the
+// deprecated status.summary.runtime stays the first entry.
+func TestIntegration_SummaryListsEveryRuntime(t *testing.T) {
+	env := startEnvTest(t)
+	ctx := context.Background()
+
+	nsName := "multi-runtime"
+	depName := "chat"
+	mustCreateOptedInNamespace(t, env.k8sClient, ctx, nsName)
+	dep := vllmDeployment(nsName, depName)
+	dep.Spec.Template.Spec.Containers = append(dep.Spec.Template.Spec.Containers, corev1.Container{
+		Name:  "embeddings",
+		Image: "ghcr.io/huggingface/text-embeddings-inference:1.5.0",
+	})
+	mustCreate(t, env.k8sClient, ctx, dep)
+
+	var got aibomv1beta1.AIBOM
+	aibomKey := types.NamespacedName{Name: "apps-deployment-" + depName, Namespace: nsName}
+	eventually(t, 30*time.Second, 200*time.Millisecond, func() error {
+		if err := env.k8sClient.Get(ctx, aibomKey, &got); err != nil {
+			return fmt.Errorf("get AIBOM %s: %w", aibomKey, err)
+		}
+		if got.Status.Summary == nil {
+			return fmt.Errorf("AIBOM exists but status.summary not yet populated")
+		}
+		return nil
+	})
+
+	var names []string
+	for _, rt := range got.Status.Summary.Runtimes {
+		names = append(names, rt.Name)
+	}
+	if want := []string{"tei", "vllm"}; !slices.Equal(names, want) {
+		t.Fatalf("Summary.Runtimes names = %v, want %v", names, want)
+	}
+	if got.Status.Summary.Runtime == nil || *got.Status.Summary.Runtime != got.Status.Summary.Runtimes[0] {
+		t.Fatalf("Summary.Runtime = %+v, want the first entry %+v", got.Status.Summary.Runtime, got.Status.Summary.Runtimes[0])
 	}
 }
 
