@@ -59,7 +59,7 @@ func findItems(t *testing.T) []unstructured.Unstructured {
 func runFindCapture(t *testing.T, items []unstructured.Unstructured, f findFilter) (out, errOut string) {
 	t.Helper()
 	var o, e bytes.Buffer
-	if err := runFind(items, f, &o, &e); err != nil {
+	if err := runFind(testAIBOMItems(items...), f, &o, &e); err != nil {
 		t.Fatalf("runFind: %v", err)
 	}
 	return o.String(), e.String()

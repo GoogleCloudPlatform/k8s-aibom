@@ -38,6 +38,8 @@ All notable changes to k8s-aibom are documented here. The format follows
 
 ### Fixed
 
+- Page AIBOM lists in `kubectl aibom summary` and `find`, preserving table output (#403).
+
 - **A model env var that refers to another env var names the model, not
   the reference.** `HF_MODEL_ID` (or `MODEL_NAME`, `NIM_MODEL_NAME`,
   `NIM_SERVED_MODEL_NAME`) set to `$(MODEL_ID)` or `$(ORG)/gemma-2-2b`

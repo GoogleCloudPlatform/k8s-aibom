@@ -17,10 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"strings"
 	"text/tabwriter"
 
@@ -352,13 +354,16 @@ func joinTruncated(items []string, max int) string {
 
 // runFind prints the filtered table. Zero matches is a successful run,
 // and so is a run with rows whose document could not be read.
-func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer) error {
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+func runFind(items iter.Seq2[*unstructured.Unstructured, error], f findFilter, w, errw io.Writer) error {
+	var table bytes.Buffer
+	tw := tabwriter.NewWriter(&table, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAMESPACE\tKIND\tNAME\tRUNTIME\tMODELS\tIMAGES\tSIGNED\tCONFIDENCE")
 	matches := 0
 	var unavailableRows, summaryOnlyRows []string
-	for i := range items {
-		u := &items[i]
+	for u, err := range items {
+		if err != nil {
+			return err
+		}
 		matched, facts, unavailable := findMatch(u, f)
 		if !matched {
 			if unavailable != "" {
@@ -394,6 +399,9 @@ func runFind(items []unstructured.Unstructured, f findFilter, w, errw io.Writer)
 		fmt.Fprintln(w, "0 matches")
 	} else {
 		if err := tw.Flush(); err != nil {
+			return err
+		}
+		if _, err := table.WriteTo(w); err != nil {
 			return err
 		}
 		if len(unavailableRows) > 0 && f.needsDocument() {
