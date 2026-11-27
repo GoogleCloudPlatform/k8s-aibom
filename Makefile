@@ -91,6 +91,13 @@ chart-crds:
 			$$file > charts/k8s-aibom-crds/templates/$$(basename $$file); \
 	done
 
+# verify-changelog fails when a released section of CHANGELOG.md differs
+# from the same section at its release tag (an entry merged into a
+# released section). Needs the release tags in the clone.
+.PHONY: verify-changelog
+verify-changelog:
+	@hack/verify-changelog-released.sh
+
 .PHONY: verify-chart-crds
 verify-chart-crds: chart-crds
 	@git diff --exit-code -- charts/k8s-aibom/crds charts/k8s-aibom-crds/templates \
