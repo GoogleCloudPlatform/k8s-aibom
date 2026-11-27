@@ -37,8 +37,10 @@ WORKDIR /workspace
 # Dependency layer: cached separately from source layers so dependency
 # changes don't invalidate the compile cache and vice versa.
 COPY go.mod go.sum ./
-# The verifier nested module is a replace target of the root go.mod;
-# its module files must exist before `go mod download` resolves it.
+# The verifier nested module is required by version from the root
+# go.mod (#397); `go mod download` fetches it from the module proxy.
+# Its module files are copied here so the source layer below has the
+# full tree; the build itself resolves the module from the proxy.
 COPY verifier/go.mod verifier/go.sum ./verifier/
 RUN go mod download
 

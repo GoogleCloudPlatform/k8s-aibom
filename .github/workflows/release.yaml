@@ -50,11 +50,22 @@ jobs:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       with:
         persist-credentials: false
+        # Full history: the verifier-pin guard below diffs the pinned
+        # commit's verifier/ tree against this tag, so that commit
+        # must be present.
+        fetch-depth: 0
 
     - name: Set up Go
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
         go-version-file: 'go.mod'
+
+    - name: Check verifier pin matches the tree
+      # Release gate (#397): the root go.mod requires verifier by
+      # version, so verify the pinned version is the content of
+      # ./verifier in this tag, and that the module the proxy serves
+      # for it matches, before anything is built or published.
+      run: bash hack/check-verifier-pin.sh
 
     # TAG keeps the leading v (image tag, binary version, appVersion);
     # VERSION strips it (Helm chart semver).
