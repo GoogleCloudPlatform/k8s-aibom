@@ -264,3 +264,54 @@ func TestTrainingSpecScraper_UnsupportedObject(t *testing.T) {
 		t.Errorf("err = %v, want an unsupported object type error", err)
 	}
 }
+
+// TestTrainingSpecScraper_ImageNameBoundary: each framework image
+// pattern ends at the image-name boundary (a tag, a digest or the end
+// of the reference), so the framework's own images match in every form
+// and other images in the vendor's namespace whose name starts with the
+// framework's do not.
+func TestTrainingSpecScraper_ImageNameBoundary(t *testing.T) {
+	const digest = "@sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+	match := []struct{ image, want string }{
+		{"pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime", "pytorch"},
+		{"pytorch/pytorch" + digest, "pytorch"},
+		{"pytorch/pytorch", "pytorch"},
+		{"rayproject/ray:2.52.0-py311-gpu", "kuberay"},
+		{"rayproject/ray" + digest, "kuberay"},
+		{"rayproject/ray-ml:2.9.0", "kuberay"},
+		{"rayproject/ray-llm:nightly-py312-cu130", "kuberay"},
+		{"ghcr.io/google/jax:latest", "jax"},
+		{"ghcr.io/google/jax" + digest, "jax"},
+		{"huggingface/accelerate:gpu-nightly", "accelerate"},
+		{"huggingface/accelerate" + digest, "accelerate"},
+		{"huggingface/accelerate-gpu:0.28.0", "accelerate"},
+		{"huggingface/accelerate-cpu:latest", "accelerate"},
+	}
+	for _, tc := range match {
+		t.Run(tc.image, func(t *testing.T) {
+			got := scrapeImage(t, NewTrainingSpecScraper(), tc.image)
+			if got == nil || got.Name != tc.want {
+				t.Fatalf("%q matched %+v, want %q", tc.image, got, tc.want)
+			}
+		})
+	}
+
+	quiet := []string{
+		// PyTorch's old binary build environment and Ray's dependency
+		// and build base images carry the framework's name but do not
+		// run it.
+		"pytorch/pytorch-binary-docker-image-ubuntu16.04:latest",
+		"rayproject/ray-deps:2.8.1.2023-12-07-py311-gpu-aarch64",
+		"rayproject/ray_arrow_manylinux1_x86_64_base:latest",
+		// Names that only start with the framework's.
+		"ghcr.io/google/jaxite:latest",
+		"huggingface/accelerate-docs:latest",
+	}
+	for _, img := range quiet {
+		t.Run(img, func(t *testing.T) {
+			if got := scrapeImage(t, NewTrainingSpecScraper(), img); got != nil {
+				t.Errorf("%q matched %q via %q, want no match", img, got.Name, got.Properties["runtime.pattern"])
+			}
+		})
+	}
+}

@@ -32,11 +32,23 @@ type AgentImagePattern struct {
 	Pattern *regexp.Regexp
 }
 
+// DefaultAgentImagePatterns provides the built-in agent framework image
+// patterns.
+//
+// Each pattern ends at the repository name boundary (a tag, a digest or
+// the end of the reference), so other images in the vendor's namespace
+// are not taken for the framework: deepset/haystack-annotation and the
+// Haystack demo images (haystack-demo-ui, haystack-streamlit-ui,
+// haystack-demo-elasticsearch) run next to Haystack but are not
+// Haystack. The frameworks' own published variants are matched:
+// Langflow's backend, frontend, all and ep images and their nightly
+// builds, the Flowise queue-mode worker, and the Haystack 1.x cpu, gpu
+// and m1 images.
 var DefaultAgentImagePatterns = []AgentImagePattern{
-	{Name: "langflow", Pattern: regexp.MustCompile(`^langflowai/langflow.*`)},
-	{Name: "flowise", Pattern: regexp.MustCompile(`^flowiseai/flowise.*`)},
-	{Name: "chainlit", Pattern: regexp.MustCompile(`^chainlit/chainlit.*`)},
-	{Name: "haystack", Pattern: regexp.MustCompile(`^deepset/haystack.*`)},
+	{Name: "langflow", Pattern: regexp.MustCompile(`^langflowai/langflow(?:-(?:backend|frontend|all|ep))?(?:-nightly)?(?:[:@]|$)`)},
+	{Name: "flowise", Pattern: regexp.MustCompile(`^flowiseai/flowise(?:-worker)?(?:[:@]|$)`)},
+	{Name: "chainlit", Pattern: regexp.MustCompile(`^chainlit/chainlit(?:[:@]|$)`)},
+	{Name: "haystack", Pattern: regexp.MustCompile(`^deepset/haystack(?:-(?:cpu|gpu|m1))?(?:[:@]|$)`)},
 	{Name: "llamaindex", Pattern: regexp.MustCompile(`^(?:.*/)?llama-index(?:[:@]|$)`)},
 }
 

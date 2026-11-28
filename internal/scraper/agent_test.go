@@ -366,3 +366,64 @@ func TestAgentSpecScraper_RemoteAPIDependencyType(t *testing.T) {
 		t.Errorf("found %d API dependency components, want %d", seen, len(want))
 	}
 }
+
+// TestAgentSpecScraper_ImageNameBoundary: each framework image pattern
+// ends at the image-name boundary (a tag, a digest or the end of the
+// reference), so the framework's own images match in every form and
+// other images in the vendor's namespace whose name starts with the
+// framework's do not.
+func TestAgentSpecScraper_ImageNameBoundary(t *testing.T) {
+	const digest = "@sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+	match := []struct{ image, want string }{
+		{"langflowai/langflow:1.13.4", "langflow"},
+		{"langflowai/langflow" + digest, "langflow"},
+		{"langflowai/langflow", "langflow"},
+		{"langflowai/langflow-nightly:1.14.0.dev41", "langflow"},
+		{"langflowai/langflow-backend:1.13.4", "langflow"},
+		{"langflowai/langflow-frontend:1.13.4-arm64", "langflow"},
+		{"langflowai/langflow-backend-nightly:1.0.19.dev19", "langflow"},
+		{"langflowai/langflow-frontend-nightly:1.0.19.dev19", "langflow"},
+		{"langflowai/langflow-all:1.13.4", "langflow"},
+		{"langflowai/langflow-all-nightly:v1.4.2.dev7", "langflow"},
+		{"langflowai/langflow-ep:1.13.4", "langflow"},
+		{"flowiseai/flowise:3.1.4", "flowise"},
+		{"flowiseai/flowise" + digest, "flowise"},
+		{"flowiseai/flowise-worker:3.1.4", "flowise"},
+		{"chainlit/chainlit:1.0.0", "chainlit"},
+		{"chainlit/chainlit" + digest, "chainlit"},
+		{"deepset/haystack:base-v2.5.0", "haystack"},
+		{"deepset/haystack" + digest, "haystack"},
+		{"deepset/haystack-cpu:latest", "haystack"},
+		{"deepset/haystack-gpu:minimal-latest", "haystack"},
+		{"deepset/haystack-m1:0.10.0", "haystack"},
+	}
+	for _, tc := range match {
+		t.Run(tc.image, func(t *testing.T) {
+			got := scrapeImage(t, NewAgentSpecScraper(), tc.image)
+			if got == nil || got.Name != tc.want {
+				t.Fatalf("%q matched %+v, want %q", tc.image, got, tc.want)
+			}
+		})
+	}
+
+	quiet := []string{
+		// deepset's annotation tool and the Haystack demo images (the
+		// Streamlit UI, the Elasticsearch instance preloaded with demo
+		// documents) run next to Haystack but are not Haystack.
+		"deepset/haystack-annotation:0.1.75",
+		"deepset/haystack-streamlit-ui:0.10.0",
+		"deepset/haystack-demo-ui:latest",
+		"deepset/haystack-demo-elasticsearch:0.2.1",
+		// Names that only start with the framework's.
+		"langflowai/langflow-docs:latest",
+		"flowiseai/flowise-embed:latest",
+		"chainlit/chainlit-cookbook:latest",
+	}
+	for _, img := range quiet {
+		t.Run(img, func(t *testing.T) {
+			if got := scrapeImage(t, NewAgentSpecScraper(), img); got != nil {
+				t.Errorf("%q matched %q via %q, want no match", img, got.Name, got.Properties["runtime.pattern"])
+			}
+		})
+	}
+}
