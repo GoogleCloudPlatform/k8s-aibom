@@ -60,7 +60,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		Name:      job.Name,
 		UID:       job.UID,
 		Object:    &job,
-		Pods:      append(pods, corev1.Pod{Spec: job.Spec.JobTemplate.Spec.Template.Spec}),
+		Pods:      pods,
 	}
 
 	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{

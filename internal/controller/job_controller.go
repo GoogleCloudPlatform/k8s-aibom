@@ -59,7 +59,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		Name:      job.Name,
 		UID:       job.UID,
 		Object:    &job,
-		Pods:      append(pods, corev1.Pod{Spec: job.Spec.Template.Spec}),
+		Pods:      pods,
 	}
 
 	return r.reconcileWorkload(ctx, WorkloadReconcileRequest{
