@@ -73,6 +73,13 @@ All notable changes to k8s-aibom are documented here. The format follows
   `spec.env[1]`). The entry is now left in place with no stated value,
   as `spec.args` already does (#430).
 
+- **`aibom_pod_info` lists only the pods a Job or CronJob owns.** The
+  Job and CronJob reconcilers added a Pod built from the pod template to
+  the workload's pods. No scraper read it, but the identity series did,
+  so every Job and CronJob AIBOM published an `aibom_pod_info` series
+  with `pod=""` next to its real pods. That series joins to no pod. The
+  template Pod is no longer added.
+
 - **The controller no longer risks a 30-second hang on shutdown.**
   controller-runtime v0.24's default priority queue can deadlock while a
   controller stops (kubernetes-sigs/controller-runtime#3540, fixed in
