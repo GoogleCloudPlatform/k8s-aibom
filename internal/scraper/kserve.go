@@ -19,6 +19,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -122,7 +123,7 @@ func (s *KServeInferenceServiceScraper) Scrape(ctx context.Context, w Workload, 
 		extractAnnotationModels(u.GetAnnotations(), SourceWorkloadAnnotation, "metadata.annotations")...)
 
 	// spec.predictor.model + spec.predictor.serviceAccountName extraction.
-	inputs.Components = append(inputs.Components, s.extractPredictor(u)...)
+	inputs.Components = append(inputs.Components, s.extractPredictor(u, inputs)...)
 
 	// Signature verification (Design 002) over the declared model
 	// components, from the InferenceService's own annotations.
@@ -148,15 +149,35 @@ func (s *KServeInferenceServiceScraper) Scrape(ctx context.Context, w Workload, 
 
 // extractPredictor reads the four documented spec.predictor.* fields
 // from the unstructured InferenceService and emits the corresponding
-// Components.
-func (s *KServeInferenceServiceScraper) extractPredictor(u *unstructured.Unstructured) []Component {
+// Components. A field of the wrong type is recorded as an error on
+// inputs and read as absent.
+func (s *KServeInferenceServiceScraper) extractPredictor(u *unstructured.Unstructured, inputs *BOMInputs) []Component {
 	var out []Component
 
-	modelFormatName, _, _ := unstructured.NestedString(u.Object, "spec", "predictor", "model", "modelFormat", "name")
-	modelFormatVersion, _, _ := unstructured.NestedString(u.Object, "spec", "predictor", "model", "modelFormat", "version")
-	runtimeRef, _, _ := unstructured.NestedString(u.Object, "spec", "predictor", "model", "runtime")
-	storageUri, _, _ := unstructured.NestedString(u.Object, "spec", "predictor", "model", "storageUri")
-	serviceAccountName, _, _ := unstructured.NestedString(u.Object, "spec", "predictor", "serviceAccountName")
+	// A parent that is not an object is recorded once; the fields
+	// beneath it then read as absent without an error of their own.
+	for _, parent := range [][]string{
+		{"spec"},
+		{"spec", "predictor"},
+		{"spec", "predictor", "model"},
+		{"spec", "predictor", "model", "modelFormat"},
+	} {
+		v, present := nestedPresent(u.Object, parent...)
+		if !present {
+			break
+		}
+		if _, ok := v.(map[string]interface{}); !ok {
+			inputs.Errors = append(inputs.Errors,
+				fmt.Errorf("%s: not an object; skipped", strings.Join(parent, ".")))
+			break
+		}
+	}
+
+	modelFormatName := kserveString(u, inputs, "spec", "predictor", "model", "modelFormat", "name")
+	modelFormatVersion := kserveString(u, inputs, "spec", "predictor", "model", "modelFormat", "version")
+	runtimeRef := kserveString(u, inputs, "spec", "predictor", "model", "runtime")
+	storageUri := kserveString(u, inputs, "spec", "predictor", "model", "storageUri")
+	serviceAccountName := kserveString(u, inputs, "spec", "predictor", "serviceAccountName")
 
 	// Runtime application component, when modelFormat.name is declared.
 	// Confidence is Declared (not Inferred like InferenceSpecScraper's
@@ -217,4 +238,22 @@ func (s *KServeInferenceServiceScraper) extractPredictor(u *unstructured.Unstruc
 	}
 
 	return out
+}
+
+// kserveString reads the string at fields. A value that is present but
+// not a string is recorded as an error on inputs and read as "". A field
+// under a parent that is not an object reads as "" without an error;
+// extractPredictor records the parent.
+func kserveString(u *unstructured.Unstructured, inputs *BOMInputs, fields ...string) string {
+	v, present := nestedPresent(u.Object, fields...)
+	if !present {
+		return ""
+	}
+	str, ok := v.(string)
+	if !ok {
+		inputs.Errors = append(inputs.Errors,
+			fmt.Errorf("%s: not a string (%T); skipped", strings.Join(fields, "."), v))
+		return ""
+	}
+	return str
 }

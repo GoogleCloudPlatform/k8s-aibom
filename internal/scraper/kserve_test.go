@@ -351,3 +351,80 @@ func findComponent(t *testing.T, cs []Component, pred func(Component) bool) Comp
 	t.Fatalf("no matching component in:\n%s", dumpComponents(cs))
 	return Component{}
 }
+
+// A spec.predictor field of the wrong type is recorded rather than read
+// as absent, so a model or runtime the CR declares never disappears
+// from the BOM without a trace. The other fields are still extracted.
+func TestKServeInferenceServiceScraper_WrongTypeRecorded(t *testing.T) {
+	cases := []struct {
+		name       string
+		value      interface{}
+		path       []string
+		wantErr    string
+		wantModel  bool
+		wantRunRef bool
+	}{
+		{"storageUri not a string", int64(7), []string{"spec", "predictor", "model", "storageUri"},
+			"spec.predictor.model.storageUri: not a string (int64); skipped", false, true},
+		{"runtime not a string", map[string]interface{}{"name": "kserve-vllm"}, []string{"spec", "predictor", "model", "runtime"},
+			"spec.predictor.model.runtime: not a string (map[string]interface {}); skipped", true, false},
+		{"modelFormat.name not a string", true, []string{"spec", "predictor", "model", "modelFormat", "name"},
+			"spec.predictor.model.modelFormat.name: not a string (bool); skipped", true, false},
+		{"modelFormat not an object", "huggingface", []string{"spec", "predictor", "model", "modelFormat"},
+			"spec.predictor.model.modelFormat: not an object; skipped", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			u := minimalKServeISVC("ns", "isvc")
+			_ = unstructured.SetNestedField(u.Object, "huggingface", "spec", "predictor", "model", "modelFormat", "name")
+			_ = unstructured.SetNestedField(u.Object, "kserve-vllm", "spec", "predictor", "model", "runtime")
+			_ = unstructured.SetNestedField(u.Object, "hf://org/model", "spec", "predictor", "model", "storageUri")
+			_ = unstructured.SetNestedField(u.Object, tc.value, tc.path...)
+
+			got, err := newKServeScraper().Scrape(context.Background(), Workload{
+				Kind:   WorkloadKind{Group: "serving.kserve.io", Version: "v1beta1", Kind: "InferenceService"},
+				Object: u,
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Errors) != 1 || got.Errors[0].Error() != tc.wantErr {
+				t.Errorf("errors = %v, want exactly %q", got.Errors, tc.wantErr)
+			}
+			var model, runRef bool
+			for _, c := range got.Components {
+				if c.Type == ComponentMLModel && c.Name == "hf://org/model" {
+					model = true
+				}
+				if c.Type == ComponentApplication && c.Properties["kserve.runtime.ref"] == "kserve-vllm" {
+					runRef = true
+				}
+			}
+			if model != tc.wantModel || runRef != tc.wantRunRef {
+				t.Errorf("storageUri model = %v (want %v), runtime ref = %v (want %v): %+v",
+					model, tc.wantModel, runRef, tc.wantRunRef, got.Components)
+			}
+		})
+	}
+
+	// A parent that is not an object is recorded once, not once per
+	// field beneath it.
+	t.Run("model not an object", func(t *testing.T) {
+		u := minimalKServeISVC("ns", "isvc")
+		_ = unstructured.SetNestedField(u.Object, "hf://org/model", "spec", "predictor", "model")
+		_ = unstructured.SetNestedField(u.Object, "sa", "spec", "predictor", "serviceAccountName")
+		got, err := newKServeScraper().Scrape(context.Background(), Workload{
+			Kind:   WorkloadKind{Group: "serving.kserve.io", Version: "v1beta1", Kind: "InferenceService"},
+			Object: u,
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Errors) != 1 || got.Errors[0].Error() != "spec.predictor.model: not an object; skipped" {
+			t.Errorf("errors = %v, want exactly spec.predictor.model: not an object; skipped", got.Errors)
+		}
+		if len(got.Components) != 0 {
+			t.Errorf("components = %+v, want none", got.Components)
+		}
+	})
+}
