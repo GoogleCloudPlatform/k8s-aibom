@@ -33,11 +33,22 @@ type TrainingImagePattern struct {
 	Pattern *regexp.Regexp
 }
 
+// DefaultTrainingImagePatterns provides the built-in training framework
+// image patterns.
+//
+// Each pattern ends at the repository name boundary (a tag, a digest or
+// the end of the reference), so other images in the vendor's namespace
+// are not taken for the framework: pytorch/pytorch-binary-docker-image-ubuntu16.04
+// is a binary build environment, and rayproject/ray-deps and
+// rayproject/ray_arrow_manylinux1_x86_64_base are dependency and build
+// base images. Ray's ML and LLM images (rayproject/ray-ml,
+// rayproject/ray-llm) and Accelerate's earlier huggingface/accelerate-cpu
+// and huggingface/accelerate-gpu repositories are matched.
 var DefaultTrainingImagePatterns = []TrainingImagePattern{
-	{Name: "pytorch", Pattern: regexp.MustCompile(`^pytorch/pytorch.*`)},
-	{Name: "kuberay", Pattern: regexp.MustCompile(`^rayproject/ray.*`)},
-	{Name: "jax", Pattern: regexp.MustCompile(`^ghcr\.io/google/jax.*`)},
-	{Name: "accelerate", Pattern: regexp.MustCompile(`^huggingface/accelerate.*`)},
+	{Name: "pytorch", Pattern: regexp.MustCompile(`^pytorch/pytorch(?:[:@]|$)`)},
+	{Name: "kuberay", Pattern: regexp.MustCompile(`^rayproject/ray(?:-(?:ml|llm))?(?:[:@]|$)`)},
+	{Name: "jax", Pattern: regexp.MustCompile(`^ghcr\.io/google/jax(?:[:@]|$)`)},
+	{Name: "accelerate", Pattern: regexp.MustCompile(`^huggingface/accelerate(?:-(?:cpu|gpu))?(?:[:@]|$)`)},
 }
 
 // TrainingEnvSignatures matches environment variables that indicate training frameworks.

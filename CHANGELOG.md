@@ -107,6 +107,21 @@ All notable changes to k8s-aibom are documented here. The format follows
   example Grafana dashboard gains a "Tracked Workloads (by Category)"
   panel.
 
+- **The agent and training scrapers no longer take other images in a
+  framework's namespace for the framework.** The `langflow`, `flowise`,
+  `chainlit`, `haystack`, `pytorch`, `kuberay`, `jax` and `accelerate`
+  image patterns ended in `.*`, so any image whose name starts with the
+  framework's matched: a Deployment running deepset's annotation tool
+  (`deepset/haystack-annotation`) or the Haystack demo images got
+  category `agent` and a `haystack` component, and a Job running
+  `rayproject/ray-deps` or `pytorch/pytorch-binary-docker-image-ubuntu16.04`
+  got category `training`. The patterns now end at the image-name
+  boundary, as the vector-database patterns do since #210. The
+  frameworks' own published variants still match: Langflow's backend,
+  frontend, all and ep images and their nightlies, `flowiseai/flowise-worker`,
+  `deepset/haystack-cpu`, `-gpu` and `-m1`, `rayproject/ray-ml` and
+  `ray-llm`, and `huggingface/accelerate-cpu` and `-gpu`.
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)
