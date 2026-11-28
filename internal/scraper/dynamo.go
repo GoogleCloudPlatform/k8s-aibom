@@ -51,17 +51,26 @@ type dynamoComponent struct {
 
 // dynamoComponents returns the components of a graph
 // (spec.components[i]) or the single component a standalone
-// DynamoComponentDeployment is (spec). Non-object entries are reported
-// as errors on inputs and skipped.
+// DynamoComponentDeployment is (spec). A spec.components that is not a
+// list, a standalone spec that is not an object, and non-object entries
+// are reported as errors on inputs and skipped.
 func dynamoComponents(u *unstructured.Unstructured, inputs *BOMInputs) []dynamoComponent {
 	if u.GetKind() == "DynamoComponentDeployment" {
 		spec, found, _ := unstructured.NestedMap(u.Object, "spec")
 		if !found {
+			if _, present := nestedPresent(u.Object, "spec"); present {
+				inputs.Errors = append(inputs.Errors, fmt.Errorf("spec: not an object; skipped"))
+			}
 			return nil
 		}
 		return []dynamoComponent{{m: spec, locator: "spec"}}
 	}
-	raw, _, _ := unstructured.NestedSlice(u.Object, "spec", "components")
+	raw, found, _ := unstructured.NestedSlice(u.Object, "spec", "components")
+	if !found {
+		if _, present := nestedPresent(u.Object, "spec", "components"); present {
+			inputs.Errors = append(inputs.Errors, fmt.Errorf("spec.components: not a list; skipped"))
+		}
+	}
 	out := make([]dynamoComponent, 0, len(raw))
 	for i, item := range raw {
 		m, ok := item.(map[string]interface{})
@@ -253,7 +262,12 @@ func (s *DynamoGraphDeploymentScraper) Scrape(ctx context.Context, w Workload, c
 				fmt.Errorf("%s.podTemplate: not an object; skipped", base))
 		}
 
-		roles, _, _ := unstructured.NestedSlice(m, "roles")
+		roles, found, _ := unstructured.NestedSlice(m, "roles")
+		if !found {
+			if _, present := m["roles"]; present {
+				inputs.Errors = append(inputs.Errors, fmt.Errorf("%s.roles: not a list; skipped", base))
+			}
+		}
 		for j, rawRole := range roles {
 			rm, ok := rawRole.(map[string]interface{})
 			if !ok {

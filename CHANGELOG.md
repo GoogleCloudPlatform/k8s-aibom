@@ -107,6 +107,19 @@ All notable changes to k8s-aibom are documented here. The format follows
   example Grafana dashboard gains a "Tracked Workloads (by Category)"
   panel.
 
+- **Dynamo and KServe fields of the wrong type are recorded, not read as
+  absent.** A DynamoGraphDeployment `spec.components` or component
+  `roles` that is not a list, or a DynamoComponentDeployment `spec` that
+  is not an object, dropped every component or role under it without an
+  extraction error, where DisaggregatedSet already records a
+  `spec.roles` that is not a list. A KServe InferenceService
+  `storageUri`, `runtime`, `modelFormat` (or its `name` or `version`) or
+  `serviceAccountName` of the wrong type dropped the declared model or
+  runtime the same way. Each is now recorded as an extraction error
+  (`spec.components: not a list; skipped`,
+  `spec.predictor.model.storageUri: not a string (int64); skipped`) and
+  the rest of the CR is still read.
+
 ## [1.7.0] - 2026-11-24
 
 ### Document shape (one transition, v1.7.0)

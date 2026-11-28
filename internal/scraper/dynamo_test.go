@@ -465,3 +465,66 @@ func TestDynamoScraper_StandaloneComponentDeployment(t *testing.T) {
 		}
 	}
 }
+
+// A spec.components, roles or standalone spec of the wrong shape is
+// recorded rather than read as absent, as DisaggregatedSet records a
+// spec.roles that is not a list. The rest of the CR is still extracted.
+func TestDynamoScraper_WrongShapeRecorded(t *testing.T) {
+	t.Run("components not a list", func(t *testing.T) {
+		u := withBackend(minimalDGD("ns", "bad-components"), "vllm")
+		_ = unstructured.SetNestedField(u.Object, map[string]interface{}{"name": "Worker"}, "spec", "components")
+		got, err := newDynamoScraper().Scrape(context.Background(), dgdWorkload(u), testConfig())
+		if err != nil {
+			t.Fatalf("Scrape: %v", err)
+		}
+		if len(got.Errors) != 1 || got.Errors[0].Error() != "spec.components: not a list; skipped" {
+			t.Errorf("errors = %v, want exactly spec.components: not a list; skipped", got.Errors)
+		}
+		if rt := componentsOf(got.Components, ComponentApplication); len(rt) != 1 || rt[0].Name != "vllm" {
+			t.Errorf("the declared runtime must still be extracted: %+v", rt)
+		}
+	})
+
+	t.Run("roles not a list", func(t *testing.T) {
+		u := withComponents(withBackend(minimalDGD("ns", "bad-roles"), "vllm"),
+			dgdComponent("Worker", "worker", "nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.6.0", nil,
+				map[string]interface{}{
+					"modelRef": map[string]interface{}{"name": "Qwen/Qwen3-0.6B"},
+					"roles":    map[string]interface{}{"name": "leader"},
+				}),
+		)
+		got, err := newDynamoScraper().Scrape(context.Background(), dgdWorkload(u), testConfig())
+		if err != nil {
+			t.Fatalf("Scrape: %v", err)
+		}
+		if len(got.Errors) != 1 || got.Errors[0].Error() != "spec.components[0].roles: not a list; skipped" {
+			t.Errorf("errors = %v, want exactly spec.components[0].roles: not a list; skipped", got.Errors)
+		}
+		if models := componentsOf(got.Components, ComponentMLModel); len(models) != 1 {
+			t.Errorf("the component's modelRef must still be extracted: %+v", models)
+		}
+		if containers := componentsOf(got.Components, ComponentContainer); len(containers) != 1 {
+			t.Errorf("the component's own podTemplate must still be extracted: %+v", containers)
+		}
+	})
+
+	t.Run("standalone spec not an object", func(t *testing.T) {
+		u := &unstructured.Unstructured{}
+		u.SetAPIVersion("nvidia.com/v1beta1")
+		u.SetKind("DynamoComponentDeployment")
+		u.SetName("solo")
+		u.SetNamespace("ns")
+		u.Object["spec"] = "not-an-object"
+		w := Workload{Kind: WorkloadKind{Group: "nvidia.com", Version: "v1beta1", Kind: "DynamoComponentDeployment"}, Category: CategoryInference, Namespace: "ns", Name: "solo", Object: u}
+		got, err := newDynamoScraper().Scrape(context.Background(), w, testConfig())
+		if err != nil {
+			t.Fatalf("Scrape: %v", err)
+		}
+		if len(got.Errors) != 1 || got.Errors[0].Error() != "spec: not an object; skipped" {
+			t.Errorf("errors = %v, want exactly spec: not an object; skipped", got.Errors)
+		}
+		if len(got.Components) != 0 {
+			t.Errorf("components = %+v, want none", got.Components)
+		}
+	})
+}
